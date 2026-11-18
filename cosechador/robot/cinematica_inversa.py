@@ -9,6 +9,12 @@ import numpy as np
 from .cinematica import dh_a_servo, servo_a_dh, servos_en_rango
 
 
+# A MENOS DE ESTA DISTANCIA DEL EJE DE LA BASE, EL GIRO DE LA BASE ES INDIFERENTE (SE USA EL CENTRO DE SU
+# RANGO). CON 1e-6 mm, EL HOME REDONDEADO DE UN ARCHIVO (A 0.0005 mm DEL EJE) ELEGÍA EL BRAZO INCLINADO
+# HACIA ATRÁS Y EL JOG DESDE AHÍ FALLABA A LOS 350 mm.
+SOBRE_EL_EJE_MM = 0.01
+
+
 class SinSolver(RuntimeError):
     """El robot no declara un solver de cinemática inversa para su topología."""
 
@@ -33,7 +39,7 @@ def _antropomorfico_3r(robot, x, y, z):
         raise FueraDeAlcance("El punto está fuera del alcance del robot.")
     D = float(np.clip(D, -1.0, 1.0))
 
-    if r < 1e-6:
+    if r < SOBRE_EL_EJE_MM:
         # PUNTO SOBRE EL EJE DE LA BASE (P. EJ. HOME): CUALQUIER GIRO SIRVE. SE USA EL CENTRO DEL
         # RANGO DEL SERVO PARA QUE EL ROBOT (Y LA CAMARA) MIRE A LA MITAD DE SU ZONA DE TRABAJO.
         theta1 = servo_a_dh(robot, (j1.servo.centro, j2.servo.centro, j3.servo.centro))[0]

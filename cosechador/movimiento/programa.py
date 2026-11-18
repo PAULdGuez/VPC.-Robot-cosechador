@@ -132,10 +132,10 @@ def programa_a_dict(programa):
     datos = {"formato": FORMATO, "nombre": programa.nombre, "tipo": programa.tipo,
              "robot": programa.robot, "gdl": programa.gdl}
     if programa.tipo == "puntos":
-        datos["puntos"] = [{"servos": _Lista(round(s, 4) for s in p.servos), "movimiento": p.movimiento,
+        datos["puntos"] = [{"servos": _Lista(round(s, 6) for s in p.servos), "movimiento": p.movimiento,
                             "velocidad": p.velocidad} for p in programa.puntos]
     else:
-        datos["muestras"] = [{"t": round(m.t, 4), "servos": _Lista(round(s, 4) for s in m.servos)}
+        datos["muestras"] = [{"t": round(m.t, 4), "servos": _Lista(round(s, 6) for s in m.servos)}
                              for m in programa.muestras]
     return datos
 

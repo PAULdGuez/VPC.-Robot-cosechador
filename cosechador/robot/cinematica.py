@@ -54,13 +54,28 @@ def pose_efector(robot, q):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SERVOS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+# UN SERVO RECIBE GRADOS ENTEROS: UNA CENTÉSIMA DE GRADO FUERA DE SU RANGO ES RUIDO NUMÉRICO, NO UN
+# LÍMITE REAL. (CON 1e-6 °, EL REDONDEO DE UN PROGRAMA GUARDADO DECLARABA INALCANZABLE UN PUNTO A 350 mm.)
+TOLERANCIA_SERVO = 0.01
+
+
+def _recortar(valor, servo):
+    """Si el ángulo se sale del rango por menos de TOLERANCIA_SERVO, se lleva al borde."""
+    if servo.minimo - TOLERANCIA_SERVO <= valor < servo.minimo:
+        return servo.minimo
+    if servo.maximo < valor <= servo.maximo + TOLERANCIA_SERVO:
+        return servo.maximo
+    return valor
+
+
 def dh_a_servo(robot, q):
     """Ángulos DH -> ángulos de servo: servo = offset + signo * theta.
 
     Se envuelve alrededor del CENTRO del rango de cada servo: así el ruido numérico (-1e-10°)
-    queda como ~0° y no como 359.9999° (fuera de rango).
+    queda como ~0° y no como 359.9999° (fuera de rango). Lo que se sale por menos de
+    TOLERANCIA_SERVO se recorta al borde, para que lo que llega a la placa siempre esté en rango.
     """
-    return tuple(envolver(j.servo.offset + j.servo.signo * float(theta), j.servo.centro)
+    return tuple(_recortar(envolver(j.servo.offset + j.servo.signo * float(theta), j.servo.centro), j.servo)
                  for theta, j in zip(q, robot.articulaciones))
 
 
@@ -69,6 +84,6 @@ def servo_a_dh(robot, servos):
     return tuple(j.servo.signo * (float(s) - j.servo.offset) for s, j in zip(servos, robot.articulaciones))
 
 
-def servos_en_rango(robot, servos, tolerancia=1e-6):
+def servos_en_rango(robot, servos, tolerancia=TOLERANCIA_SERVO):
     return all(j.servo.minimo - tolerancia <= s <= j.servo.maximo + tolerancia
                for s, j in zip(servos, robot.articulaciones))

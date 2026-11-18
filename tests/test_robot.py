@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from cosechador.robot import ErrorConfiguracion, cargar_robot, robot_desde_dict
-from cosechador.robot.cinematica import (cinematica_directa, dh_a_servo, matrices, servo_a_dh,
+from cosechador.robot.cinematica import (TOLERANCIA_SERVO, cinematica_directa, dh_a_servo, matrices, servo_a_dh,
                                          servos_en_rango)
 from cosechador.robot.cinematica_inversa import (FueraDeAlcance, SinSolver, alcanzable, angulos_servo,
                                                  soluciones)
@@ -103,7 +103,8 @@ def test_c3_mapeo_servos_igual_al_original(robot):
         q = (rng.uniform(-10, 190), rng.uniform(-10, 170), rng.uniform(-190, 10))
         nuevo, viejo = dh_a_servo(robot, q), original(*q)
         if servos_en_rango(robot, viejo):
-            assert np.allclose(nuevo, viejo, atol=1e-9)
+            # IGUALES, SALVO EL RECORTE AL BORDE (≤ TOLERANCIA_SERVO) DE LO QUE SE SALÍA POR RUIDO
+            assert np.allclose(nuevo, viejo, atol=TOLERANCIA_SERVO + 1e-9)
 
 
 def test_c4_otro_robot_se_carga_y_tiene_cinematica(robot_4gdl):
@@ -156,3 +157,14 @@ def test_c7_robot_no_importa_qt_ni_pyvista():
 def test_movimiento_por_omision_si_el_yaml_no_lo_trae(robot_4gdl):
     assert robot_4gdl.movimiento.salto_max_por_paso == 15
     assert robot_4gdl.movimiento.al_cambiar_postura == "despacio"
+
+
+def test_home_redondeado_de_un_archivo_sigue_sobre_el_eje(robot):
+    # 18-NOV: EL HOME DE UN PROGRAMA GUARDADO (SERVOS CON 4 DECIMALES) QUEDA A 0.0005 mm DEL EJE; CON
+    # TOLERANCIAS DE 1e-6 EL JOG HACIA +X FALLABA A LOS 350 mm EN LUGAR DE A LOS 1545 mm
+    from cosechador.movimiento.trayectorias import tramo_continuo
+    redondeado = (90.0, 45.573, 45.6432)
+    plan, motivo = tramo_continuo(robot, redondeado, (2050, 0, 1065), "despacio", pasos=411)
+    assert "(1545, 0, 1065)" in motivo or "(1544, 0, 1065)" in motivo
+    assert servos_en_rango(robot, dh_a_servo(robot, (-6e-5, 90, -90)))
+    assert dh_a_servo(robot, (-6e-5, 90, -90))[0] == 0.0  # SE RECORTA AL BORDE: A LA PLACA LLEGA EN RANGO
