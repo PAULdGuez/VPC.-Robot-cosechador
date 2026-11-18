@@ -77,7 +77,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.dibujo.addWidget(self.simulacion.plotter.interactor)
         t1, t2, t3 = self.simulacion.CI(0, 0, 1065)
         #self.simulacion.COSECHADOR(t1,100,0,90,   t2,0,100,0,   t3,0,100,0)
-        self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+        self.simulacion.COSECHADOR(t1, t2, t3)
         #self.simulacion.plotter.show(auto_close=False, interactive_update=True)
         self.configurar_sliders()
 
@@ -108,7 +108,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         z_h = 1065
 
         t1, t2, t3 = self.simulacion.CI(0, 0, 1065)
-        self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+        self.simulacion.COSECHADOR(t1, t2, t3)
 
         for x_f, y_f, z_f in zip(self.COORDENADAS_X, self.COORDENADAS_Y, self.COORDENADAS_Z):
 
@@ -120,7 +120,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
                 for x, y, z in zip(x_val, y_val, z_val):
                     t1, t2, t3 = self.simulacion.CI(x, y, z)
-                    self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                    self.simulacion.COSECHADOR(t1, t2, t3)
 
                     self.simulacion.plotter.renderer.SetInteractive(True)
                     self.simulacion.plotter.update()
@@ -155,7 +155,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.VS_2.setText(str(-(t2-180)))
             self.VS_3.setText(str((t3)))
 
-            self.simulacion.COSECHADOR(t1,350,0,90,   t2,0,1000,0,   t3,0,700,0)
+            self.simulacion.COSECHADOR(t1, t2, t3)
             # self.simulacion.R7(t1,0,140,0,     t2,0,140,180,      0,d3,1,0,      90,20,0,0)
             #self.simulacion.R7(t1,352,0,0,     t2-90,0,70,-90,      t3,0,360,0,      t4,380,0,-90,     t5,0,1,-90,     t6-180,65,0,-90)
             self.simulacion.plotter.renderer.SetInteractive(True)
@@ -181,7 +181,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                     
                     # Configurar posición inicial
                     t1, t2, t3 = self.simulacion.CI(x_h, y_h, z_h)
-                    self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                    self.simulacion.COSECHADOR(t1, t2, t3)
                     #self.simulacion.plotter.write_frame()  # Capturar frame inicial
                     
                     # Movimiento hacia el objetivo
@@ -189,7 +189,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                                     np.linspace(y_h, y_f, 20),
                                     np.linspace(z_h, z_f, 20)):
                         t1, t2, t3 = self.simulacion.CI(x, y, z)
-                        self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                        self.simulacion.COSECHADOR(t1, t2, t3)
                         
                         # Actualizar visualización y capturar frame
                         self.simulacion.plotter.update()
@@ -201,7 +201,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                                     np.linspace(y_f, y_h, 20),
                                     np.linspace(z_f, z_h, 20)):
                         t1, t2, t3 = self.simulacion.CI(x, y, z)
-                        self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                        self.simulacion.COSECHADOR(t1, t2, t3)
                         
                         # Actualizar visualización y capturar frame
                         self.simulacion.plotter.update()
@@ -254,14 +254,14 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                 z_h = 1065
 
                 t1, t2, t3 = self.simulacion.CI(0, 0, 1065)
-                self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                self.simulacion.COSECHADOR(t1, t2, t3)
                 x_val = np.linspace(x_h, x_f, 20)
                 y_val = np.linspace(y_h, y_f, 20)
                 z_val = np.linspace(z_h, z_f, 20)
 
                 for x, y, z in zip(x_val, y_val, z_val):
                     t1, t2, t3 = self.simulacion.CI(x, y, z)
-                    self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                    self.simulacion.COSECHADOR(t1, t2, t3)
 
                     self.simulacion.plotter.renderer.SetInteractive(True)
                     self.simulacion.plotter.update()
@@ -274,7 +274,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
                 for x, y, z in zip(x_val, y_val, z_val):
                     t1, t2, t3 = self.simulacion.CI(x, y, z)
-                    self.simulacion.COSECHADOR(t1,350,0,90,     t2,0,1000,0,      t3,0,700,0)
+                    self.simulacion.COSECHADOR(t1, t2, t3)
 
                     self.simulacion.plotter.renderer.SetInteractive(True)
                     self.simulacion.plotter.update()

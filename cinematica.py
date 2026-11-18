@@ -1,25 +1,53 @@
 #CLASE: PYVISTA - QT DESIGNER
-# DEFINICOMOS CLASE
-import numpy as np 
-import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
-from matplotlib import cm 
-import math
-import pyvista as pv
-import vtk
-from scipy.spatial import KDTree
+# CINEMATICA DIRECTA (DENAVIT-HARTENBERG) E INVERSA DEL ROBOT COSECHADOR DE 3 GDL
 import numpy as np
-from math import atan2, acos, sqrt, degrees, radians
+import pyvista as pv
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%% MEDIDAS DEL ROBOT (mm) — UNICA FUENTE DE VERDAD %%%%%%%%%%%%%%%%%%%%%%%%%%%
+# LA SIMULACION, LA CINEMATICA INVERSA Y EL VOLUMEN DE TRABAJO LEEN ESTAS TRES CONSTANTES.
+# SI CAMBIAS EL ROBOT, SOLO SE CAMBIA AQUI.
+D1 = 350    # ALTURA DE LA BASE (d del eslabon 1)
+A2 = 1000   # LARGO DEL BRAZO (a del eslabon 2)
+A3 = 700    # LARGO DEL ANTEBRAZO (a del eslabon 3)
+
+# RANGO FISICO DE CADA SERVO (grados), EL MISMO QUE VALIDA EL FIRMWARE DE LA ESP32
+LIMITES_SERVO = ((0, 180), (20, 180), (0, 180))
+
+HOME = (0, 0, 1065)  # POSICION DE REPOSO DEL EFECTOR (mm)
+
+
+def _envolver(angulo):
+    """Lleva un angulo al rango [-180, 180)."""
+    return ((angulo + 180) % 360) - 180
+
+
+def dh_a_servo(t1, t2, t3):
+    """Angulos de Denavit-Hartenberg -> angulos que se le mandan a cada servo."""
+    # SE REDONDEA ANTES DE ENVOLVER: UN y = -1e-14 DARIA 359.9999° EN VEZ DE 0°
+    t1, t2, t3 = (round(float(t), 9) for t in (t1, t2, t3))
+    return t1 % 360, 180 - t2, _envolver(t3) + 180
+
+
+def servo_a_dh(s1, s2, s3):
+    """Angulos de cada servo -> angulos de Denavit-Hartenberg (inversa de dh_a_servo)."""
+    return s1, 180 - s2, s3 + 180
+
+
+def servos_en_rango(s1, s2, s3, tolerancia=1e-6):
+    return all(lo - tolerancia <= s <= hi + tolerancia
+               for s, (lo, hi) in zip((s1, s2, s3), LIMITES_SERVO))
+
 
 class cinematica:
-    CONTADOR = 0
-    LISTA_SLABONES = []
-    LISTA_ARTICULACIONES = []
-    DISTANCIA_RELATIVA = []
-    PROCESO = 0
     def __init__(self):
         self.plotter = pv.Plotter()
-        
+        # ESTADO DE LA SIMULACION (POR INSTANCIA, NO COMPARTIDO ENTRE VENTANAS)
+        self.CONTADOR = 0
+        self.LISTA_DATOS_BASE = []
+        self.LISTA_ARTICULACIONES = []
+        self.DISTANCIA_RELATIVA = []
+        self.actor_volumen = None
+
     def matriz_rotacion_z (self, grados):
         rad = grados/180*np.pi
         rotacion = np.array([
@@ -28,7 +56,7 @@ class cinematica:
             [          0,            0,          1,          0],
             [          0,            0,          0,          1]
         ])
-        return rotacion 
+        return rotacion
     def matriz_rotacion_x (self, grados):
         rad = grados/180*np.pi
         rotacion = np.array([
@@ -37,187 +65,156 @@ class cinematica:
             [         0,  np.sin(rad),  np.cos(rad),          0],
             [         0,            0,            0,          1]
         ])
-        return rotacion 
-    def matriz_rotacion_y (self, grados):
-        rad = grados/180*np.pi
-        rotacion = np.array([
-            [ np.cos(rad),         0, np.sin(rad),          0],
-            [           0,         1,           0,          0],
-            [-np.sin(rad),         0, np.cos(rad),          0],
-            [           0,         0,           0,          1]
-        ])
-        return rotacion 
+        return rotacion
 
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%% MATRICES DE TRASLACION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    #%%%%%%%%%%%%%%%%%%%%%%%%%%% MATRICES DE TRASLACION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def matriz_traslacion_x(self, x):
-        traslacion = np.array([[1,0,0,x],
-                               [0,1,0,0],
-                               [0,0,1,0],
-                               [0,0,0,1]])
-        return traslacion
-    def matriz_traslacion_y(self, y):
-        traslacion = np.array([[1,0,0,0],
-                               [0,1,0,y],
-                               [0,0,1,0],
-                               [0,0,0,1]])
-        return traslacion
+        return np.array([[1,0,0,x],
+                         [0,1,0,0],
+                         [0,0,1,0],
+                         [0,0,0,1]])
     def matriz_traslacion_z(self, z):
-        
-        traslacion = np.array([[1,0,0,0],
-                               [0,1,0,0],
-                               [0,0,1,z],
-                               [0,0,0,1]])
-        return traslacion
-    
+        return np.array([[1,0,0,0],
+                         [0,1,0,0],
+                         [0,0,1,z],
+                         [0,0,0,1]])
+
     def denavit_hartemberg(self, theta_i, d_i, a_i, alpha_i):
-        MTH = self.matriz_rotacion_z(theta_i)@self.matriz_traslacion_z(d_i)@self.matriz_traslacion_x(a_i)@self.matriz_rotacion_x(alpha_i)
-        #MTH = self.matriz_rotacion_x(theta_i)@self.matriz_traslacion_x(d_i)@self.matriz_traslacion_y(a_i)@self.matriz_rotacion_y(alpha_i)
-        return MTH
-#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%5
-    def COSECHADOR(self, theta_1,d_1,a_1,alpha_1,  theta_2,d_2,a_2,alpha_2,  theta_3,d_3,a_3,alpha_3):
-        A0_0 = self.matriz_rotacion_z(0)
-        A0_1 = self.denavit_hartemberg(theta_1, d_1, a_1, alpha_1)
-        A1_2 = self.denavit_hartemberg(theta_2, d_2, a_2, alpha_2)
-        A2_3 = self.denavit_hartemberg(theta_3, d_3, a_3, alpha_3)
-        
-        A_0_1_0 = A0_0 @ A0_1
-        A_0_2 = A_0_1_0 @ A1_2
-        A_0_3 = A_0_2 @ A2_3
- 
-        puntos = [A0_0, A_0_1_0, A_0_2, A_0_3]
-        
-        
+        return (self.matriz_rotacion_z(theta_i) @ self.matriz_traslacion_z(d_i)
+                @ self.matriz_traslacion_x(a_i) @ self.matriz_rotacion_x(alpha_i))
+
+    def matrices(self, t1, t2, t3):
+        """Matrices acumuladas de cada articulacion: [base, 1, 2, efector]."""
+        A0_1 = self.denavit_hartemberg(t1, D1, 0, 90)
+        A1_2 = self.denavit_hartemberg(t2, 0, A2, 0)
+        A2_3 = self.denavit_hartemberg(t3, 0, A3, 0)
+        A0_2 = A0_1 @ A1_2
+        return [np.eye(4), A0_1, A0_2, A0_2 @ A2_3]
+
+    def CD(self, t1, t2, t3):
+        """Cinematica directa: angulos DH -> posicion (x, y, z) del efector en mm."""
+        return self.matrices(t1, t2, t3)[-1][:3, 3]
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def COSECHADOR(self, theta_1, theta_2, theta_3):
+        """Dibuja (o actualiza) el robot en los angulos DH dados."""
+        puntos = self.matrices(theta_1, theta_2, theta_3)
+
         if self.CONTADOR == 0:
-            self.LISTA_DATOS_BASE = []
-            malla = pv.Plane(i_size=500, j_size=500, i_resolution=10, j_resolution=10)
+            malla = pv.Plane(i_size=4000, j_size=4000, i_resolution=20, j_resolution=20)
             self.plotter.add_mesh(malla, style="wireframe", color="gray", opacity=0.3)
 
             for i in range(len(puntos)-1):
                 start = puntos[i][:3, 3]
                 end = puntos[i+1][:3, 3]
-                
-                linea = pv.Line(start, end)
+                tubo = pv.Line(start, end).tube(radius=40 if i == 0 else 20)
 
-                if i == 0:
-                    tubo = linea.tube(radius=40)
-                else:
-                    tubo = linea.tube(radius=20)
-                
-                actor = self.plotter.add_mesh(tubo, color="orange", smooth_shading=True)
-                #self.LISTA_SLABONES.append(actor)
-                self.LISTA_DATOS_BASE.append(tubo)  
-                
+                self.plotter.add_mesh(tubo, color="orange", smooth_shading=True)
+                self.LISTA_DATOS_BASE.append(tubo)
+
                 self.DISTANCIA_RELATIVA.append(start)
                 esfera = pv.Sphere(radius=20, center=start)
-
-                actor_esfera = self.plotter.add_mesh(esfera, color="orange")
-                self.LISTA_ARTICULACIONES.append(actor_esfera)
+                self.LISTA_ARTICULACIONES.append(self.plotter.add_mesh(esfera, color="orange"))
 
             self.CONTADOR = 1
-
         else:
             for i in range(len(puntos)-1):
                 start = puntos[i][:3, 3]
                 end = puntos[i+1][:3, 3]
-
-                # UNA NUEVA LINEA DE LA CUAL SOLO OCUPAREMOS SU COORDENADAS PARA ACTUALIZAR EL ANTERIOR TUBO
-                nueva_linea = pv.Line(start, end)
-                if i == 0:
-                    nuevo_tubo = nueva_linea.tube(radius=40)
-                else:
-                    nuevo_tubo = nueva_linea.tube(radius=20)
-
+                # UNA NUEVA LINEA DE LA CUAL SOLO OCUPAMOS SUS COORDENADAS PARA ACTUALIZAR EL TUBO ANTERIOR
+                nuevo_tubo = pv.Line(start, end).tube(radius=40 if i == 0 else 20)
                 self.LISTA_DATOS_BASE[i].points = nuevo_tubo.points
+                self.LISTA_ARTICULACIONES[i].SetPosition(*(start - self.DISTANCIA_RELATIVA[i]))
 
-                NUEVA_POS = start-self.DISTANCIA_RELATIVA[i]
-                self.LISTA_ARTICULACIONES[i].SetPosition(*NUEVA_POS)
-     
         self.plotter.render()
 
-    def CI(self, x, y, z):
-        L1 = L2 = L3 = 100  # Longitudes de los eslabones
+    def CI_soluciones(self, x, y, z):
+        """Todas las soluciones de cinematica inversa (hasta 4), en grados DH.
 
-        # 1. theta1 (rotación en Z)
-        theta1 = np.arctan2(y, x)
-
-        # 2. Distancia plana y altura
+        Orden de preferencia: base mirando al punto con codo arriba, base mirando al punto con
+        codo abajo, y luego la base girada 180° (el brazo se inclina hacia atras).
+        Lanza ValueError si el punto esta fuera del alcance geometrico del brazo.
+        """
+        # Distancia plana y altura MEDIDA DESDE EL HOMBRO (encima de la base, a D1)
         r = np.sqrt(x**2 + y**2)
-        s = z
+        s = z - D1
 
-        # 3. Ley del coseno para theta3
-        D = (r**2 + s**2 - L2**2 - L3**2) / (2 * L2 * L3)
-        if np.abs(D) > 1:
+        # Ley del coseno para theta3
+        D = (r**2 + s**2 - A2**2 - A3**2) / (2 * A2 * A3)
+        # (TOLERANCIA PARA EL BRAZO TOTALMENTE ESTIRADO, DONDE EL REDONDEO DA D = 1.0000000001)
+        if np.abs(D) > 1 + 1e-9:
             raise ValueError("El punto está fuera del alcance del robot.")
+        D = np.clip(D, -1.0, 1.0)
 
-        # Solución 1: Codo Abajo (theta3 positivo)
-        #theta3_down = np.arctan2(np.sqrt(1 - D**2), D)
-        theta3_down = np.arctan2(np.sqrt(1 - D**2), D)
-        phi1_down = np.arctan2(L3 * np.sin(theta3_down), L2 + L3 * np.cos(theta3_down))
-        theta2_down = np.arctan2(s, r) - phi1_down
+        theta1 = np.degrees(np.arctan2(y, x))
+        soluciones = []
+        for t1, r_plano in ((theta1, r), (theta1 + 180, -r)):
+            for signo in (-1, 1):  # -1: codo arriba (theta3 negativo), 1: codo abajo
+                t3 = np.arctan2(signo * np.sqrt(1 - D**2), D)
+                phi = np.arctan2(A3 * np.sin(t3), A2 + A3 * np.cos(t3))
+                t2 = np.arctan2(s, r_plano) - phi
+                soluciones.append((t1, np.degrees(t2), np.degrees(t3)))
+        return soluciones
 
-        # Solución 2: Codo Arriba (theta3 negativo)
-        theta3_up = np.arctan2(-np.sqrt(1 - D**2), D)
-        phi1_up = np.arctan2(L3 * np.sin(theta3_up), L2 + L3 * np.cos(theta3_up))
-        theta2_up = np.arctan2(s, r) - phi1_up
+    def CI(self, x, y, z):
+        """Cinematica inversa: posicion (mm) -> angulos DH en grados.
 
-        # Devolver ambas soluciones en grados
-        return np.degrees(theta1), np.degrees(theta2_up), np.degrees(theta3_up)     # Codo arriba
+        Devuelve la primera solucion que los servos pueden ejecutar; si ninguna cabe en sus
+        rangos, la de codo arriba. Lanza ValueError si el punto esta fuera del alcance del brazo.
+        """
+        soluciones = self.CI_soluciones(x, y, z)
+        for sol in soluciones:
+            if servos_en_rango(*dh_a_servo(*sol)):
+                return sol
+        return soluciones[0]
 
-    def CI_FILTRO(self, x, y, z):
-        L1 = L2 = L3 = 100  # Longitudes de los eslabones
+    def angulos_servo(self, x, y, z):
+        """Angulos de servo para llegar a (x, y, z), o None si el robot real no puede.
 
-        # 1. theta1 (rotación en Z)
-        theta1 = np.arctan2(y, x)
+        No alcanza si el punto esta fuera del brazo o si ningun acomodo cabe en el rango de los servos.
+        """
+        try:
+            soluciones = self.CI_soluciones(x, y, z)
+        except ValueError:
+            return None
+        for sol in soluciones:
+            servos = dh_a_servo(*sol)
+            if servos_en_rango(*servos):
+                return servos
+        return None
 
-        # 2. Distancia plana y altura
-        r = np.sqrt(x**2 + y**2)
-        s = z
+    def punto_en_volumen(self, x, y, z):
+        """True si el robot real puede llegar al punto (alcance + limites de los servos)."""
+        return self.angulos_servo(x, y, z) is not None
 
-        # 3. Ley del coseno para theta3
-        D = (r**2 + s**2 - L2**2 - L3**2) / (2 * L2 * L3)
-        return np.abs(D) > 1
+    def volumen_trabajo(self, progresbar=None, paso=5):
+        """Dibuja la nube de puntos que el efector alcanza recorriendo el rango de cada servo."""
+        rangos = [range(lo, hi + 1, paso) for lo, hi in LIMITES_SERVO]
+        total = len(rangos[0]) * len(rangos[1]) * len(rangos[2])
+        if progresbar is not None:
+            progresbar.setRange(0, total)
+            progresbar.setValue(0)
 
-    def volumen_trabajo(self, progresbar=None):
         puntos_efector = []
-
-        # Barrido de los ángulos
-        for t1 in range(0, 181, 5):     # paso de 10° para θ1
-            for t2 in range(0, 181, 5): # paso de 10° para θ2
-                for t3 in range(0, 181, 5): # paso de 10° para θ3
-                    try:
-                        self.PROCESO +=1
-                        progresbar.setValue(self.PROCESO)
-                        A0_1 = self.denavit_hartemberg(t1, 100, 0, 90)
-                        A1_2 = self.denavit_hartemberg(t2, 0, 100, 0)
-                        A2_3 = self.denavit_hartemberg(t3, 0, 100, 0)
-
-                        T = A0_1 @ A1_2 @ A2_3
-                        x, y, z = T[0, 3], T[1, 3], T[2, 3]
-                        puntos_efector.append([x, y, z])
-                    except:
-                        continue
+        hechos = 0
+        for s1 in rangos[0]:
+            for s2 in rangos[1]:
+                for s3 in rangos[2]:
+                    puntos_efector.append(self.CD(*servo_a_dh(s1, s2, s3)))
+                hechos += len(rangos[2])
+                if progresbar is not None:
+                    progresbar.setValue(hechos)
 
         self.puntos_efector = np.array(puntos_efector)
-        self.tree = KDTree(self.puntos_efector)
-
-        nube = pv.PolyData(self.puntos_efector)
-        self.plotter.add_mesh(nube, color="cyan", point_size=1, render_points_as_spheres=True)
-        self.plotter.show_grid()  
-        self.plotter.show()
-
-      # Asegúrate de importar al inicio
-
-    # Dentro de la clase 'cinematica':
-    def punto_en_volumen(self, x, y, z, tolerancia=20.0):
-        # ACA PONER LA FUNCION DE ci Y QUE AVALUE SI NO HAY PEDO SEN LLEGAR A ESE PUNTO (ESTO EN GENRAL YA QUE TRABAAJA CON TETAS DE -180 A 180)
-        # SI PASA EL FILTRO, AHORA VERIFICAR SI ESTA DENTRO DE NUESTRO VOLUMEN DE TRBABAJO CALCULADO PARA THETA SDE 0 A 180
-        if self.CI_FILTRO(x, y, z):
-            print("El punto esta fuera del alcanze del robot")
-        else:
-            if not hasattr(self, 'tree'):
-                raise ValueError("Primero debes generar el volumen de trabajo con 'volumen_trabajo()'.")
-            dist, _ = self.tree.query([x, y, z])
-            return dist <= tolerancia
+        # SI YA SE HABIA DIBUJADO, SE REEMPLAZA EN VEZ DE APILAR OTRA NUBE
+        if self.actor_volumen is not None:
+            self.plotter.remove_actor(self.actor_volumen)
+        self.actor_volumen = self.plotter.add_mesh(
+            pv.PolyData(self.puntos_efector), color="cyan", point_size=2,
+            render_points_as_spheres=True)
+        self.plotter.show_grid()
+        self.plotter.render()
+        return self.puntos_efector
 
     def mostrar(self):
         self.plotter.show()
