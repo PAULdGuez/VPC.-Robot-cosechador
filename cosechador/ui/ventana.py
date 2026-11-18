@@ -3,6 +3,7 @@
 Aquí no se calcula nada: los movimientos los planea cosechador.movimiento y esta ventana solo
 ejecuta el plan paso a paso con un temporizador (sin bucles que bloqueen la interfaz).
 """
+import math
 import os
 from collections import deque
 
@@ -12,7 +13,7 @@ from PyQt5.QtGui import QImage, QPixmap
 from pyvistaqt import QtInteractor
 
 from cosechador.hardware.enlace import abrir_enlace
-from cosechador.movimiento.trayectorias import plan_cosecha, plan_ir_y_volver, posicion
+from cosechador.movimiento.trayectorias import plan_cosecha, plan_ir_y_volver, posicion, tramo_continuo
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
 from cosechador.robot.espacio_trabajo import barrer
@@ -43,6 +44,11 @@ def abrir_camara(fuente):
     return video if video.isOpened() else None
 
 
+MODOS_SLIDERS = (("servos", "Mover por servos"), ("xyz", "Mover la punta en X, Y, Z"))
+POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al cambiar de postura: negarse"))
+MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
+
+
 class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def __init__(self, robot, enlace=None, fuente_camara=None):
@@ -71,6 +77,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.temporizador_movimiento.setInterval(int(robot.movimiento.ms_por_paso))
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
 
+        self._configurar_selectores()
         self._configurar_sliders()
         self._configurar_vision()
         self.CALCULAR.clicked.connect(self.ir_y_volver)
@@ -107,8 +114,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """Dibuja el robot con esos ángulos de servo y se los manda a la placa."""
         self.servos = tuple(servos)
         self.escena.dibujar(servo_a_dh(self.robot, self.servos))
-        for etiqueta, valor in zip(self.etiquetas_servo, self.servos):
-            etiqueta.setText(f"{valor:.0f}")
+        self.poner_etiquetas()
         comando, respuestas = self.enlace.enviar(*self.servos)
         for respuesta in respuestas:
             self.avisar(f"[{self.enlace.nombre}] {respuesta}  (comando: {comando})")
@@ -124,16 +130,23 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._sincronizar_sliders()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EJECUCIÓN DE PLANES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def ejecutar(self, plan):
-        """Encola los pasos del plan; el temporizador los ejecuta uno por uno."""
+    def ejecutar(self, plan, bloquear=True):
+        """Encola los pasos del plan; el temporizador los ejecuta uno por uno.
+
+        bloquear=False (jog con los sliders): no se bloquean los controles y un movimiento nuevo
+        reemplaza lo que faltaba del anterior.
+        """
+        if not bloquear:
+            self.cola.clear()
         self.cola.extend(plan)
-        self._ocupado(True)
+        self._ocupado(bloquear)
         self.temporizador_movimiento.start()
 
     def _siguiente_paso(self):
         if not self.cola:
             self.temporizador_movimiento.stop()
-            self._sincronizar_sliders()
+            if not self._arrastrando():
+                self._sincronizar_sliders()
             self._ocupado(False)
             return
         paso = self.cola.popleft()
@@ -162,13 +175,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         except ValueError:
             self.avisar("Escribe números en X, Y y Z (en mm).")
             return
-        self.ejecutar(plan_ir_y_volver(self.robot, self.servos, destino))
+        self.ejecutar(plan_ir_y_volver(self.robot, self.servos, destino, self.postura))
 
     def cosechar(self):
         """Botón COSECHAR: visitar cada pedúnculo guardado y regresar a HOME."""
         if not self._puede_planear():
             return
-        plan, _ = plan_cosecha(self.robot, self.servos, self.puntos_cosecha)
+        plan, _ = plan_cosecha(self.robot, self.servos, self.puntos_cosecha, self.postura)
         self.ejecutar(plan)
 
     def ver_volumen(self):
@@ -179,10 +192,35 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
         self.escena.encuadrar(zoom=1.0)
 
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SELECTORES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def _configurar_selectores(self):
+        """Dos selectores debajo de los sliders (el .ui no los trae; se agregan por código)."""
+        self.selector_modo = QtWidgets.QComboBox(self.centralwidget)
+        self.selector_modo.setGeometry(540, 812, 300, 24)  # EL AREA CENTRAL MIDE 836 px EN UNA MAC DE 1512x891
+        for clave, texto in MODOS_SLIDERS:
+            self.selector_modo.addItem(texto, clave)
+        self.selector_postura = QtWidgets.QComboBox(self.centralwidget)
+        self.selector_postura.setGeometry(860, 812, 330, 24)
+        for clave, texto in POSTURAS:
+            self.selector_postura.addItem(texto, clave)
+        self.selector_postura.setCurrentIndex([c for c, _ in POSTURAS].index(self.robot.movimiento.al_cambiar_postura))
+        self.selector_modo.currentIndexChanged.connect(self._aplicar_modo)
+        if self.robot.cinematica_inversa is None:  # SIN SOLVER NO HAY MODO XYZ NI TRAYECTORIAS
+            self.selector_modo.setEnabled(False)
+
+    @property
+    def modo_sliders(self):
+        return self.selector_modo.currentData()
+
+    @property
+    def postura(self):
+        return self.selector_postura.currentData()
+
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SLIDERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_sliders(self):
         todos = (self.SLIDER_1, self.SLIDER_2, self.SLIDER_3)
         todas = (self.VS_1, self.VS_2, self.VS_3)
+        self.etiquetas_eje = (self.label_12, self.label_7, self.label_9)
         n = min(self.robot.gdl, len(todos))
         if self.robot.gdl > len(todos):
             print(f"Aviso: la interfaz tiene {len(todos)} sliders y el robot {self.robot.gdl} articulaciones; "
@@ -190,19 +228,64 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.sliders, self.etiquetas_servo = todos[:n], todas[:n]
         for slider in todos[n:]:
             slider.setEnabled(False)
-        for slider, j in zip(self.sliders, self.robot.articulaciones):
-            slider.setRange(int(j.servo.minimo), int(j.servo.maximo))
+        for slider in self.sliders:
             slider.valueChanged.connect(self._slider_movido)
+        self._aplicar_modo()
+
+    def _aplicar_modo(self):
+        """Rangos y etiquetas de los sliders según el modo; la pose del robot no cambia."""
+        if self.modo_sliders == "xyz":
+            alcance = int(math.ceil(self.robot.alcance))
+            rangos = ((-alcance, alcance), (-alcance, alcance), (0, alcance))
+            nombres = ("X", "Y", "Z")
+        else:
+            rangos = [(int(j.servo.minimo), int(j.servo.maximo)) for j in self.robot.articulaciones]
+            nombres = tuple(f"Servo {i + 1}" for i in range(len(self.sliders)))
+        for slider, etiqueta, (lo, hi), nombre in zip(self.sliders, self.etiquetas_eje, rangos, nombres):
+            slider.blockSignals(True)
+            slider.setRange(lo, hi)
+            slider.blockSignals(False)
+            etiqueta.setText(nombre)
+        if self.servos is not None:
+            self._sincronizar_sliders()
+            self.poner_etiquetas()
+
+    def poner_etiquetas(self):
+        valores = self.posicion if self.modo_sliders == "xyz" else self.servos
+        for etiqueta, valor in zip(self.etiquetas_servo, valores):
+            etiqueta.setText(f"{valor:.0f}")
+
+    def _arrastrando(self):
+        return any(slider.isSliderDown() for slider in self.sliders)
 
     def _slider_movido(self):
-        # LOS SLIDERS SON LOS ÁNGULOS DE CADA SERVO (LO MISMO QUE RECIBE LA PLACA)
+        if self.modo_sliders == "xyz":
+            self._jog_cartesiano()
+            return
+        # MODO SERVOS: LOS SLIDERS SON LOS ÁNGULOS DE CADA SERVO (LO MISMO QUE RECIBE LA PLACA)
         servos = list(self.servos)
         for i, slider in enumerate(self.sliders):
             servos[i] = slider.value()
         self.poner_servos(servos)
 
+    def _jog_cartesiano(self):
+        """Modo XYZ: la punta va en línea recta al punto de los sliders; la CI mueve los servos."""
+        destino = [float(slider.value()) for slider in self.sliders]
+        distancia = math.dist(self.posicion, destino)
+        if distancia < 0.5:
+            return
+        muestras = max(2, int(distancia / MM_POR_MUESTRA_JOG) + 1)
+        plan, motivo = tramo_continuo(self.robot, self.servos, destino, self.postura, pasos=muestras)
+        if plan is None:
+            self.avisar(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
+                        if not motivo.startswith("Para") else f"No se mueve. {motivo}")
+            self._sincronizar_sliders()  # EL SLIDER REGRESA A DONDE ESTÁ LA PUNTA
+            return
+        self.ejecutar(plan, bloquear=False)
+
     def _sincronizar_sliders(self):
-        for slider, valor in zip(self.sliders, self.servos):
+        valores = self.posicion if self.modo_sliders == "xyz" else self.servos
+        for slider, valor in zip(self.sliders, valores):
             slider.blockSignals(True)
             slider.setValue(int(round(valor)))
             slider.blockSignals(False)
