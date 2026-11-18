@@ -1,10 +1,11 @@
+import os
 import sys
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QMainWindow, QProgressBar
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5 import uic, QtWidgets, QtCore
-from R_C_ESP32_CLASE import cinematica
+from cinematica import cinematica
 from pyvistaqt import QtInteractor
 from PyQt5 import uic, QtWidgets, QtTest
 import time
@@ -66,7 +67,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
-        uic.loadUi("COSECHADOR_AGUACATE.ui", self)
+        uic.loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)), "COSECHADOR_AGUACATE.ui"), self)
         self.simulacion = cinematica()
         # USAMOS UN INTERACTOR PARA PODER SUSTITUIRLO 
         self.simulacion.plotter = QtInteractor(self)
