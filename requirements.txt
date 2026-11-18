@@ -5,4 +5,5 @@ PyQt5
 pyvista
 pyvistaqt
 pyserial
+pyyaml
 pytest

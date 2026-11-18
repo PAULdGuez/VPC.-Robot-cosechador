@@ -1,0 +1,17 @@
+# Robot inventado SOLO para probar que el código es genérico (criterio C4). No existe físicamente.
+nombre: Brazo de prueba (4 GDL)
+home_mm: [0, 0, 500]
+articulaciones:
+  - {nombre: Base, dh: {d: 200, a: 0, alpha: 90}, servo: {pin: 1, min: 0, max: 180, offset: 0, signo: 1}}
+  - {nombre: Hombro, dh: {d: 0, a: 300, alpha: 0}, servo: {pin: 2, min: 0, max: 180, offset: 90, signo: 1}}
+  - {nombre: Codo, dh: {d: 0, a: 250, alpha: 0}, servo: {pin: 3, min: 0, max: 180, offset: 90, signo: 1}}
+  - {nombre: Muñeca, dh: {d: 0, a: 80, alpha: 0}, servo: {pin: 4, min: 0, max: 180, offset: 90, signo: -1}}
+camara:
+  montaje: fija
+  matriz_montaje: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+  fx_referencia: 1000
+  resolucion_referencia: [1280, 720]
+  diametro_objeto_mm: 60
+vision:
+  verde: {min: [30, 90, 70], max: [85, 255, 255]}
+  cafe: {min: [5, 30, 20], max: [20, 255, 255]}

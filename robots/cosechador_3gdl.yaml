@@ -1,0 +1,69 @@
+# Descripción del robot cosechador de aguacates (3 GDL).
+# TODO lo que es propio de ESTE robot vive aquí; el código solo sabe leerlo.
+# Para otro brazo: copia este archivo, cambia la tabla DH, los servos y las piezas.
+# Unidades: milímetros y grados.
+
+nombre: Cosechador de aguacates (3 GDL)
+
+# Solver de cinemática inversa para esta topología. Opciones: antropomorfico_3r, o quítalo si no
+# hay solver (el robot se carga, se dibuja y se mueve con los sliders, pero no calcula trayectorias).
+cinematica_inversa: antropomorfico_3r
+
+home_mm: [0, 0, 1065]
+
+base:
+  pieza: base.stl           # en modelos/; si no existe se usa una pieza provisional
+  color: "#4a5560"
+
+# Una fila por grado de libertad, en orden desde la base.
+#   dh:    parámetros de Denavit-Hartenberg (d y a en mm, alpha en grados).
+#   servo: ángulo_servo = offset + signo * theta_DH, y debe caer entre min y max.
+articulaciones:
+  - nombre: Base giratoria
+    dh: {d: 350, a: 0, alpha: 90}
+    servo: {pin: 13, min: 0, max: 180, offset: 0, signo: 1}
+    pieza: columna.stl
+    color: "#e07b22"
+  - nombre: Hombro
+    dh: {d: 0, a: 1000, alpha: 0}
+    servo: {pin: 12, min: 20, max: 180, offset: 180, signo: -1}
+    pieza: brazo.stl
+    color: "#f09a3e"
+  - nombre: Codo
+    dh: {d: 0, a: 700, alpha: 0}
+    servo: {pin: 14, min: 0, max: 180, offset: 180, signo: 1}
+    pieza: antebrazo.stl
+    color: "#f09a3e"
+
+efector:
+  pieza: efector.stl
+  color: "#c9d1d9"
+
+camara:
+  montaje: efector            # efector (se mueve con el brazo) o fija
+  # Cómo está atornillada la cámara: columnas = ejes de la cámara (x derecha, y abajo, z al frente)
+  # expresados en el marco del montaje. Esta mira a lo largo del antebrazo.
+  matriz_montaje:
+    - [0,  0, 1, 0]
+    - [0, -1, 0, 0]
+    - [1,  0, 0, 0]
+    - [0,  0, 0, 1]
+  fx_referencia: 1200          # distancia focal en píxeles a la resolución de referencia
+  resolucion_referencia: [1920, 1080]
+  diametro_objeto_mm: 80       # ancho típico de un aguacate Hass: de aquí sale la profundidad
+
+vision:
+  verde: {min: [30, 170, 70], max: [85, 255, 255]}   # HSV; los sliders ajustan H y S mínimos
+  cafe:  {min: [5, 30, 20],   max: [20, 255, 255]}   # defectos
+
+# Puntos de demostración para COSECHAR antes de guardar detecciones reales.
+puntos_demo_mm:
+  - [5, -4, 1057]
+  - [0, 0, 1065]
+  - [430, 0, 1718]
+  - [-370, 0, 1368]
+  - [-723, 0, 1552]
+  - [723, 0, 1552]
+  - [-1656, 0, 630]
+  - [1656, 0, 630]
+  - [0, 0, 1065]
