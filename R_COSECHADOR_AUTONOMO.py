@@ -118,7 +118,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if not fuente:
             self.ORIGINAL.setText("Sin cámara.\nDefine ROBOT_CAMARA, por ejemplo\nhttp://192.168.100.63:8080/video")
             return None
-        video = cv2.VideoCapture(int(fuente) if fuente.isdigit() else fuente)
+        try:
+            fuente = int(fuente)  # INDICE DE WEBCAM ("0", "1"...); SI NO ES NUMERO, ES UNA URL
+        except ValueError:
+            pass
+        video = cv2.VideoCapture(fuente)
         if not video.isOpened():
             self.ORIGINAL.setText(f"No se pudo abrir la cámara:\n{fuente}")
             return None
