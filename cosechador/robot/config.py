@@ -1,0 +1,273 @@
+"""Descripción de un robot leída de un archivo YAML (ver robots/cosechador_3gdl.yaml).
+
+Este módulo no sabe nada de un robot en particular: solo lee, valida y entrega datos inmutables.
+Si el archivo trae un error, ErrorConfiguracion dice en qué campo está y por qué.
+"""
+import os
+from dataclasses import dataclass, field
+
+import numpy as np
+import yaml
+
+CARPETA_ROBOTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "robots")
+ROBOT_POR_OMISION = os.path.join(CARPETA_ROBOTS, "cosechador_3gdl.yaml")
+
+SOLVERS_CONOCIDOS = ("antropomorfico_3r",)
+MONTAJES_CAMARA = ("efector", "fija")
+CAMBIOS_DE_POSTURA = ("despacio", "negar")
+
+
+class ErrorConfiguracion(ValueError):
+    """El archivo del robot tiene un campo faltante o inválido."""
+
+
+@dataclass(frozen=True)
+class Servo:
+    pin: int
+    minimo: float
+    maximo: float
+    offset: float = 0.0
+    signo: int = 1
+
+    @property
+    def centro(self):
+        return (self.minimo + self.maximo) / 2
+
+
+@dataclass(frozen=True)
+class Pieza:
+    archivo: str | None
+    color: str = "#f09a3e"
+
+
+@dataclass(frozen=True)
+class Articulacion:
+    nombre: str
+    d: float
+    a: float
+    alpha: float
+    servo: Servo
+    pieza: Pieza
+
+
+@dataclass(frozen=True)
+class Camara:
+    montaje: str
+    matriz_montaje: np.ndarray = field(repr=False)
+    fx_referencia: float
+    resolucion_referencia: tuple
+    diametro_objeto_mm: float
+
+
+@dataclass(frozen=True)
+class RangoHSV:
+    minimo: tuple
+    maximo: tuple
+
+
+@dataclass(frozen=True)
+class Vision:
+    verde: RangoHSV
+    cafe: RangoHSV
+
+
+@dataclass(frozen=True)
+class Movimiento:
+    """Cómo se mueve el robot. Valores por omisión pensados para servos SG90."""
+    ms_por_paso: float = 50.0
+    salto_max_por_paso: float = 15.0      # grados que un servo puede girar en un paso
+    al_cambiar_postura: str = "despacio"   # despacio | negar
+
+
+@dataclass(frozen=True)
+class Robot:
+    nombre: str
+    articulaciones: tuple
+    home: tuple
+    base: Pieza
+    efector: Pieza
+    camara: Camara
+    vision: Vision
+    cinematica_inversa: str | None = None
+    puntos_demo: tuple = ()
+    carpeta_modelos: str = ""
+    movimiento: Movimiento = Movimiento()
+
+    @property
+    def gdl(self):
+        return len(self.articulaciones)
+
+    @property
+    def alcance(self):
+        """Distancia máxima aproximada desde la base (para escalar el dibujo)."""
+        return sum(abs(j.a) + abs(j.d) for j in self.articulaciones)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LECTURA Y VALIDACIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def _campo(datos, clave, donde, tipo=None):
+    if not isinstance(datos, dict) or clave not in datos:
+        raise ErrorConfiguracion(f"Falta el campo '{clave}' en {donde}.")
+    valor = datos[clave]
+    if tipo is not None and not isinstance(valor, tipo):
+        raise ErrorConfiguracion(f"El campo '{clave}' en {donde} debe ser {_nombre_tipo(tipo)} (llegó {valor!r}).")
+    return valor
+
+
+def _nombre_tipo(tipo):
+    nombres = {(int, float): "un número", int: "un entero", str: "un texto", list: "una lista", dict: "una sección"}
+    return nombres.get(tipo, str(tipo))
+
+
+def _numero(datos, clave, donde, por_omision=None):
+    if por_omision is not None and clave not in datos:
+        return float(por_omision)
+    valor = _campo(datos, clave, donde)
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise ErrorConfiguracion(f"El campo '{clave}' en {donde} debe ser un número (llegó {valor!r}).")
+    return float(valor)
+
+
+def _vector(datos, clave, donde, largo):
+    valor = _campo(datos, clave, donde, list)
+    if len(valor) != largo or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in valor):
+        raise ErrorConfiguracion(f"El campo '{clave}' en {donde} debe ser una lista de {largo} números (llegó {valor!r}).")
+    return tuple(float(v) for v in valor)
+
+
+def _pieza(datos, donde):
+    archivo = datos.get("pieza")
+    if archivo is not None and not isinstance(archivo, str):
+        raise ErrorConfiguracion(f"El campo 'pieza' en {donde} debe ser un nombre de archivo (llegó {archivo!r}).")
+    color = datos.get("color", "#f09a3e")
+    return Pieza(archivo=archivo, color=str(color))
+
+
+def _servo(datos, donde):
+    pin = _campo(datos, "pin", donde)
+    if isinstance(pin, bool) or not isinstance(pin, int):
+        raise ErrorConfiguracion(f"El campo 'pin' en {donde} debe ser un entero (llegó {pin!r}).")
+    minimo, maximo = _numero(datos, "min", donde), _numero(datos, "max", donde)
+    if minimo >= maximo:
+        raise ErrorConfiguracion(f"En {donde}, 'min' ({minimo:g}) debe ser menor que 'max' ({maximo:g}).")
+    if maximo - minimo > 360:
+        raise ErrorConfiguracion(f"En {donde}, el rango del servo no puede pasar de 360° (min {minimo:g}, max {maximo:g}).")
+    signo = datos.get("signo", 1)
+    if signo not in (1, -1):
+        raise ErrorConfiguracion(f"El campo 'signo' en {donde} debe ser 1 o -1 (llegó {signo!r}).")
+    return Servo(pin=pin, minimo=minimo, maximo=maximo, offset=_numero(datos, "offset", donde, 0), signo=signo)
+
+
+def _articulacion(datos, i):
+    donde = f"articulaciones[{i}]"
+    if not isinstance(datos, dict):
+        raise ErrorConfiguracion(f"{donde} debe ser una sección con dh, servo y pieza.")
+    dh = _campo(datos, "dh", donde, dict)
+    return Articulacion(
+        nombre=str(datos.get("nombre", f"Articulación {i + 1}")),
+        d=_numero(dh, "d", f"{donde}.dh"),
+        a=_numero(dh, "a", f"{donde}.dh"),
+        alpha=_numero(dh, "alpha", f"{donde}.dh"),
+        servo=_servo(_campo(datos, "servo", donde, dict), f"{donde}.servo"),
+        pieza=_pieza(datos, donde),
+    )
+
+
+def _camara(datos):
+    donde = "camara"
+    montaje = _campo(datos, "montaje", donde, str)
+    if montaje not in MONTAJES_CAMARA:
+        raise ErrorConfiguracion(f"'camara.montaje' debe ser uno de {MONTAJES_CAMARA} (llegó {montaje!r}).")
+    matriz = np.array(_campo(datos, "matriz_montaje", donde, list), dtype=float)
+    if matriz.shape != (4, 4):
+        raise ErrorConfiguracion(f"'camara.matriz_montaje' debe ser una matriz de 4x4 (llegó de {matriz.shape}).")
+    rotacion = matriz[:3, :3]
+    if not np.allclose(rotacion @ rotacion.T, np.eye(3), atol=1e-6) or np.linalg.det(rotacion) < 0:
+        raise ErrorConfiguracion("'camara.matriz_montaje' no es una rotación válida (sus columnas deben ser ejes unitarios perpendiculares).")
+    diametro = _numero(datos, "diametro_objeto_mm", donde)
+    fx = _numero(datos, "fx_referencia", donde)
+    if diametro <= 0 or fx <= 0:
+        raise ErrorConfiguracion("'camara.diametro_objeto_mm' y 'camara.fx_referencia' deben ser mayores que 0.")
+    return Camara(montaje=montaje, matriz_montaje=matriz, fx_referencia=fx,
+                  resolucion_referencia=_vector(datos, "resolucion_referencia", donde, 2),
+                  diametro_objeto_mm=diametro)
+
+
+def _movimiento(datos):
+    if datos is None:
+        return Movimiento()
+    if not isinstance(datos, dict):
+        raise ErrorConfiguracion("'movimiento' debe ser una sección (ms_por_paso, salto_max_por_paso, al_cambiar_postura).")
+    por_omision = Movimiento()
+    ms = _numero(datos, "ms_por_paso", "movimiento", por_omision.ms_por_paso)
+    salto = _numero(datos, "salto_max_por_paso", "movimiento", por_omision.salto_max_por_paso)
+    if ms <= 0 or salto <= 0:
+        raise ErrorConfiguracion("'movimiento.ms_por_paso' y 'movimiento.salto_max_por_paso' deben ser mayores que 0.")
+    postura = datos.get("al_cambiar_postura", por_omision.al_cambiar_postura)
+    if postura not in CAMBIOS_DE_POSTURA:
+        raise ErrorConfiguracion(f"'movimiento.al_cambiar_postura' debe ser uno de {CAMBIOS_DE_POSTURA} (llegó {postura!r}).")
+    return Movimiento(ms_por_paso=ms, salto_max_por_paso=salto, al_cambiar_postura=postura)
+
+
+def _rango_hsv(datos, donde):
+    return RangoHSV(minimo=_vector(datos, "min", donde, 3), maximo=_vector(datos, "max", donde, 3))
+
+
+def robot_desde_dict(datos, carpeta_modelos=""):
+    """Construye y valida un Robot a partir de un diccionario (lo que devuelve el YAML)."""
+    if not isinstance(datos, dict):
+        raise ErrorConfiguracion("El archivo del robot debe ser una sección con nombre, articulaciones, etc.")
+    articulaciones = _campo(datos, "articulaciones", "el robot", list)
+    if not articulaciones:
+        raise ErrorConfiguracion("El robot debe tener al menos una articulación.")
+    solver = datos.get("cinematica_inversa")
+    if solver is not None and solver not in SOLVERS_CONOCIDOS:
+        raise ErrorConfiguracion(f"'cinematica_inversa' debe ser uno de {SOLVERS_CONOCIDOS} o no ponerse (llegó {solver!r}).")
+    vision = _campo(datos, "vision", "el robot", dict)
+    puntos = datos.get("puntos_demo_mm", [])
+    robot = Robot(
+        nombre=str(_campo(datos, "nombre", "el robot")),
+        articulaciones=tuple(_articulacion(j, i) for i, j in enumerate(articulaciones)),
+        home=_vector(datos, "home_mm", "el robot", 3),
+        base=_pieza(datos.get("base", {}), "base"),
+        efector=_pieza(datos.get("efector", {}), "efector"),
+        camara=_camara(_campo(datos, "camara", "el robot", dict)),
+        vision=Vision(verde=_rango_hsv(_campo(vision, "verde", "vision", dict), "vision.verde"),
+                      cafe=_rango_hsv(_campo(vision, "cafe", "vision", dict), "vision.cafe")),
+        cinematica_inversa=solver,
+        puntos_demo=tuple(_vector({"p": p}, "p", f"puntos_demo_mm[{i}]", 3) for i, p in enumerate(puntos)),
+        carpeta_modelos=carpeta_modelos,
+        movimiento=_movimiento(datos.get("movimiento")),
+    )
+    if solver == "antropomorfico_3r":
+        _validar_topologia_3r(robot)
+    return robot
+
+
+def _validar_topologia_3r(robot):
+    """El solver analítico 3R solo vale para: base vertical + hombro + codo paralelos."""
+    if robot.gdl != 3:
+        raise ErrorConfiguracion(f"El solver 'antropomorfico_3r' necesita 3 articulaciones (hay {robot.gdl}).")
+    j1, j2, j3 = robot.articulaciones
+    if not (abs(j1.a) < 1e-9 and abs(j1.alpha - 90) < 1e-9 and abs(j2.d) < 1e-9 and abs(j2.alpha) < 1e-9
+            and abs(j3.d) < 1e-9 and abs(j3.alpha) < 1e-9 and j2.a > 0 and j3.a > 0):
+        raise ErrorConfiguracion(
+            "El solver 'antropomorfico_3r' necesita: articulación 1 con a=0 y alpha=90; articulaciones 2 y 3 "
+            "con d=0, alpha=0 y a>0. Revisa la tabla DH o quita 'cinematica_inversa'.")
+
+
+def cargar_robot(ruta=None):
+    """Lee y valida el YAML de un robot. Por omisión, ROBOT_CONFIG o robots/cosechador_3gdl.yaml."""
+    ruta = ruta or os.environ.get("ROBOT_CONFIG") or ROBOT_POR_OMISION
+    try:
+        with open(ruta, encoding="utf-8") as f:
+            datos = yaml.safe_load(f)
+    except FileNotFoundError:
+        raise ErrorConfiguracion(f"No existe el archivo del robot: {ruta}") from None
+    except yaml.YAMLError as e:
+        raise ErrorConfiguracion(f"El archivo {ruta} no es YAML válido: {e}") from None
+    carpeta = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(ruta))), "modelos")
+    try:
+        return robot_desde_dict(datos, carpeta_modelos=carpeta)
+    except ErrorConfiguracion as e:
+        raise ErrorConfiguracion(f"{os.path.basename(ruta)}: {e}") from None

@@ -1,0 +1,1661 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ui version="4.0">
+  <class>MainWindow</class>
+  <widget class="QMainWindow" name="MainWindow">
+    <property name="geometry">
+      <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>1440</width>
+        <height>860</height>
+      </rect>
+    </property>
+    <property name="windowTitle">
+      <string>Cosechador de aguacates</string>
+    </property>
+    <property name="styleSheet">
+      <string>background-color: rgb(255, 255, 255);</string>
+    </property>
+    <widget class="QWidget" name="centralwidget">
+      <layout class="QVBoxLayout" name="lay_principal" stretch="0,1">
+        <property name="leftMargin">
+          <number>8</number>
+        </property>
+        <property name="topMargin">
+          <number>8</number>
+        </property>
+        <property name="rightMargin">
+          <number>8</number>
+        </property>
+        <property name="bottomMargin">
+          <number>8</number>
+        </property>
+        <property name="spacing">
+          <number>8</number>
+        </property>
+        <item>
+          <widget class="QLabel" name="label">
+            <property name="minimumSize">
+              <size>
+                <width>0</width>
+                <height>56</height>
+              </size>
+            </property>
+            <property name="maximumSize">
+              <size>
+                <width>16777215</width>
+                <height>64</height>
+              </size>
+            </property>
+            <property name="styleSheet">
+              <string>QLabel {
+	font: 87 36pt "Segoe UI Black";
+        color: rgb(255, 255, 255);
+        
+        font-weight: bold;            /* Negritas */
+        background-color: #2c3e50; 
+        padding: 10px;                /* Espaciado interno */
+        border-radius: 8px;           /* Bordes redondeados */
+        border: 2px solid #066699;    /* Línea dorada elegante */
+    }</string>
+            </property>
+            <property name="text">
+              <string>COSECHADOR DE AGUACATES</string>
+            </property>
+            <property name="alignment">
+              <set>Qt::AlignCenter</set>
+            </property>
+          </widget>
+        </item>
+        <item>
+          <layout class="QHBoxLayout" name="lay_columnas" stretch="0,1,0">
+            <property name="spacing">
+              <number>10</number>
+            </property>
+            <item>
+              <widget class="QFrame" name="FONDO_VISION">
+                <property name="minimumSize">
+                  <size>
+                    <width>300</width>
+                    <height>0</height>
+                  </size>
+                </property>
+                <property name="maximumSize">
+                  <size>
+                    <width>380</width>
+                    <height>16777215</height>
+                  </size>
+                </property>
+                <property name="styleSheet">
+                  <string>QFrame#FONDO_VISION { background-color: rgb(235, 235, 235); }</string>
+                </property>
+                <layout class="QVBoxLayout" name="lay_vision" stretch="0,2,0,3,0">
+                  <property name="leftMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="topMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="rightMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="bottomMargin">
+                    <number>10</number>
+                  </property>
+                  <item>
+                    <widget class="QLabel" name="label_3">
+                      <property name="maximumSize">
+                        <size>
+                          <width>16777215</width>
+                          <height>41</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                      </property>
+                      <property name="text">
+                        <string>ORIGINAL</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QLabel" name="ORIGINAL">
+                      <property name="minimumSize">
+                        <size>
+                          <width>240</width>
+                          <height>160</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QLabel {
+    border: 2px solid black;
+    border-radius: 5px;       /* opcional: bordes redondeados */
+    background-color: white; /* opcional: color de fondo */
+    padding: 4px;              /* opcional: espacio interno */
+}
+</string>
+                      </property>
+                      <property name="text">
+                        <string>ORIGINAL</string>
+                      </property>
+                      <property name="scaledContents">
+                        <bool>true</bool>
+                      </property>
+                      <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QLabel" name="label_6">
+                      <property name="maximumSize">
+                        <size>
+                          <width>16777215</width>
+                          <height>41</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                      </property>
+                      <property name="text">
+                        <string>RESULTADO</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QLabel" name="RESULTADOS">
+                      <property name="minimumSize">
+                        <size>
+                          <width>240</width>
+                          <height>200</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QLabel {
+    border: 2px solid black;
+    border-radius: 5px;       /* opcional: bordes redondeados */
+    background-color: white; /* opcional: color de fondo */
+    padding: 4px;              /* opcional: espacio interno */
+}
+</string>
+                      </property>
+                      <property name="text">
+                        <string>RESULTADOS</string>
+                      </property>
+                      <property name="scaledContents">
+                        <bool>true</bool>
+                      </property>
+                      <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_contador">
+                      <item>
+                        <widget class="QLabel" name="label_contador">
+                          <property name="styleSheet">
+                            <string>QLabel { font-size: 14px; background: transparent; }</string>
+                          </property>
+                          <property name="text">
+                            <string>Aguacates detectados:</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="L_CONTADOR">
+                          <property name="minimumSize">
+                            <size>
+                              <width>71</width>
+                              <height>31</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>71</width>
+                              <height>31</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+</string>
+                          </property>
+                          <property name="text">
+                            <string>0</string>
+                          </property>
+                          <property name="alignment">
+                            <set>Qt::AlignCenter</set>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                </layout>
+              </widget>
+            </item>
+            <item>
+              <widget class="QFrame" name="FONDO_SIMULACION">
+                <property name="styleSheet">
+                  <string>QFrame#FONDO_SIMULACION { background-color: rgb(235, 235, 235); }</string>
+                </property>
+                <layout class="QVBoxLayout" name="lay_simulacion" stretch="0,1,0,0">
+                  <property name="leftMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="topMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="rightMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="bottomMargin">
+                    <number>10</number>
+                  </property>
+                  <item>
+                    <widget class="QLabel" name="label_5">
+                      <property name="minimumSize">
+                        <size>
+                          <width>231</width>
+                          <height>41</height>
+                        </size>
+                      </property>
+                      <property name="maximumSize">
+                        <size>
+                          <width>231</width>
+                          <height>41</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                      </property>
+                      <property name="text">
+                        <string>SIMULACION DEL ROBOT</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QWidget" name="PANTALLA">
+                      <property name="minimumSize">
+                        <size>
+                          <width>400</width>
+                          <height>300</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>border-color: rgb(0, 0, 0);
+border: 2px solid black;</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QTabWidget" name="PESTANAS_MOVIMIENTO">
+                      <property name="minimumSize">
+                        <size>
+                          <width>0</width>
+                          <height>150</height>
+                        </size>
+                      </property>
+                      <property name="maximumSize">
+                        <size>
+                          <width>16777215</width>
+                          <height>165</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QTabBar::tab { font-size: 14px; padding: 6px 18px; background: #d3d3d3; color: #333; border: 1px solid #999; border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; } QTabBar::tab:selected { background: #2c3e50; color: white; } QTabBar::tab:!selected:hover { background: #e6e6e6; }</string>
+                      </property>
+                      <property name="currentIndex">
+                        <number>0</number>
+                      </property>
+                      <widget class="QWidget" name="PESTANA_SERVOS">
+                        <layout class="QGridLayout" name="lay_servos">
+                          <property name="leftMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="topMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="rightMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="bottomMargin">
+                            <number>8</number>
+                          </property>
+                          <item row="0" column="0">
+                            <widget class="QLabel" name="label_12">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>110</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                              </property>
+                              <property name="text">
+                                <string>Servo 1</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="0" column="1">
+                            <widget class="QSlider" name="SLIDER_1">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>200</width>
+                                  <height>22</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                              </property>
+                              <property name="orientation">
+                                <enum>Qt::Horizontal</enum>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="0" column="2">
+                            <widget class="QLabel" name="VS_1">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                              </property>
+                              <property name="text">
+                                <string />
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="1" column="0">
+                            <widget class="QLabel" name="label_7">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>110</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                              </property>
+                              <property name="text">
+                                <string>Servo 2</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="1" column="1">
+                            <widget class="QSlider" name="SLIDER_2">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>200</width>
+                                  <height>22</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                              </property>
+                              <property name="orientation">
+                                <enum>Qt::Horizontal</enum>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="1" column="2">
+                            <widget class="QLabel" name="VS_2">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                              </property>
+                              <property name="text">
+                                <string />
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="2" column="0">
+                            <widget class="QLabel" name="label_9">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>110</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                              </property>
+                              <property name="text">
+                                <string>Servo 3</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="2" column="1">
+                            <widget class="QSlider" name="SLIDER_3">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>200</width>
+                                  <height>22</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                              </property>
+                              <property name="orientation">
+                                <enum>Qt::Horizontal</enum>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="2" column="2">
+                            <widget class="QLabel" name="VS_3">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                              </property>
+                              <property name="text">
+                                <string />
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                        </layout>
+                        <attribute name="title">
+                          <string>Servos</string>
+                        </attribute>
+                      </widget>
+                      <widget class="QWidget" name="PESTANA_XYZ">
+                        <layout class="QGridLayout" name="lay_xyz">
+                          <property name="leftMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="topMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="rightMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="bottomMargin">
+                            <number>8</number>
+                          </property>
+                          <item row="0" column="0">
+                            <widget class="QLabel" name="ETIQUETA_X">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>110</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                              </property>
+                              <property name="text">
+                                <string>X (mm)</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="0" column="1">
+                            <widget class="QSlider" name="SLIDER_X">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>200</width>
+                                  <height>22</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                              </property>
+                              <property name="orientation">
+                                <enum>Qt::Horizontal</enum>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="0" column="2">
+                            <widget class="QLabel" name="VS_X">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                              </property>
+                              <property name="text">
+                                <string />
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="1" column="0">
+                            <widget class="QLabel" name="ETIQUETA_Y">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>110</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                              </property>
+                              <property name="text">
+                                <string>Y (mm)</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="1" column="1">
+                            <widget class="QSlider" name="SLIDER_Y">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>200</width>
+                                  <height>22</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                              </property>
+                              <property name="orientation">
+                                <enum>Qt::Horizontal</enum>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="1" column="2">
+                            <widget class="QLabel" name="VS_Y">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                              </property>
+                              <property name="text">
+                                <string />
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="2" column="0">
+                            <widget class="QLabel" name="ETIQUETA_Z">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>110</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                              </property>
+                              <property name="text">
+                                <string>Z (mm)</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="2" column="1">
+                            <widget class="QSlider" name="SLIDER_Z">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>200</width>
+                                  <height>22</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                              </property>
+                              <property name="orientation">
+                                <enum>Qt::Horizontal</enum>
+                              </property>
+                            </widget>
+                          </item>
+                          <item row="2" column="2">
+                            <widget class="QLabel" name="VS_Z">
+                              <property name="minimumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="maximumSize">
+                                <size>
+                                  <width>91</width>
+                                  <height>31</height>
+                                </size>
+                              </property>
+                              <property name="styleSheet">
+                                <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                              </property>
+                              <property name="text">
+                                <string />
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                        </layout>
+                        <attribute name="title">
+                          <string>Punta X Y Z</string>
+                        </attribute>
+                      </widget>
+                      <widget class="QWidget" name="PESTANA_PROGRAMA">
+                        <layout class="QVBoxLayout" name="lay_programa">
+                          <property name="leftMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="topMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="rightMargin">
+                            <number>8</number>
+                          </property>
+                          <property name="bottomMargin">
+                            <number>8</number>
+                          </property>
+                          <item>
+                            <widget class="QLabel" name="label_programa">
+                              <property name="styleSheet">
+                                <string>QLabel { font-size: 14px; color: #555; }</string>
+                              </property>
+                              <property name="text">
+                                <string>Próximamente: guardar movimientos y repetirlos.</string>
+                              </property>
+                              <property name="alignment">
+                                <set>Qt::AlignCenter</set>
+                              </property>
+                            </widget>
+                          </item>
+                        </layout>
+                        <attribute name="title">
+                          <string>Programa</string>
+                        </attribute>
+                      </widget>
+                    </widget>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_globales" stretch="0,2,0,3">
+                      <property name="spacing">
+                        <number>10</number>
+                      </property>
+                      <item>
+                        <widget class="QLabel" name="ETIQUETA_VELOCIDAD">
+                          <property name="minimumSize">
+                            <size>
+                              <width>91</width>
+                              <height>31</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>110</width>
+                              <height>31</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                          </property>
+                          <property name="text">
+                            <string>Velocidad</string>
+                          </property>
+                          <property name="alignment">
+                            <set>Qt::AlignCenter</set>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QSlider" name="SLIDER_VELOCIDAD">
+                          <property name="minimumSize">
+                            <size>
+                              <width>120</width>
+                              <height>22</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #d43b2d;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                          </property>
+                          <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                          </property>
+                          <property name="minimum">
+                            <number>10</number>
+                          </property>
+                          <property name="maximum">
+                            <number>100</number>
+                          </property>
+                          <property name="value">
+                            <number>100</number>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="VS_VELOCIDAD">
+                          <property name="minimumSize">
+                            <size>
+                              <width>70</width>
+                              <height>31</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>70</width>
+                              <height>31</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QLabel {
+    background-color: #c0de5d;
+    color: white; /* Color del texto */
+	font: 11pt "Consolas";
+    border-radius: 4px; /* Bordes redondeados */
+    padding: 5px;
+    /* Alineación del texto (opcional) */
+    qproperty-alignment: AlignCenter;
+}
+
+QLabel:hover {
+    background-color: #99a66d; /* Color al pasar el mouse */
+}</string>
+                          </property>
+                          <property name="text">
+                            <string>100 %</string>
+                          </property>
+                          <property name="alignment">
+                            <set>Qt::AlignCenter</set>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QComboBox" name="SELECTOR_POSTURA">
+                          <property name="minimumSize">
+                            <size>
+                              <width>330</width>
+                              <height>28</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QComboBox { font-size: 13px; }</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                </layout>
+              </widget>
+            </item>
+            <item>
+              <widget class="QFrame" name="FONDO_HERRAMIENTAS">
+                <property name="minimumSize">
+                  <size>
+                    <width>300</width>
+                    <height>0</height>
+                  </size>
+                </property>
+                <property name="maximumSize">
+                  <size>
+                    <width>340</width>
+                    <height>16777215</height>
+                  </size>
+                </property>
+                <property name="styleSheet">
+                  <string>QFrame#FONDO_HERRAMIENTAS { background-color: rgb(235, 235, 235); border: 2px solid black; }</string>
+                </property>
+                <layout class="QVBoxLayout" name="lay_herramientas">
+                  <property name="leftMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="topMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="rightMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="bottomMargin">
+                    <number>10</number>
+                  </property>
+                  <property name="spacing">
+                    <number>8</number>
+                  </property>
+                  <item>
+                    <widget class="QLabel" name="label_14">
+                      <property name="minimumSize">
+                        <size>
+                          <width>0</width>
+                          <height>50</height>
+                        </size>
+                      </property>
+                      <property name="maximumSize">
+                        <size>
+                          <width>16777215</width>
+                          <height>60</height>
+                        </size>
+                      </property>
+                      <property name="styleSheet">
+                        <string>QLabel {
+    border: 2px solid black;
+    font-size: 30px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                      </property>
+                      <property name="text">
+                        <string>HERRAMIENTAS</string>
+                      </property>
+                      <property name="alignment">
+                        <set>Qt::AlignCenter</set>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <layout class="QGridLayout" name="lay_color">
+                      <item row="0" column="0">
+                        <widget class="QSlider" name="SLIDER_color_1">
+                          <property name="styleSheet">
+                            <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #0078d7;
+    border: 2px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                          </property>
+                          <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="0" column="1">
+                        <widget class="QLabel" name="LABEL1">
+                          <property name="minimumSize">
+                            <size>
+                              <width>41</width>
+                              <height>21</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>41</width>
+                              <height>21</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QLabel {
+    border: 2px solid black;
+    font-size: 9px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+</string>
+                          </property>
+                          <property name="text">
+                            <string />
+                          </property>
+                          <property name="alignment">
+                            <set>Qt::AlignCenter</set>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="1" column="0">
+                        <widget class="QSlider" name="SLIDER_color_2">
+                          <property name="styleSheet">
+                            <string>QSlider::groove:horizontal {
+    border: 1px solid #999999;
+    height: 14px;
+    background: #d3d3d3;
+    margin: 2px 0;
+}
+
+QSlider::handle:horizontal {
+    background: #0078d7;
+    border: 1px solid #5c5c5c;
+    width: 14px;
+    margin: -2px 0;
+    border-radius: 7px;
+}</string>
+                          </property>
+                          <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="1" column="1">
+                        <widget class="QLabel" name="LABEL2">
+                          <property name="minimumSize">
+                            <size>
+                              <width>41</width>
+                              <height>21</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>41</width>
+                              <height>21</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QLabel {
+    border: 2px solid black;
+    font-size: 9px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+</string>
+                          </property>
+                          <property name="text">
+                            <string />
+                          </property>
+                          <property name="alignment">
+                            <set>Qt::AlignCenter</set>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_imagen">
+                      <item>
+                        <widget class="QPushButton" name="CARGA">
+                          <property name="minimumSize">
+                            <size>
+                              <width>0</width>
+                              <height>38</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QPushButton {
+    background-color: #2c3e50; /* Color de fondo */
+    color: white; /* Color del texto */
+    font-size: 20px; /* Tamaño de letra */
+    border-radius: 10px; /* Bordes redondeados */
+    padding: 10px;
+}
+
+QPushButton:hover {
+    background-color: #2980b9; /* Color al pasar el mouse */
+}
+</string>
+                          </property>
+                          <property name="text">
+                            <string>CARGAR IMAGEN</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="GUARDAR">
+                          <property name="minimumSize">
+                            <size>
+                              <width>0</width>
+                              <height>38</height>
+                            </size>
+                          </property>
+                          <property name="styleSheet">
+                            <string>QPushButton {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+QPushButton:hover {
+    background-color: #f7db15; /* Color al pasar el mouse */
+}
+</string>
+                          </property>
+                          <property name="text">
+                            <string>GUARDAR</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <widget class="QFrame" name="TARJETA_VOLUMEN">
+                      <property name="styleSheet">
+                        <string>QFrame#TARJETA_VOLUMEN { background-color: #c0de5d; border-radius: 10px; }</string>
+                      </property>
+                      <layout class="QVBoxLayout" name="lay_tarjeta_volumen">
+                        <property name="leftMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="topMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="rightMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="bottomMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="spacing">
+                          <number>6</number>
+                        </property>
+                        <item>
+                          <widget class="QLabel" name="VS_7">
+                            <property name="styleSheet">
+                              <string>QLabel { color: black; font: 75 9pt "Consolas"; background: transparent; }</string>
+                            </property>
+                            <property name="text">
+                              <string>Grafica el area en el que el robot puede trabajar</string>
+                            </property>
+                            <property name="alignment">
+                              <set>Qt::AlignCenter</set>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QPushButton" name="VER_VOLUMEN">
+                            <property name="minimumSize">
+                              <size>
+                                <width>0</width>
+                                <height>38</height>
+                              </size>
+                            </property>
+                            <property name="styleSheet">
+                              <string>QPushButton {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+QPushButton:hover {
+    background-color: #f7db15; /* Color al pasar el mouse */
+}
+</string>
+                            </property>
+                            <property name="text">
+                              <string>VOLUMEN DE TRABAJO</string>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QProgressBar" name="PROCESO">
+                            <property name="value">
+                              <number>0</number>
+                            </property>
+                          </widget>
+                        </item>
+                      </layout>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QFrame" name="TARJETA_CI">
+                      <property name="styleSheet">
+                        <string>QFrame#TARJETA_CI { background-color: #101f78; border-radius: 10px; }</string>
+                      </property>
+                      <layout class="QVBoxLayout" name="lay_tarjeta_ci">
+                        <property name="leftMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="topMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="rightMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="bottomMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="spacing">
+                          <number>6</number>
+                        </property>
+                        <item>
+                          <widget class="QLabel" name="VS_9">
+                            <property name="styleSheet">
+                              <string>QLabel { color: white; font: 75 9pt "Consolas"; background: transparent; }</string>
+                            </property>
+                            <property name="text">
+                              <string>Dado un punto, calcula la CI</string>
+                            </property>
+                            <property name="alignment">
+                              <set>Qt::AlignCenter</set>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="label_10">
+                            <property name="minimumSize">
+                              <size>
+                                <width>0</width>
+                                <height>38</height>
+                              </size>
+                            </property>
+                            <property name="styleSheet">
+                              <string>QLabel {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+</string>
+                            </property>
+                            <property name="text">
+                              <string>CINEMATICA INVERSA</string>
+                            </property>
+                            <property name="alignment">
+                              <set>Qt::AlignCenter</set>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <layout class="QHBoxLayout" name="lay_xyz_campos">
+                            <item>
+                              <widget class="QLineEdit" name="TE_X">
+                                <property name="styleSheet">
+                                  <string>QLineEdit { font: 10pt "Consolas"; background: white; border: 1px solid #888; padding: 2px; }</string>
+                                </property>
+                                <property name="placeholderText">
+                                  <string>X mm</string>
+                                </property>
+                              </widget>
+                            </item>
+                            <item>
+                              <widget class="QLineEdit" name="TE_Y">
+                                <property name="styleSheet">
+                                  <string>QLineEdit { font: 10pt "Consolas"; background: white; border: 1px solid #888; padding: 2px; }</string>
+                                </property>
+                                <property name="placeholderText">
+                                  <string>Y mm</string>
+                                </property>
+                              </widget>
+                            </item>
+                            <item>
+                              <widget class="QLineEdit" name="TE_Z">
+                                <property name="styleSheet">
+                                  <string>QLineEdit { font: 10pt "Consolas"; background: white; border: 1px solid #888; padding: 2px; }</string>
+                                </property>
+                                <property name="placeholderText">
+                                  <string>Z mm</string>
+                                </property>
+                              </widget>
+                            </item>
+                          </layout>
+                        </item>
+                        <item>
+                          <widget class="QPushButton" name="CALCULAR">
+                            <property name="minimumSize">
+                              <size>
+                                <width>0</width>
+                                <height>34</height>
+                              </size>
+                            </property>
+                            <property name="styleSheet">
+                              <string>QPushButton {
+    border: 2px solid black;
+    font-size: 16px; 
+	
+	color: white;
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: #27ae60;
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+QPushButton:hover {
+    background-color: #f7db15; /* Color al pasar el mouse */
+}
+</string>
+                            </property>
+                            <property name="text">
+                              <string>CALCULAR</string>
+                            </property>
+                          </widget>
+                        </item>
+                      </layout>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QFrame" name="TARJETA_COSECHA">
+                      <property name="styleSheet">
+                        <string>QFrame#TARJETA_COSECHA { background-color: #b11623; border-radius: 10px; }</string>
+                      </property>
+                      <layout class="QVBoxLayout" name="lay_tarjeta_cosecha">
+                        <property name="leftMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="topMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="rightMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="bottomMargin">
+                          <number>8</number>
+                        </property>
+                        <property name="spacing">
+                          <number>6</number>
+                        </property>
+                        <item>
+                          <widget class="QLabel" name="VS_8">
+                            <property name="styleSheet">
+                              <string>QLabel { color: white; font: 75 9pt "Consolas"; background: transparent; }</string>
+                            </property>
+                            <property name="text">
+                              <string>Realiza la cosecha</string>
+                            </property>
+                            <property name="alignment">
+                              <set>Qt::AlignCenter</set>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QPushButton" name="COSECHAR">
+                            <property name="minimumSize">
+                              <size>
+                                <width>0</width>
+                                <height>38</height>
+                              </size>
+                            </property>
+                            <property name="styleSheet">
+                              <string>QPushButton {
+    border: 2px solid black;
+    font-size: 16px; 
+    border-radius: 10px;       /* opcional: bordes redondeados */
+    background-color: rgb(255, 255, 255);
+    padding: 4px;              /* opcional: espacio interno */
+}
+
+QPushButton:hover {
+    background-color: #f7db15; /* Color al pasar el mouse */
+}
+</string>
+                            </property>
+                            <property name="text">
+                              <string>COSECHAR</string>
+                            </property>
+                          </widget>
+                        </item>
+                      </layout>
+                    </widget>
+                  </item>
+                  <item>
+                    <spacer name="resorte_herramientas">
+                      <property name="orientation">
+                        <enum>Qt::Vertical</enum>
+                      </property>
+                      <property name="sizeHint">
+                        <size>
+                          <width>20</width>
+                          <height>10</height>
+                        </size>
+                      </property>
+                    </spacer>
+                  </item>
+                </layout>
+              </widget>
+            </item>
+          </layout>
+        </item>
+      </layout>
+    </widget>
+    <widget class="QStatusBar" name="statusbar" />
+  </widget>
+  <resources />
+  <connections />
+</ui>

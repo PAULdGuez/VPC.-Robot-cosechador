@@ -1,0 +1,9 @@
+numpy
+scipy
+opencv-python
+PyQt5
+pyvista
+pyvistaqt
+pyserial
+pyyaml
+pytest
