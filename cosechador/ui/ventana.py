@@ -13,7 +13,9 @@ from PyQt5.QtGui import QImage, QPixmap
 from pyvistaqt import QtInteractor
 
 from cosechador.hardware.enlace import abrir_enlace
-from cosechador.movimiento.trayectorias import plan_cosecha, plan_ir_y_volver, posicion, tramo_continuo
+from cosechador.movimiento import programa as programas
+from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_grabacion, plan_ir_y_volver,
+                                                plan_puntos, posicion, tramo_articular, tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
 from cosechador.robot.espacio_trabajo import barrer
@@ -51,10 +53,13 @@ MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 
 class VentanaPrincipal(QtWidgets.QMainWindow):
 
-    def __init__(self, robot, enlace=None, fuente_camara=None):
+    def __init__(self, robot, enlace=None, fuente_camara=None, ajustes=None, carpeta_programas=None):
         super().__init__()
         uic.loadUi(RUTA_UI, self)
         self.robot = robot
+        # AJUSTES DE LA PERSONA (P. EJ. EL ÚLTIMO PROGRAMA ELEGIDO): QSettings ES LO NATIVO DE Qt
+        self.ajustes = ajustes if ajustes is not None else QtCore.QSettings("robot-cosechador", "cosechador")
+        self.carpeta_programas = carpeta_programas or programas.CARPETA_PROGRAMAS
 
         # ESCENA 3D INCRUSTADA EN EL RECUADRO "PANTALLA" DEL .ui
         self.escena = Escena(QtInteractor(self), robot)
@@ -74,10 +79,12 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.imagen_fija = None
         self.cola = deque()
         self.temporizador_movimiento = QtCore.QTimer(self)
+        self.temporizador_movimiento.setTimerType(QtCore.Qt.PreciseTimer)  # LAS GRABACIONES RESPETAN SUS TIEMPOS
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
 
         self._configurar_selectores()
         self._configurar_sliders()
+        self._configurar_programas()
         self._configurar_vision()
         self.CALCULAR.clicked.connect(self.ir_y_volver)
         self.COSECHAR.clicked.connect(self.cosechar)
@@ -139,13 +146,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.cola.clear()
         self.cola.extend(plan)
         self._ocupado(bloquear)
-        self.temporizador_movimiento.start()
+        if not self.temporizador_movimiento.isActive():
+            self.temporizador_movimiento.start(1)  # EL PRIMER PASO, YA
 
     def _siguiente_paso(self):
         if not self.cola:
             self.temporizador_movimiento.stop()
-            if not self._arrastrando():
-                self._sincronizar_sliders()
+            self._sincronizar_sliders()
             self._ocupado(False)
             return
         paso = self.cola.popleft()
@@ -153,10 +160,24 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.poner_servos(paso.servos)
         if paso.aviso is not None:
             self.avisar(paso.aviso)
+        # EL SIGUIENTE PASO LLEGA CUANDO TERMINA ESTE: SU DURACIÓN, ESCALADA POR LA VELOCIDAD GENERAL
+        ms = paso.ms if paso.ms is not None else (self.robot.movimiento.ms_por_paso if paso.servos is not None else 0)
+        self.temporizador_movimiento.setInterval(max(1, int(round(ms * 100 / self.velocidad))))
+
+    def detener(self):
+        """■ Detener: el robot se queda donde iba y no se manda nada más a la placa."""
+        if not self.en_movimiento and not self.cola:
+            return
+        self.cola.clear()
+        self.temporizador_movimiento.stop()
+        self._sincronizar_sliders()
+        self._ocupado(False)
+        self.avisar(f"Detenido en {tuple(int(round(c)) for c in self.posicion)}.")
 
     def _ocupado(self, si):
         """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
-        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, *self.sliders_servo, *self.sliders_xyz):
+        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA,
+                        *self.sliders_servo, *self.sliders_xyz):
             control.setEnabled(not si)
 
     def _puede_planear(self):
@@ -211,9 +232,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         return self.SLIDER_VELOCIDAD.value()
 
     def _velocidad_cambiada(self):
-        # MENOS VELOCIDAD = MÁS TIEMPO ENTRE PASOS. EL SALTO POR PASO NO CAMBIA, ASÍ QUE AL 100 % SE VA
-        # A LO MÁS RÁPIDO QUE AGUANTA EL SERVO Y NUNCA MÁS. SE APLICA AUNQUE HAYA UN MOVIMIENTO EN CURSO.
-        self.temporizador_movimiento.setInterval(int(round(self.robot.movimiento.ms_por_paso * 100 / self.velocidad)))
+        # MENOS VELOCIDAD = MÁS TIEMPO ENTRE PASOS (LO CALCULA _siguiente_paso). EL SALTO POR PASO NO
+        # CAMBIA: AL 100 % SE VA A LO MÁS RÁPIDO QUE AGUANTA EL SERVO Y NUNCA MÁS. APLICA DESDE EL PASO
+        # SIGUIENTE, AUNQUE HAYA UN MOVIMIENTO EN CURSO.
         self.VS_VELOCIDAD.setText(f"{self.velocidad} %")
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% PESTAÑAS DE MOVIMIENTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -251,11 +272,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def _slider_servo_movido(self):
         # LOS SLIDERS DE SERVOS SON LOS ÁNGULOS DE CADA SERVO (LO MISMO QUE RECIBE LA PLACA)
-        servos = list(self.servos)
+        # VAN POCO A POCO (≤ salto_max_por_paso): UN CLIC AL EXTREMO YA NO BRINCA 0° → 180° DE GOLPE
+        destino = list(self.servos)
         for i, slider in enumerate(self.sliders_servo):
-            servos[i] = slider.value()
-        self.poner_servos(servos)
-        self._sincronizar(self.sliders_xyz, self.posicion)
+            destino[i] = slider.value()
+        self.ejecutar(tramo_articular(self.robot, self.servos, destino), bloquear=False)
 
     def _jog_cartesiano(self):
         """Pestaña Punta X Y Z: la punta va en línea recta al punto de los sliders; la CI mueve los servos."""
@@ -280,9 +301,81 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             slider.blockSignals(False)
 
     def _sincronizar_sliders(self):
-        """Las dos pestañas muestran siempre la misma pose: servos en grados y punta en mm."""
-        self._sincronizar(self.sliders_servo, self.servos)
-        self._sincronizar(self.sliders_xyz, self.posicion)
+        """Las dos pestañas muestran siempre la misma pose: servos en grados y punta en mm.
+        Un grupo de sliders que la persona está arrastrando no se toca."""
+        if not any(s.isSliderDown() for s in self.sliders_servo):
+            self._sincronizar(self.sliders_servo, self.servos)
+        if not any(s.isSliderDown() for s in self.sliders_xyz):
+            self._sincronizar(self.sliders_xyz, self.posicion)
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% PROGRAMAS (PESTAÑA PROGRAMA) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def _configurar_programas(self):
+        self.BTN_REPRODUCIR.clicked.connect(self.reproducir)
+        self.BTN_DETENER.clicked.connect(self.detener)
+        self.SELECTOR_PROGRAMA.currentIndexChanged.connect(self._programa_elegido)
+        self.recargar_programas()
+
+    def recargar_programas(self):
+        """Lista los programas de la carpeta y deja elegido el último que se usó."""
+        ultimo = self.ajustes.value("programa/ultimo", "")
+        self.SELECTOR_PROGRAMA.blockSignals(True)
+        self.SELECTOR_PROGRAMA.clear()
+        for nombre in programas.listar(self.carpeta_programas):
+            self.SELECTOR_PROGRAMA.addItem(nombre, nombre)
+        indice = self.SELECTOR_PROGRAMA.findData(ultimo)
+        self.SELECTOR_PROGRAMA.setCurrentIndex(indice if indice >= 0 else 0)
+        self.SELECTOR_PROGRAMA.blockSignals(False)
+        self._programa_elegido()
+
+    def _programa_elegido(self):
+        nombre = self.SELECTOR_PROGRAMA.currentData()
+        self.BTN_REPRODUCIR.setEnabled(nombre is not None)
+        if nombre is None:
+            self.INFO_PROGRAMA.setText(f"No hay programas en {self.carpeta_programas}.")
+            return
+        self.ajustes.setValue("programa/ultimo", nombre)
+        try:
+            p = programas.cargar(os.path.join(self.carpeta_programas, nombre), self.robot)
+        except programas.ErrorPrograma as e:
+            self.INFO_PROGRAMA.setText(f"⚠ {e}")
+            return
+        if p.tipo == "puntos":
+            self.INFO_PROGRAMA.setText(f"Programa por puntos · {len(p.puntos)} puntos")
+        else:
+            self.INFO_PROGRAMA.setText(f"Grabación · {len(p.muestras)} muestras · {p.duracion:.1f} s")
+
+    def programa_elegido(self):
+        """El Programa elegido en el selector, o None (y avisa por qué)."""
+        nombre = self.SELECTOR_PROGRAMA.currentData()
+        if nombre is None:
+            self.avisar("No hay programa elegido.")
+            return None
+        try:
+            return programas.cargar(os.path.join(self.carpeta_programas, nombre), self.robot)
+        except programas.ErrorPrograma as e:
+            self.avisar(str(e))
+            return None
+
+    def reproducir(self):
+        """▶ Reproducir: el plan se calcula COMPLETO antes de mover; si no puede terminar, no arranca."""
+        if self.en_movimiento:
+            return
+        p = self.programa_elegido()
+        if p is None:
+            return
+        if p.tipo == "puntos":
+            if not self._puede_planear():
+                return
+            plan, problemas = plan_puntos(self.robot, self.servos, p, self.postura)
+        else:
+            plan, problemas = plan_grabacion(self.robot, self.servos, p, self.CHK_QUITAR_PAUSAS.isChecked())
+        if problemas:
+            extra = f" (y {len(problemas) - 1} más)" if len(problemas) > 1 else ""
+            self.avisar(f"No arranca: {problemas[0][1]}{extra}")
+            return
+        segundos = duracion_ms(self.robot, plan) / 1000 * 100 / self.velocidad
+        self.avisar(f"Reproduciendo «{p.nombre}» (~{segundos:.1f} s)")
+        self.ejecutar(plan)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):
