@@ -1,0 +1,18 @@
+formato: 1
+nombre: Demo de cosecha
+tipo: puntos
+robot: Cosechador de aguacates (3 GDL)
+gdl: 3
+puntos:
+- servos: [63.4027, 97.0155, 81.0524]
+  movimiento: articular
+  velocidad: 100
+- servos: [63.4027, 99.9647, 72.6776]
+  movimiento: lineal
+  velocidad: 20
+- servos: [63.4027, 97.0155, 81.0524]
+  movimiento: lineal
+  velocidad: 50
+- servos: [90.0, 45.573, 45.6432]
+  movimiento: articular
+  velocidad: 100
