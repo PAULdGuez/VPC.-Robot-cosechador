@@ -78,3 +78,13 @@ def test_volumen_respeta_rango_de_servos(robot):
     # TODO PUNTO DEL VOLUMEN DEBE SER ALCANZABLE SEGUN LA CI
     for p in puntos:
         assert robot.punto_en_volumen(*p)
+
+
+def test_ruido_de_punto_flotante_en_la_base_no_saca_de_rango(robot):
+    # LA POSICION REAL DE HOME (POR CINEMATICA DIRECTA) TRAE y = -5e-9; EL CAMINO DE AHI A UN PUNTO
+    # SOBRE +X DABA BASE = 359.9999° Y SE DECLARABA INALCANZABLE
+    home_real = robot.CD(*servo_a_dh(*robot.angulos_servo(*HOME)))
+    destino = np.array([1656.0, 0.0, 630.0])
+    for k in np.linspace(0, 1, 20):
+        assert robot.angulos_servo(*(home_real + (destino - home_real) * k)) is not None
+    assert dh_a_servo(-1e-10, 90, -90)[0] == pytest.approx(0, abs=1e-6)

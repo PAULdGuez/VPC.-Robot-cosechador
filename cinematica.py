@@ -23,9 +23,10 @@ def _envolver(angulo):
 
 def dh_a_servo(t1, t2, t3):
     """Angulos de Denavit-Hartenberg -> angulos que se le mandan a cada servo."""
-    # SE REDONDEA ANTES DE ENVOLVER: UN y = -1e-14 DARIA 359.9999° EN VEZ DE 0°
-    t1, t2, t3 = (round(float(t), 9) for t in (t1, t2, t3))
-    return t1 % 360, 180 - t2, _envolver(t3) + 180
+    # LA BASE SE ENVUELVE ALREDEDOR DEL CENTRO DE SU RANGO (90°), NO DESDE 0°: ASI UN RUIDO
+    # DE -1e-10° QUEDA COMO ~0° (DENTRO DE LA TOLERANCIA) Y NO COMO 359.9999° (FUERA DE RANGO).
+    t1, t2, t3 = (float(t) for t in (t1, t2, t3))
+    return _envolver(t1 - 90) + 90, 180 - t2, _envolver(t3) + 180
 
 
 def servo_a_dh(s1, s2, s3):
