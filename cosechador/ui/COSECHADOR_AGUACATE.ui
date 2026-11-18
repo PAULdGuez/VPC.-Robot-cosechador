@@ -1029,7 +1029,7 @@ QLabel:hover {
                                   <property name="minimumSize">
                                     <size>
                                       <width>200</width>
-                                      <height>26</height>
+                                      <height>28</height>
                                     </size>
                                   </property>
                                   <property name="styleSheet">
@@ -1239,7 +1239,7 @@ QLabel:hover {
                           <property name="minimumSize">
                             <size>
                               <width>330</width>
-                              <height>28</height>
+                              <height>30</height>
                             </size>
                           </property>
                           <property name="styleSheet">
@@ -1269,7 +1269,7 @@ QLabel:hover {
                 <property name="styleSheet">
                   <string>QFrame#FONDO_HERRAMIENTAS { background-color: rgb(235, 235, 235); border: 2px solid black; }</string>
                 </property>
-                <layout class="QVBoxLayout" name="lay_herramientas">
+                <layout class="QVBoxLayout" name="lay_herramientas" stretch="0,0,0,0,0,0,1">
                   <property name="leftMargin">
                     <number>10</number>
                   </property>
@@ -1753,17 +1753,126 @@ QPushButton:hover {
                     </widget>
                   </item>
                   <item>
-                    <spacer name="resorte_herramientas">
-                      <property name="orientation">
-                        <enum>Qt::Vertical</enum>
+                    <widget class="QFrame" name="FONDO_REGISTRO">
+                      <property name="styleSheet">
+                        <string>QFrame#FONDO_REGISTRO { background-color: #ffffff; border-radius: 10px; }</string>
                       </property>
-                      <property name="sizeHint">
-                        <size>
-                          <width>20</width>
-                          <height>10</height>
-                        </size>
-                      </property>
-                    </spacer>
+                      <layout class="QVBoxLayout" name="lay_registro" stretch="0,1,0,0">
+                        <property name="leftMargin">
+                          <number>6</number>
+                        </property>
+                        <property name="topMargin">
+                          <number>6</number>
+                        </property>
+                        <property name="rightMargin">
+                          <number>6</number>
+                        </property>
+                        <property name="bottomMargin">
+                          <number>6</number>
+                        </property>
+                        <property name="spacing">
+                          <number>5</number>
+                        </property>
+                        <item>
+                          <layout class="QHBoxLayout" name="lay_registro_cabeza" stretch="1,0">
+                            <property name="spacing">
+                              <number>6</number>
+                            </property>
+                            <item>
+                              <widget class="QLabel" name="ETIQUETA_REGISTRO">
+                                <property name="styleSheet">
+                                  <string>QLabel { font-size: 13px; font-weight: bold; color: #2c3e50; background: transparent; }</string>
+                                </property>
+                                <property name="text">
+                                  <string>REGISTRO</string>
+                                </property>
+                              </widget>
+                            </item>
+                            <item>
+                              <widget class="QComboBox" name="FILTRO_REGISTRO">
+                                <property name="minimumSize">
+                                  <size>
+                                    <width>150</width>
+                                    <height>26</height>
+                                  </size>
+                                </property>
+                              </widget>
+                            </item>
+                          </layout>
+                        </item>
+                        <item>
+                          <widget class="QListWidget" name="LISTA_REGISTRO">
+                            <property name="minimumSize">
+                              <size>
+                                <width>0</width>
+                                <height>120</height>
+                              </size>
+                            </property>
+                            <property name="styleSheet">
+                              <string>QListWidget { background: white; border: 1px solid #999; border-radius: 6px; font-size: 12px; } QListWidget::item { padding: 3px 4px; border-bottom: 1px solid #eee; } QListWidget::item:selected { background: #dde6ee; color: black; } QScrollBar:vertical { width: 8px; background: transparent; margin: 2px; border: none; } QScrollBar::handle:vertical { background: #c4c4c4; border: none; border-radius: 4px; min-height: 20px; } QScrollBar::add-line, QScrollBar::sub-line { height: 0; border: none; } QScrollBar::add-page, QScrollBar::sub-page { background: none; } QScrollBar:horizontal { height: 0; }</string>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QTextBrowser" name="DETALLE_REGISTRO">
+                            <property name="minimumSize">
+                              <size>
+                                <width>0</width>
+                                <height>80</height>
+                              </size>
+                            </property>
+                            <property name="maximumSize">
+                              <size>
+                                <width>16777215</width>
+                                <height>120</height>
+                              </size>
+                            </property>
+                            <property name="styleSheet">
+                              <string>QTextBrowser { background: #fafafa; border: 1px solid #ccc; border-radius: 6px; font-size: 11px; } QScrollBar:vertical { width: 8px; background: transparent; margin: 2px; border: none; } QScrollBar::handle:vertical { background: #c4c4c4; border: none; border-radius: 4px; min-height: 20px; } QScrollBar::add-line, QScrollBar::sub-line { height: 0; border: none; } QScrollBar::add-page, QScrollBar::sub-page { background: none; } QScrollBar:horizontal { height: 0; }</string>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <layout class="QHBoxLayout" name="lay_registro_botones">
+                            <property name="spacing">
+                              <number>10</number>
+                            </property>
+                            <item>
+                              <widget class="QPushButton" name="BTN_COPIAR_REGISTRO">
+                                <property name="minimumSize">
+                                  <size>
+                                    <width>0</width>
+                                    <height>26</height>
+                                  </size>
+                                </property>
+                                <property name="styleSheet">
+                                  <string>QPushButton { font-size: 14px; border: 2px solid black; border-radius: 8px; background: white; padding: 2px 12px; } QPushButton:disabled { color: #999; border-color: #bbb; }</string>
+                                </property>
+                                <property name="text">
+                                  <string>Copiar</string>
+                                </property>
+                              </widget>
+                            </item>
+                            <item>
+                              <widget class="QPushButton" name="BTN_EXPORTAR_REGISTRO">
+                                <property name="minimumSize">
+                                  <size>
+                                    <width>0</width>
+                                    <height>26</height>
+                                  </size>
+                                </property>
+                                <property name="styleSheet">
+                                  <string>QPushButton { font-size: 14px; border: 2px solid black; border-radius: 8px; background: white; padding: 2px 12px; } QPushButton:disabled { color: #999; border-color: #bbb; }</string>
+                                </property>
+                                <property name="text">
+                                  <string>Exportar…</string>
+                                </property>
+                              </widget>
+                            </item>
+                          </layout>
+                        </item>
+                      </layout>
+                    </widget>
                   </item>
                 </layout>
               </widget>

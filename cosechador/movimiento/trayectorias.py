@@ -32,6 +32,7 @@ class Paso:
     servos: tuple | None = None
     aviso: str | None = None
     ms: float | None = None
+    nivel: str = "info"           # DEL AVISO: info | ok | aviso | error (ver cosechador/registro.py)
 
 
 class _NoSePuede(Exception):
@@ -68,7 +69,7 @@ def _cambio_de_postura(robot, servos_a, servos_b, cerca_de, postura):
                          f"(el brazo barrería hasta {desvio:.0f} mm fuera de la línea) y el modo es «negar».")
     aviso = (f"Cambio de postura cerca de {_texto(cerca_de)}: los servos giran despacio "
              f"(la punta sale hasta {desvio:.0f} mm de la línea recta).")
-    return [Paso(aviso=aviso)] + pasos
+    return [Paso(aviso=aviso, nivel="aviso")] + pasos
 
 
 def _refinar(robot, pa, sa, pb, postura):
@@ -131,13 +132,13 @@ def _ir(robot, servos, destino, postura, via_home):
 def plan_ir_y_volver(robot, servos, destino, postura=None):
     """Ir al destino en línea recta y regresar a HOME (botón CALCULAR)."""
     if not alcanzable(robot, destino):
-        return [Paso(aviso=f"Punto fuera del volumen de trabajo: {_texto(destino)}")]
+        return [Paso(aviso=f"Punto fuera del volumen de trabajo: {_texto(destino)}", nivel="aviso")]
     ida, llegada, motivo = _ir(robot, servos, destino, postura, via_home=False)
     if ida is None:
         return [Paso(aviso=f"El camino hacia {_texto(destino)} {motivo}"
-                           if not motivo.startswith("Para") else motivo)]
+                           if not motivo.startswith("Para") else motivo, nivel="aviso")]
     regreso, _, _ = _ir(robot, llegada, robot.home, postura, via_home=False)
-    return ida + (regreso or []) + [Paso(aviso=f"Punto {_texto(destino)} alcanzado; de regreso en HOME.")]
+    return ida + (regreso or []) + [Paso(aviso=f"Punto {_texto(destino)} alcanzado; de regreso en HOME.", nivel="ok")]
 
 
 def plan_cosecha(robot, servos, puntos, postura=None):
@@ -149,18 +150,19 @@ def plan_cosecha(robot, servos, puntos, postura=None):
     for i, punto in enumerate(puntos, start=1):
         plan.append(Paso(aviso=f"Cosechando {i}/{len(puntos)}: {_texto(punto)}"))
         if not alcanzable(robot, punto):
-            plan.append(Paso(aviso=f"Punto fuera del volumen de trabajo: {_texto(punto)}"))
+            plan.append(Paso(aviso=f"Punto fuera del volumen de trabajo: {_texto(punto)}", nivel="aviso"))
             continue
         tramo, llegada, motivo = _ir(robot, actual, punto, postura, via_home=True)
         if tramo is None:
             plan.append(Paso(aviso=f"El camino hacia {_texto(punto)} {motivo}"
-                                   if not motivo.startswith("Para") else motivo))
+                                   if not motivo.startswith("Para") else motivo, nivel="aviso"))
             continue
         plan.extend(tramo)
         cosechados, actual = cosechados + 1, llegada
     regreso, _, _ = _ir(robot, actual, robot.home, postura, via_home=False)
     plan.extend(regreso or [])
-    plan.append(Paso(aviso=f"Cosecha terminada: {cosechados} de {len(puntos)} puntos alcanzados."))
+    plan.append(Paso(aviso=f"Cosecha terminada: {cosechados} de {len(puntos)} puntos alcanzados.",
+                     nivel="ok" if cosechados == len(puntos) else "aviso"))
     return plan, cosechados
 
 
@@ -206,7 +208,7 @@ def plan_puntos(robot, servos, programa, postura=None):
         actual = servos_del_plan(tramo)[-1] if servos_del_plan(tramo) else actual
     if problemas:
         return None, problemas
-    return plan + [Paso(aviso=f"Programa «{programa.nombre}» terminado.")], []
+    return plan + [Paso(aviso=f"Programa «{programa.nombre}» terminado.", nivel="ok")], []
 
 
 UMBRAL_QUIETO = 0.05   # GRADOS: POR DEBAJO, ENTRE DOS MUESTRAS NO HUBO MOVIMIENTO (ES PAUSA)
@@ -240,7 +242,7 @@ def plan_grabacion(robot, servos, programa, quitar_pausas=False):
     final = f"Grabación «{programa.nombre}» terminada."
     if retraso > 1:
         final += f" Tardó {retraso / 1000:.1f} s más que lo grabado: hubo movimientos más rápidos que lo que aguanta el servo."
-    return plan + [Paso(aviso=final)], []
+    return plan + [Paso(aviso=final, nivel="aviso" if retraso > 1 else "ok")], []
 
 
 def duracion_ms(robot, plan):
