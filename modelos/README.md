@@ -1,7 +1,11 @@
 # Piezas 3D del robot
 
-Pon aquí un STL por pieza con estos nombres exactos. La simulación usa el STL si existe y, si no,
-una pieza provisional. **No hay que tocar código**: exportas, guardas aquí y vuelves a abrir la app.
+Pon aquí un STL por pieza. **Qué archivo es cada pieza lo dice el YAML del robot**
+(`robots/cosechador_3gdl.yaml`, campos `pieza:` de la base, de cada articulación y del efector).
+La simulación usa el STL si existe y, si no, una pieza provisional armada con la tabla DH.
+**No hay que tocar código**: exportas, guardas aquí y vuelves a abrir la app.
+
+Para el cosechador:
 
 | Archivo | Qué es | Se mueve con |
 |---|---|---|
@@ -25,8 +29,11 @@ Si el origen queda en otro lado, la pieza aparece desfasada o girada.
   del codo es **Z**.
 - **efector**: origen en la punta del antebrazo, apuntando a **+X**.
 
-Las medidas 350 / 1000 / 700 viven en `cinematica.py` (`D1`, `A2`, `A3`). Si tu diseño cambia una
-medida, cámbiala ahí, para que la cinemática y el dibujo sigan coincidiendo.
+En general, para cualquier robot del YAML: **la pieza de la articulación i tiene su origen en el eje
+de giro i (que es Z), sube `d` sobre Z y luego avanza `a` sobre +X** hasta el eje de la siguiente.
+
+Las medidas 350 / 1000 / 700 viven en la tabla DH del YAML. Si tu diseño cambia una medida,
+cámbiala ahí, para que la cinemática y el dibujo sigan coincidiendo.
 
 ## Exportar desde Onshape
 
@@ -37,4 +44,4 @@ medida, cámbiala ahí, para que la cinemática y el dibujo sigan coincidiendo.
 En Fusion 360: clic derecho en el cuerpo → **Save As Mesh** → STL, unidades en **mm**.
 
 **Para comprobarlo:** corre `.venv/bin/python -m pytest -q tests`. Al abrir la app, en la terminal
-puedes revisar qué piezas tomó del STL con `ventana.simulacion.origen_piezas`.
+puedes revisar qué piezas tomó del STL con `ventana.escena.origen_piezas`.

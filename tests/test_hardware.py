@@ -57,3 +57,20 @@ def test_sin_puerto_abre_la_virtual(monkeypatch):
     enlace.dispositivo.leer_respuestas()
     assert enlace.enviar(90, 45, 45) == ("90,45,45", [])
     assert enlace.dispositivo.angulos == (90, 45, 45)
+
+
+def test_virtual_de_n_servos_no_se_traga_valores():
+    # CON UN ROBOT DE 4 SERVOS LA VIRTUAL ESPERA 4 VALORES (ANTES SE QUEDABA CON 3 SIN AVISAR)
+    esp = ESP32Virtual(rangos=[(0, 180)] * 4)
+    esp.leer_respuestas()
+    esp.write("90,150,90,45\n")
+    assert esp.angulos == (90, 150, 90, 45)
+    esp.write("90,150,90\n")
+    assert esp.leer_respuestas() == ["Formato incorrecto. Usar: angulo1,angulo2,angulo3,angulo4"]
+
+
+def test_tres_servos_sigue_siendo_el_firmware():
+    # "90,45,45,45" CON EL FIRMWARE DE 3: EL TERCERO SE LEE CON toInt("45,45") = 45
+    esp = ESP32Virtual()
+    esp.write("90,45,45,45\n")
+    assert esp.angulos == (90, 45, 45)

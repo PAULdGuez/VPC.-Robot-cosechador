@@ -28,14 +28,21 @@ def formatear_comando(*servos):
 
 
 class ESP32Virtual:
-    """Emula ROBOT_ESP32_CODIGO.ino: mismo parseo, mismas validaciones y mismos mensajes."""
+    """Emula ROBOT_ESP32_CODIGO.ino: mismo parseo, mismas validaciones y mismos mensajes.
+
+    Con los 3 rangos por omision es EXACTAMENTE ese firmware. Con otros `rangos` emula el mismo
+    firmware generalizado a N servos (sirve para otros robots del YAML): espera N valores
+    separados por comas; el ultimo se lee con toInt, como hace el firmware con el tercero.
+    """
 
     nombre = "ESP32 virtual"
 
-    def __init__(self):
+    def __init__(self, rangos=RANGOS_FIRMWARE):
+        self.rangos = tuple(rangos)
         self.angulos = None          # ULTIMOS ANGULOS QUE "MOVIERON" LOS SERVOS
         self.historial = []          # TODOS LOS COMANDOS ACEPTADOS, PARA PRUEBAS O GRAFICAR
-        self._salida = ["", "Envie angulos en formato: theta1,theta2,theta3"]
+        formato = ",".join(f"theta{i + 1}" for i in range(len(self.rangos)))
+        self._salida = ["", f"Envie angulos en formato: {formato}"]
 
     def write(self, datos):
         texto = datos.decode() if isinstance(datos, (bytes, bytearray)) else str(datos)
@@ -44,19 +51,25 @@ class ESP32Virtual:
         return len(datos)
 
     def _procesar(self, entrada):
-        coma = entrada.find(",")
-        coma_dos = entrada.find(",", coma + 1) if coma >= 0 else -1
-        if coma > 0 and coma_dos > 0:
-            angulos = (_to_int_arduino(entrada[:coma]),
-                       _to_int_arduino(entrada[coma + 1:coma_dos]),
-                       _to_int_arduino(entrada[coma_dos + 1:]))
-            if all(lo <= a <= hi for a, (lo, hi) in zip(angulos, RANGOS_FIRMWARE)):
+        # COMO EL FIRMWARE: BUSCA N-1 COMAS (indexOf), CADA COMA DESPUES DE LA ANTERIOR, Y LA PRIMERA > 0
+        comas, desde = [], 0
+        for _ in range(len(self.rangos) - 1):
+            pos = entrada.find(",", desde)
+            if pos <= 0:
+                break
+            comas.append(pos)
+            desde = pos + 1
+        if len(comas) == len(self.rangos) - 1:
+            cortes = [-1] + comas + [len(entrada)]
+            angulos = tuple(_to_int_arduino(entrada[cortes[i] + 1:cortes[i + 1]]) for i in range(len(self.rangos)))
+            if all(lo <= a <= hi for a, (lo, hi) in zip(angulos, self.rangos)):
                 self.angulos = angulos
                 self.historial.append(angulos)
             else:
                 self._salida.append("Los angulos deben estar entre 0-180°")
         else:
-            self._salida.append("Formato incorrecto. Usar: angulo1,angulo2,angulo3")
+            formato = ",".join(f"angulo{i + 1}" for i in range(len(self.rangos)))
+            self._salida.append(f"Formato incorrecto. Usar: {formato}")
 
     def leer_respuestas(self):
         salida, self._salida = self._salida, []
@@ -106,7 +119,11 @@ class Enlace:
         self.dispositivo.close()
 
 
-def abrir_enlace(puerto=None):
-    """Abre la placa real si hay puerto (argumento o ROBOT_PUERTO); si no, la ESP32 virtual."""
+def abrir_enlace(puerto=None, rangos=RANGOS_FIRMWARE):
+    """Abre la placa real si hay puerto (argumento o ROBOT_PUERTO); si no, la ESP32 virtual.
+
+    `rangos` (min, max) por servo configuran la virtual; deben coincidir con lo que valida el
+    firmware real, que los trae escritos en el .ino.
+    """
     puerto = puerto or os.environ.get("ROBOT_PUERTO")
-    return Enlace(ESP32Serial(puerto) if puerto else ESP32Virtual())
+    return Enlace(ESP32Serial(puerto) if puerto else ESP32Virtual(rangos))
