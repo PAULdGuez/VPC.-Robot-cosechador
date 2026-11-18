@@ -44,8 +44,8 @@ def abrir_camara(fuente):
     return video if video.isOpened() else None
 
 
-MODOS_SLIDERS = (("servos", "Mover por servos"), ("xyz", "Mover la punta en X, Y, Z"))
 POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al cambiar de postura: negarse"))
+PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 
 
@@ -74,7 +74,6 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.imagen_fija = None
         self.cola = deque()
         self.temporizador_movimiento = QtCore.QTimer(self)
-        self.temporizador_movimiento.setInterval(int(robot.movimiento.ms_por_paso))
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
 
         self._configurar_selectores()
@@ -157,7 +156,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def _ocupado(self, si):
         """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
-        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, *self.sliders):
+        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, *self.sliders_servo, *self.sliders_xyz):
             control.setEnabled(not si)
 
     def _puede_planear(self):
@@ -171,7 +170,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if not self._puede_planear():
             return
         try:
-            destino = tuple(float(campo.toPlainText()) for campo in (self.TE_X, self.TE_Y, self.TE_Z))
+            destino = tuple(float(campo.text()) for campo in (self.TE_X, self.TE_Y, self.TE_Z))
         except ValueError:
             self.avisar("Escribe números en X, Y y Z (en mm).")
             return
@@ -192,85 +191,75 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
         self.escena.encuadrar(zoom=1.0)
 
-    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SELECTORES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VELOCIDAD Y POSTURA (FUERA DE LAS PESTAÑAS) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_selectores(self):
-        """Dos selectores debajo de los sliders (el .ui no los trae; se agregan por código)."""
-        self.selector_modo = QtWidgets.QComboBox(self.centralwidget)
-        self.selector_modo.setGeometry(540, 812, 300, 24)  # EL AREA CENTRAL MIDE 836 px EN UNA MAC DE 1512x891
-        for clave, texto in MODOS_SLIDERS:
-            self.selector_modo.addItem(texto, clave)
-        self.selector_postura = QtWidgets.QComboBox(self.centralwidget)
-        self.selector_postura.setGeometry(860, 812, 330, 24)
         for clave, texto in POSTURAS:
-            self.selector_postura.addItem(texto, clave)
-        self.selector_postura.setCurrentIndex([c for c, _ in POSTURAS].index(self.robot.movimiento.al_cambiar_postura))
-        self.selector_modo.currentIndexChanged.connect(self._aplicar_modo)
-        if self.robot.cinematica_inversa is None:  # SIN SOLVER NO HAY MODO XYZ NI TRAYECTORIAS
-            self.selector_modo.setEnabled(False)
-
-    @property
-    def modo_sliders(self):
-        return self.selector_modo.currentData()
+            self.SELECTOR_POSTURA.addItem(texto, clave)
+        self.SELECTOR_POSTURA.setCurrentIndex([c for c, _ in POSTURAS].index(self.robot.movimiento.al_cambiar_postura))
+        self.SLIDER_VELOCIDAD.valueChanged.connect(self._velocidad_cambiada)
+        self._velocidad_cambiada()
+        if self.robot.cinematica_inversa is None:  # SIN SOLVER NO HAY JOG XYZ NI TRAYECTORIAS
+            self.PESTANAS_MOVIMIENTO.setTabEnabled(PESTANA_XYZ, False)
 
     @property
     def postura(self):
-        return self.selector_postura.currentData()
+        return self.SELECTOR_POSTURA.currentData()
 
-    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SLIDERS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    @property
+    def velocidad(self):
+        """Porcentaje de la velocidad máxima segura (10 a 100 %)."""
+        return self.SLIDER_VELOCIDAD.value()
+
+    def _velocidad_cambiada(self):
+        # MENOS VELOCIDAD = MÁS TIEMPO ENTRE PASOS. EL SALTO POR PASO NO CAMBIA, ASÍ QUE AL 100 % SE VA
+        # A LO MÁS RÁPIDO QUE AGUANTA EL SERVO Y NUNCA MÁS. SE APLICA AUNQUE HAYA UN MOVIMIENTO EN CURSO.
+        self.temporizador_movimiento.setInterval(int(round(self.robot.movimiento.ms_por_paso * 100 / self.velocidad)))
+        self.VS_VELOCIDAD.setText(f"{self.velocidad} %")
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% PESTAÑAS DE MOVIMIENTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_sliders(self):
+        """Pestaña Servos: un slider por servo (grados). Pestaña Punta X Y Z: un slider por eje (mm)."""
         todos = (self.SLIDER_1, self.SLIDER_2, self.SLIDER_3)
         todas = (self.VS_1, self.VS_2, self.VS_3)
-        self.etiquetas_eje = (self.label_12, self.label_7, self.label_9)
         n = min(self.robot.gdl, len(todos))
         if self.robot.gdl > len(todos):
             print(f"Aviso: la interfaz tiene {len(todos)} sliders y el robot {self.robot.gdl} articulaciones; "
                   f"las demás se quedan en el centro de su rango.")
-        self.sliders, self.etiquetas_servo = todos[:n], todas[:n]
+        self.sliders_servo, self.valores_servo = todos[:n], todas[:n]
         for slider in todos[n:]:
             slider.setEnabled(False)
-        for slider in self.sliders:
-            slider.valueChanged.connect(self._slider_movido)
-        self._aplicar_modo()
+        for slider, etiqueta, j in zip(self.sliders_servo, (self.label_12, self.label_7, self.label_9), self.robot.articulaciones):
+            slider.setRange(int(j.servo.minimo), int(j.servo.maximo))
+            etiqueta.setToolTip(j.nombre)
+            slider.valueChanged.connect(self._slider_servo_movido)
 
-    def _aplicar_modo(self):
-        """Rangos y etiquetas de los sliders según el modo; la pose del robot no cambia."""
-        if self.modo_sliders == "xyz":
-            alcance = int(math.ceil(self.robot.alcance))
-            rangos = ((-alcance, alcance), (-alcance, alcance), (0, alcance))
-            nombres = ("X", "Y", "Z")
-        else:
-            rangos = [(int(j.servo.minimo), int(j.servo.maximo)) for j in self.robot.articulaciones]
-            nombres = tuple(f"Servo {i + 1}" for i in range(len(self.sliders)))
-        for slider, etiqueta, (lo, hi), nombre in zip(self.sliders, self.etiquetas_eje, rangos, nombres):
-            slider.blockSignals(True)
+        self.sliders_xyz = (self.SLIDER_X, self.SLIDER_Y, self.SLIDER_Z)
+        self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
+        alcance = int(math.ceil(self.robot.alcance))
+        for slider, (lo, hi) in zip(self.sliders_xyz, ((-alcance, alcance), (-alcance, alcance), (0, alcance))):
             slider.setRange(lo, hi)
-            slider.blockSignals(False)
-            etiqueta.setText(nombre)
-        if self.servos is not None:
-            self._sincronizar_sliders()
-            self.poner_etiquetas()
+            slider.valueChanged.connect(self._jog_cartesiano)
 
     def poner_etiquetas(self):
-        valores = self.posicion if self.modo_sliders == "xyz" else self.servos
-        for etiqueta, valor in zip(self.etiquetas_servo, valores):
-            etiqueta.setText(f"{valor:.0f}")
+        for etiqueta, valor in zip(self.valores_servo, self.servos):
+            etiqueta.setText(f"{valor:.0f}°")
+        for etiqueta, valor in zip(self.valores_xyz, self.posicion):
+            etiqueta.setText(f"{round(valor) + 0:.0f}")  # (+ 0 QUITA EL "-0")
 
     def _arrastrando(self):
-        return any(slider.isSliderDown() for slider in self.sliders)
+        return any(slider.isSliderDown() for slider in (*self.sliders_servo, *self.sliders_xyz))
 
-    def _slider_movido(self):
-        if self.modo_sliders == "xyz":
-            self._jog_cartesiano()
-            return
-        # MODO SERVOS: LOS SLIDERS SON LOS ÁNGULOS DE CADA SERVO (LO MISMO QUE RECIBE LA PLACA)
+    def _slider_servo_movido(self):
+        # LOS SLIDERS DE SERVOS SON LOS ÁNGULOS DE CADA SERVO (LO MISMO QUE RECIBE LA PLACA)
         servos = list(self.servos)
-        for i, slider in enumerate(self.sliders):
+        for i, slider in enumerate(self.sliders_servo):
             servos[i] = slider.value()
         self.poner_servos(servos)
+        self._sincronizar(self.sliders_xyz, self.posicion)
 
     def _jog_cartesiano(self):
-        """Modo XYZ: la punta va en línea recta al punto de los sliders; la CI mueve los servos."""
-        destino = [float(slider.value()) for slider in self.sliders]
+        """Pestaña Punta X Y Z: la punta va en línea recta al punto de los sliders; la CI mueve los servos."""
+        destino = [float(slider.value()) for slider in self.sliders_xyz]
         distancia = math.dist(self.posicion, destino)
         if distancia < 0.5:
             return
@@ -279,16 +268,21 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if plan is None:
             self.avisar(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
                         if not motivo.startswith("Para") else f"No se mueve. {motivo}")
-            self._sincronizar_sliders()  # EL SLIDER REGRESA A DONDE ESTÁ LA PUNTA
+            self._sincronizar(self.sliders_xyz, self.posicion)  # EL SLIDER REGRESA A DONDE ESTÁ LA PUNTA
             return
         self.ejecutar(plan, bloquear=False)
 
-    def _sincronizar_sliders(self):
-        valores = self.posicion if self.modo_sliders == "xyz" else self.servos
-        for slider, valor in zip(self.sliders, valores):
+    @staticmethod
+    def _sincronizar(sliders, valores):
+        for slider, valor in zip(sliders, valores):
             slider.blockSignals(True)
             slider.setValue(int(round(valor)))
             slider.blockSignals(False)
+
+    def _sincronizar_sliders(self):
+        """Las dos pestañas muestran siempre la misma pose: servos en grados y punta en mm."""
+        self._sincronizar(self.sliders_servo, self.servos)
+        self._sincronizar(self.sliders_xyz, self.posicion)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):
@@ -297,6 +291,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.SLIDER_color_2.setRange(0, 255)
         self.SLIDER_color_1.setValue(int(verde[0]))
         self.SLIDER_color_2.setValue(int(verde[1]))
+        self.LABEL1.setText(str(self.SLIDER_color_1.value()))
+        self.LABEL2.setText(str(self.SLIDER_color_2.value()))
+        self.SLIDER_color_1.valueChanged.connect(lambda v: self.LABEL1.setText(str(v)))
+        self.SLIDER_color_2.valueChanged.connect(lambda v: self.LABEL2.setText(str(v)))
         self.GUARDAR.clicked.connect(self.guardar_detecciones)
         self.CARGA.clicked.connect(self.cargar_imagen)
 
