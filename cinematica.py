@@ -43,10 +43,8 @@ class cinematica:
     def __init__(self):
         self.plotter = pv.Plotter()
         # ESTADO DE LA SIMULACION (POR INSTANCIA, NO COMPARTIDO ENTRE VENTANAS)
-        self.CONTADOR = 0
-        self.LISTA_DATOS_BASE = []
-        self.LISTA_ARTICULACIONES = []
-        self.DISTANCIA_RELATIVA = []
+        self.actores_piezas = {}   # NOMBRE DE LA PIEZA -> ACTOR DE PYVISTA
+        self.origen_piezas = {}    # NOMBRE DE LA PIEZA -> RUTA DEL STL O "provisional"
         self.actor_volumen = None
 
     def matriz_rotacion_z (self, grados):
@@ -98,34 +96,24 @@ class cinematica:
 
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def COSECHADOR(self, theta_1, theta_2, theta_3):
-        """Dibuja (o actualiza) el robot en los angulos DH dados."""
-        puntos = self.matrices(theta_1, theta_2, theta_3)
+        """Dibuja (o actualiza) el robot en los angulos DH dados.
 
-        if self.CONTADOR == 0:
-            malla = pv.Plane(i_size=4000, j_size=4000, i_resolution=20, j_resolution=20)
-            self.plotter.add_mesh(malla, style="wireframe", color="gray", opacity=0.3)
+        Las piezas (modelos/*.stl o provisionales) se agregan una sola vez; despues solo se
+        mueve su matriz de posicion, sin regenerar geometria.
+        """
+        from modelo3d import COLORES, PIEZAS, cargar_pieza, poses_piezas  # (EVITA IMPORT CIRCULAR)
 
-            for i in range(len(puntos)-1):
-                start = puntos[i][:3, 3]
-                end = puntos[i+1][:3, 3]
-                tubo = pv.Line(start, end).tube(radius=40 if i == 0 else 20)
+        if not self.actores_piezas:
+            piso = pv.Plane(i_size=4000, j_size=4000, i_resolution=20, j_resolution=20)
+            self.plotter.add_mesh(piso, style="wireframe", color="gray", opacity=0.3)
+            for nombre in PIEZAS:
+                malla, origen = cargar_pieza(nombre)
+                self.origen_piezas[nombre] = origen
+                self.actores_piezas[nombre] = self.plotter.add_mesh(
+                    malla, color=COLORES[nombre], smooth_shading=True, specular=0.4)
 
-                self.plotter.add_mesh(tubo, color="orange", smooth_shading=True)
-                self.LISTA_DATOS_BASE.append(tubo)
-
-                self.DISTANCIA_RELATIVA.append(start)
-                esfera = pv.Sphere(radius=20, center=start)
-                self.LISTA_ARTICULACIONES.append(self.plotter.add_mesh(esfera, color="orange"))
-
-            self.CONTADOR = 1
-        else:
-            for i in range(len(puntos)-1):
-                start = puntos[i][:3, 3]
-                end = puntos[i+1][:3, 3]
-                # UNA NUEVA LINEA DE LA CUAL SOLO OCUPAMOS SUS COORDENADAS PARA ACTUALIZAR EL TUBO ANTERIOR
-                nuevo_tubo = pv.Line(start, end).tube(radius=40 if i == 0 else 20)
-                self.LISTA_DATOS_BASE[i].points = nuevo_tubo.points
-                self.LISTA_ARTICULACIONES[i].SetPosition(*(start - self.DISTANCIA_RELATIVA[i]))
+        for nombre, T in poses_piezas(self, theta_1, theta_2, theta_3).items():
+            self.actores_piezas[nombre].user_matrix = T
 
         self.plotter.render()
 

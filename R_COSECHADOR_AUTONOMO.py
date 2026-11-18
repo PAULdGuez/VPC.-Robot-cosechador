@@ -54,6 +54,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.posicion = HOME
         self.mover_a(HOME)
         self.simulacion.plotter.reset_camera()
+        self.simulacion.plotter.camera.zoom(1.8)  # EL ENCUADRE INCLUYE TODO EL PISO; ACERCA AL ROBOT
         self.configurar_sliders()
 
         self.SLIDER_color_1.setRange(0, 255)
