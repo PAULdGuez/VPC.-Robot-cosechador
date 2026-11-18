@@ -1,7 +1,10 @@
 """Genera piezas del robot por código (CAD con build123d) a partir del YAML del robot.
 
-    .venv/bin/python modelos/generar_piezas.py brazo            # -> modelos/brazo-codigo.stl
+    .venv/bin/python modelos/generar_piezas.py brazo            # -> modelos/brazo-codigo.stl y .step
     .venv/bin/python modelos/generar_piezas.py brazo --salida modelos/brazo.stl
+
+El STL es para la simulación (malla). El STEP es para abrir la pieza en Onshape/Fusion/SolidWorks
+como sólido EDITABLE (Onshape: Import, y se puede seguir modelando encima).
 
 Las medidas salen del YAML (robots/cosechador_3gdl.yaml): si cambias la tabla DH, la pieza se
 regenera con la medida nueva. Se respeta la convención de modelos/README.md: origen en el eje de
@@ -12,7 +15,7 @@ import os
 import sys
 
 from build123d import (BuildPart, BuildSketch, Circle, Locations, Mode, Plane, SlotCenterToCenter,
-                       export_stl, extrude)
+                       export_step, export_stl, extrude)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cosechador.robot import cargar_robot  # noqa: E402
@@ -54,8 +57,10 @@ def main(argv=None):
     pieza = PIEZAS[args.pieza](robot)
     salida = args.salida or os.path.join(CARPETA, f"{args.pieza}-codigo.stl")
     export_stl(pieza, salida)
+    salida_step = os.path.splitext(salida)[0] + ".step"
+    export_step(pieza, salida_step)
     caja = pieza.bounding_box()
-    print(f"{salida}\n  volumen {pieza.volume:,.0f} mm³ · caja X [{caja.min.X:.1f}, {caja.max.X:.1f}] "
+    print(f"{salida}\n{salida_step}\n  volumen {pieza.volume:,.0f} mm³ · caja X [{caja.min.X:.1f}, {caja.max.X:.1f}] "
           f"Y [{caja.min.Y:.1f}, {caja.max.Y:.1f}] Z [{caja.min.Z:.1f}, {caja.max.Z:.1f}] mm")
 
 

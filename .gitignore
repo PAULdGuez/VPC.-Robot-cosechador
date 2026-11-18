@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 *.gif
 modelos/*-codigo.stl
+modelos/*-codigo.step
