@@ -44,7 +44,6 @@ def abrir_camara(fuente):
 
 
 class VentanaPrincipal(QtWidgets.QMainWindow):
-    MS_POR_PASO = 50  # VELOCIDAD DE LA ANIMACIÓN: UN PASO DEL PLAN CADA 50 ms
 
     def __init__(self, robot, enlace=None, fuente_camara=None):
         super().__init__()
@@ -69,7 +68,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.imagen_fija = None
         self.cola = deque()
         self.temporizador_movimiento = QtCore.QTimer(self)
-        self.temporizador_movimiento.setInterval(self.MS_POR_PASO)
+        self.temporizador_movimiento.setInterval(int(robot.movimiento.ms_por_paso))
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
 
         self._configurar_sliders()
@@ -163,13 +162,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         except ValueError:
             self.avisar("Escribe números en X, Y y Z (en mm).")
             return
-        self.ejecutar(plan_ir_y_volver(self.robot, self.posicion, destino))
+        self.ejecutar(plan_ir_y_volver(self.robot, self.servos, destino))
 
     def cosechar(self):
         """Botón COSECHAR: visitar cada pedúnculo guardado y regresar a HOME."""
         if not self._puede_planear():
             return
-        plan, _ = plan_cosecha(self.robot, self.posicion, self.puntos_cosecha)
+        plan, _ = plan_cosecha(self.robot, self.servos, self.puntos_cosecha)
         self.ejecutar(plan)
 
     def ver_volumen(self):

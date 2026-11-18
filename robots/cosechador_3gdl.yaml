@@ -56,6 +56,16 @@ vision:
   verde: {min: [30, 170, 70], max: [85, 255, 255]}   # HSV; los sliders ajustan H y S mínimos
   cafe:  {min: [5, 30, 20],   max: [20, 255, 255]}   # defectos
 
+movimiento:
+  ms_por_paso: 50
+  # SG90: ~0.1 s cada 60° sin carga (600°/s); a la mitad por la carga, 300°/s × 0.05 s = 15° por paso.
+  salto_max_por_paso: 15
+  # Cuando un movimiento exige cambiar de postura (p. ej. voltear la base 180° para cruzar y = 0):
+  #   despacio: lo hace moviendo los servos poco a poco y avisa (la punta sale de la línea recta)
+  #   negar:    no se mueve y avisa
+  # Se puede cambiar en la interfaz.
+  al_cambiar_postura: despacio
+
 # Puntos de demostración para COSECHAR antes de guardar detecciones reales.
 puntos_demo_mm:
   - [5, -4, 1057]

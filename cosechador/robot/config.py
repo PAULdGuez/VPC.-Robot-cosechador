@@ -14,6 +14,7 @@ ROBOT_POR_OMISION = os.path.join(CARPETA_ROBOTS, "cosechador_3gdl.yaml")
 
 SOLVERS_CONOCIDOS = ("antropomorfico_3r",)
 MONTAJES_CAMARA = ("efector", "fija")
+CAMBIOS_DE_POSTURA = ("despacio", "negar")
 
 
 class ErrorConfiguracion(ValueError):
@@ -71,6 +72,14 @@ class Vision:
 
 
 @dataclass(frozen=True)
+class Movimiento:
+    """Cómo se mueve el robot. Valores por omisión pensados para servos SG90."""
+    ms_por_paso: float = 50.0
+    salto_max_por_paso: float = 15.0      # grados que un servo puede girar en un paso
+    al_cambiar_postura: str = "despacio"   # despacio | negar
+
+
+@dataclass(frozen=True)
 class Robot:
     nombre: str
     articulaciones: tuple
@@ -82,6 +91,7 @@ class Robot:
     cinematica_inversa: str | None = None
     puntos_demo: tuple = ()
     carpeta_modelos: str = ""
+    movimiento: Movimiento = Movimiento()
 
     @property
     def gdl(self):
@@ -183,6 +193,22 @@ def _camara(datos):
                   diametro_objeto_mm=diametro)
 
 
+def _movimiento(datos):
+    if datos is None:
+        return Movimiento()
+    if not isinstance(datos, dict):
+        raise ErrorConfiguracion("'movimiento' debe ser una sección (ms_por_paso, salto_max_por_paso, al_cambiar_postura).")
+    por_omision = Movimiento()
+    ms = _numero(datos, "ms_por_paso", "movimiento", por_omision.ms_por_paso)
+    salto = _numero(datos, "salto_max_por_paso", "movimiento", por_omision.salto_max_por_paso)
+    if ms <= 0 or salto <= 0:
+        raise ErrorConfiguracion("'movimiento.ms_por_paso' y 'movimiento.salto_max_por_paso' deben ser mayores que 0.")
+    postura = datos.get("al_cambiar_postura", por_omision.al_cambiar_postura)
+    if postura not in CAMBIOS_DE_POSTURA:
+        raise ErrorConfiguracion(f"'movimiento.al_cambiar_postura' debe ser uno de {CAMBIOS_DE_POSTURA} (llegó {postura!r}).")
+    return Movimiento(ms_por_paso=ms, salto_max_por_paso=salto, al_cambiar_postura=postura)
+
+
 def _rango_hsv(datos, donde):
     return RangoHSV(minimo=_vector(datos, "min", donde, 3), maximo=_vector(datos, "max", donde, 3))
 
@@ -211,6 +237,7 @@ def robot_desde_dict(datos, carpeta_modelos=""):
         cinematica_inversa=solver,
         puntos_demo=tuple(_vector({"p": p}, "p", f"puntos_demo_mm[{i}]", 3) for i, p in enumerate(puntos)),
         carpeta_modelos=carpeta_modelos,
+        movimiento=_movimiento(datos.get("movimiento")),
     )
     if solver == "antropomorfico_3r":
         _validar_topologia_3r(robot)

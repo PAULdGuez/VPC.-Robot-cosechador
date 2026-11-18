@@ -78,3 +78,22 @@ def angulos_servo(robot, punto):
 def alcanzable(robot, punto):
     """True si el robot real puede llegar al punto (alcance + límites de los servos)."""
     return angulos_servo(robot, punto) is not None
+
+
+def salto(servos_a, servos_b):
+    """Lo más que gira cualquier servo para pasar de una pose a otra (grados)."""
+    return max(abs(a - b) for a, b in zip(servos_a, servos_b))
+
+
+def angulos_servo_cercanos(robot, punto, servos_actuales):
+    """Como angulos_servo, pero entre las soluciones válidas elige la MÁS CERCANA a la pose actual.
+
+    Mantiene la postura (codo arriba/abajo, base de frente/volteada) mientras se pueda; así un
+    movimiento continuo no cambia de solución a medio camino. None si el robot real no puede llegar.
+    """
+    try:
+        candidatas = soluciones(robot, punto)
+    except FueraDeAlcance:
+        return None
+    validas = [s for s in (dh_a_servo(robot, q) for q in candidatas) if servos_en_rango(robot, s)]
+    return min(validas, key=lambda s: salto(s, servos_actuales)) if validas else None

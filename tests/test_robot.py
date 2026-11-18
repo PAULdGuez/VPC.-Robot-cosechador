@@ -128,6 +128,8 @@ def test_c4_otro_robot_se_carga_y_tiene_cinematica(robot_4gdl):
     (lambda d: d.update({"cinematica_inversa": "magia"}), "cinematica_inversa"),
     (lambda d: d["articulaciones"][1]["dh"].update({"alpha": 90}), "antropomorfico_3r"),
     (lambda d: d["articulaciones"][0]["dh"].update({"a": "mucho"}), "debe ser un número"),
+    (lambda d: d["movimiento"].update({"al_cambiar_postura": "brincar"}), "movimiento.al_cambiar_postura"),
+    (lambda d: d["movimiento"].update({"salto_max_por_paso": 0}), "mayores que 0"),
 ])
 def test_c5_yaml_invalido_dice_que_esta_mal(datos_yaml, romper, mensaje):
     datos = copy.deepcopy(datos_yaml)
@@ -149,3 +151,8 @@ def test_c7_robot_no_importa_qt_ni_pyvista():
     salida = subprocess.run([sys.executable, "-c", codigo], capture_output=True, text=True,
                             cwd=__file__.rsplit("/tests/", 1)[0])
     assert salida.returncode == 0, salida.stdout + salida.stderr
+
+
+def test_movimiento_por_omision_si_el_yaml_no_lo_trae(robot_4gdl):
+    assert robot_4gdl.movimiento.salto_max_por_paso == 15
+    assert robot_4gdl.movimiento.al_cambiar_postura == "despacio"
