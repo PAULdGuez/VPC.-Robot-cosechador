@@ -146,7 +146,12 @@ class cinematica:
             raise ValueError("El punto está fuera del alcance del robot.")
         D = np.clip(D, -1.0, 1.0)
 
-        theta1 = np.degrees(np.arctan2(y, x))
+        if r < 1e-6:
+            # PUNTO SOBRE EL EJE DE LA BASE (P. EJ. HOME): CUALQUIER GIRO SIRVE. SE USA EL CENTRO DEL
+            # RANGO DEL SERVO PARA QUE EL ROBOT (Y LA CAMARA) MIRE A LA MITAD DE SU ZONA DE TRABAJO.
+            theta1 = float(sum(LIMITES_SERVO[0]) / 2)
+        else:
+            theta1 = np.degrees(np.arctan2(y, x))
         soluciones = []
         for t1, r_plano in ((theta1, r), (theta1 + 180, -r)):
             for signo in (-1, 1):  # -1: codo arriba (theta3 negativo), 1: codo abajo

@@ -17,9 +17,10 @@ def robot():
 
 
 def test_home_es_alcanzable_y_coincide_con_los_sliders(robot):
-    # LA INTERFAZ ARRANCA CON LOS SLIDERS EN 0, 45, 45: HOME DEBE CAER AHI
+    # HOME ESTA SOBRE EL EJE DE LA BASE: LA BASE VA AL CENTRO DE SU RANGO (90°) PARA QUE LA CAMARA
+    # MIRE A LA MITAD DE LA ZONA DE TRABAJO; BRAZO Y ANTEBRAZO COMO LOS SLIDERS ORIGINALES (45, 45)
     s1, s2, s3 = robot.angulos_servo(*HOME)
-    assert (round(s1), round(s2), round(s3)) == (0, 46, 46)
+    assert (round(s1), round(s2), round(s3)) == (90, 46, 46)
 
 
 @pytest.mark.parametrize("servos", [(0, 20, 0), (90, 45, 45), (180, 180, 180),
