@@ -1,14 +1,16 @@
 import os
 import sys
+import traceback
+
 import cv2
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QProgressBar
-from PyQt5.QtGui import QPixmap, QImage
-from PyQt5 import uic, QtWidgets, QtCore
-from cinematica import cinematica
+from PyQt5 import QtCore, QtTest, QtWidgets, uic
+from PyQt5.QtGui import QImage, QPixmap, QSurfaceFormat
+from PyQt5.QtWidgets import QApplication
 from pyvistaqt import QtInteractor
-from PyQt5 import uic, QtWidgets, QtTest
-import time
+
+from cinematica import HOME, LIMITES_SERVO, cinematica, servo_a_dh
+from enlace_robot import abrir_enlace
 
 # Matriz de rotación (3x3) y vector de traslación (3x1)
 R_cam_to_robot = np.array([
@@ -58,32 +60,37 @@ def DE_CV_A_QT(imagen_cv):
     return QPixmap.fromImage(qt_image)
 
 class VentanaPrincipal(QtWidgets.QMainWindow):
-    # PARA LA SIMULACION, GUARDAMOS LAS COORDENADAAS DE PEDUNUCULOS DETECTADOS
-    # DADO QUE PARA LA SIMULACION NECESITAMOS X,Y,Z, CREAMOS TRES ARRAYS PARA SU FACILIDAD
-    COORDENADAS_X = [5 ,0,430,-370,-723,723,-1656,1656,0]
-    COORDENADAS_Y = [-4,0,0,0,0,0,0,0,0]
-    COORDENADAS_Z = [1057,1065,1718,1368,1552,1552,630,630,1065]
-    CONTADOR = 0
+    PASOS_TRAYECTORIA = 20   # PUNTOS INTERMEDIOS DE CADA MOVIMIENTO EN LINEA RECTA
+    ESPERA_PASO_MS = 50      # PAUSA ENTRE PUNTOS (VELOCIDAD DE LA ANIMACION)
 
     def __init__(self):
         super().__init__()
         uic.loadUi(os.path.join(os.path.dirname(os.path.abspath(__file__)), "COSECHADOR_AGUACATE.ui"), self)
+
+        # PARA LA SIMULACION, GUARDAMOS LAS COORDENADAS (mm) DE PEDUNCULOS DETECTADOS
+        # DADO QUE PARA LA SIMULACION NECESITAMOS X,Y,Z, CREAMOS TRES LISTAS PARA SU FACILIDAD
+        self.COORDENADAS_X = [5, 0, 430, -370, -723, 723, -1656, 1656, 0]
+        self.COORDENADAS_Y = [-4, 0, 0, 0, 0, 0, 0, 0, 0]
+        self.COORDENADAS_Z = [1057, 1065, 1718, 1368, 1552, 1552, 630, 630, 1065]
+        self.CONTADOR = 0
+
         self.simulacion = cinematica()
-        # USAMOS UN INTERACTOR PARA PODER SUSTITUIRLO 
+        # USAMOS UN INTERACTOR PARA PODER INCRUSTAR LA SIMULACION EN LA VENTANA
         self.simulacion.plotter = QtInteractor(self)
-        #self.simulacion.plotter.camera_position = [(500, 500, 500), (0, 0, 0), (0, 0, 1)]
         self.dibujo = QtWidgets.QVBoxLayout(self.PANTALLA)
-        self.dibujo.setContentsMargins(0,0,0,0)
+        self.dibujo.setContentsMargins(0, 0, 0, 0)
         self.dibujo.addWidget(self.simulacion.plotter.interactor)
-        t1, t2, t3 = self.simulacion.CI(0, 0, 1065)
-        #self.simulacion.COSECHADOR(t1,100,0,90,   t2,0,100,0,   t3,0,100,0)
-        self.simulacion.COSECHADOR(t1, t2, t3)
-        #self.simulacion.plotter.show(auto_close=False, interactive_update=True)
+
+        # ESP32 REAL SI HAY ROBOT_PUERTO; SI NO, LA VIRTUAL
+        self.enlace = abrir_enlace()
+        for respuesta in self.enlace.dispositivo.leer_respuestas():
+            print(f"[{self.enlace.nombre}] {respuesta}")
+
+        self.posicion = HOME
+        self.mover_a(HOME)
+        self.simulacion.plotter.reset_camera()
         self.configurar_sliders()
 
-        self.PROCESO.setMinimum(0)
-        self.PROCESO.setMaximum(46656)
-        self.PROCESO.setValue(0)
         self.SLIDER_color_1.setRange(0, 255)
         self.SLIDER_color_2.setRange(0, 255)
         self.SLIDER_color_1.setValue(30)
@@ -92,201 +99,144 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.GUARDAR.clicked.connect(self.GUARDAR_COORDENADAS)
         self.COSECHAR.clicked.connect(self.COSECHAR_AGUACATES)
 
+        self.video = self.abrir_camara()
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.ACTUALIZAR_FRAME)
-        self.timer.start(30)
+        if self.video is not None:
+            self.timer.start(30)
 
-        #self.video = cv2.VideoCapture("http://10.11.200.245:8080/video")
-        self.video = cv2.VideoCapture("http://192.168.100.63:8080/video")
+        self.avisar(f"Conectado a: {self.enlace.nombre}")
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CAMARA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def abrir_camara(self):
+        """Abre la camara de ROBOT_CAMARA (URL de la app del celular o indice de webcam).
+
+        Sin la variable no se abre ninguna: antes la IP fija bloqueaba el arranque si el
+        celular no estaba en la red.
+        """
+        fuente = os.environ.get("ROBOT_CAMARA")
+        if not fuente:
+            self.ORIGINAL.setText("Sin cámara.\nDefine ROBOT_CAMARA, por ejemplo\nhttp://192.168.100.63:8080/video")
+            return None
+        video = cv2.VideoCapture(int(fuente) if fuente.isdigit() else fuente)
+        if not video.isOpened():
+            self.ORIGINAL.setText(f"No se pudo abrir la cámara:\n{fuente}")
+            return None
+        return video
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% MOVIMIENTO DEL ROBOT %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def avisar(self, texto):
+        print(texto)
+        self.statusBar().showMessage(texto)
+
+    def poner_servos(self, s1, s2, s3):
+        """Dibuja el robot con esos angulos de servo y se los manda a la ESP32."""
+        self.simulacion.COSECHADOR(*servo_a_dh(s1, s2, s3))
+        self.simulacion.plotter.update()
+        self.VS_1.setText(f"{s1:.0f}")
+        self.VS_2.setText(f"{s2:.0f}")
+        self.VS_3.setText(f"{s3:.0f}")
+        comando, respuestas = self.enlace.enviar(s1, s2, s3)
+        for respuesta in respuestas:
+            self.avisar(f"[{self.enlace.nombre}] {respuesta}  (comando: {comando})")
+        self.posicion = tuple(self.simulacion.CD(*servo_a_dh(s1, s2, s3)))
+
+    def mover_a(self, punto):
+        servos = self.simulacion.angulos_servo(*punto)
+        if servos is None:
+            self.avisar(f"Punto fuera del volumen de trabajo: {punto}")
+            return False
+        self.poner_servos(*servos)
+        self.sincronizar_sliders(*servos)
+        return True
+
+    def trayectoria(self, destino):
+        """Mueve el efector en linea recta hasta destino. Antes de moverse comprueba TODO el camino."""
+        origen = np.array(self.posicion, dtype=float)
+        camino = [origen + (np.array(destino, dtype=float) - origen) * k
+                  for k in np.linspace(0, 1, self.PASOS_TRAYECTORIA)]
+        servos_camino = [self.simulacion.angulos_servo(*p) for p in camino]
+        if any(s is None for s in servos_camino):
+            self.avisar(f"El camino hacia {tuple(int(round(c)) for c in destino)} pasa por una zona que el robot no alcanza.")
+            return False
+        for servos in servos_camino:
+            self.poner_servos(*servos)
+            QtTest.QTest.qWait(self.ESPERA_PASO_MS)
+        self.sincronizar_sliders(*servos_camino[-1])
+        return True
+
+    def ocupado(self, si):
+        """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
+        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN,
+                        self.SLIDER_1, self.SLIDER_2, self.SLIDER_3):
+            control.setEnabled(not si)
+
+    def sincronizar_sliders(self, s1, s2, s3):
+        for slider, valor in ((self.SLIDER_1, s1), (self.SLIDER_2, s2), (self.SLIDER_3, s3)):
+            slider.blockSignals(True)
+            slider.setValue(int(round(valor)))
+            slider.blockSignals(False)
 
     def COSECHAR_AGUACATES(self):
-        print(self.COORDENADAS_X)
-        print(self.COORDENADAS_Y)
-        print(self.COORDENADAS_Z)
-        x_h = 0
-        y_h = 0
-        z_h = 1065
-
-        t1, t2, t3 = self.simulacion.CI(0, 0, 1065)
-        self.simulacion.COSECHADOR(t1, t2, t3)
-
-        for x_f, y_f, z_f in zip(self.COORDENADAS_X, self.COORDENADAS_Y, self.COORDENADAS_Z):
-
-            if self.simulacion.punto_en_volumen(x_f, y_f, z_f):
-
-                x_val = np.linspace(x_h, x_f, 20)
-                y_val = np.linspace(y_h, y_f, 20)
-                z_val = np.linspace(z_h, z_f, 20)
-
-                for x, y, z in zip(x_val, y_val, z_val):
-                    t1, t2, t3 = self.simulacion.CI(x, y, z)
-                    self.simulacion.COSECHADOR(t1, t2, t3)
-
-                    self.simulacion.plotter.renderer.SetInteractive(True)
-                    self.simulacion.plotter.update()
-                    self.simulacion.plotter.reset_camera()
-                    QtTest.QTest.qWait(50)
-                
-            else:
-                print("Punto fuera del volumen de trabajo...")
-            
-            x_h = x_f
-            y_h = y_f
-            z_h = z_f
-    
+        """Visita cada pedunculo guardado y regresa a HOME."""
+        puntos = list(zip(self.COORDENADAS_X, self.COORDENADAS_Y, self.COORDENADAS_Z))
+        self.ocupado(True)
+        try:
+            cosechados = 0
+            for i, punto in enumerate(puntos, start=1):
+                self.avisar(f"Cosechando {i}/{len(puntos)}: {punto}")
+                if not self.simulacion.punto_en_volumen(*punto):
+                    self.avisar(f"Punto fuera del volumen de trabajo: {punto}")
+                    continue
+                # SI LA LINEA RECTA CRUZA UNA ZONA INALCANZABLE (P. EJ. EL EJE DE LA BASE), PASA POR HOME
+                if self.trayectoria(punto) or (self.trayectoria(HOME) and self.trayectoria(punto)):
+                    cosechados += 1
+            self.trayectoria(HOME)
+            self.avisar(f"Cosecha terminada: {cosechados} de {len(puntos)} puntos alcanzados.")
+        finally:
+            self.ocupado(False)
 
     def configurar_sliders(self):
         def actualizar_robot():
-            # t_1 = self.SLIDER_1.value()
-            # t_2 = self.SLIDER_2.value()
-            # t_3 = self.SLIDER_3.value()
-            t1 = self.SLIDER_1.value()
-            t2 = 180-self.SLIDER_2.value()
-            t3 = self.SLIDER_3.value()+180
+            # LOS SLIDERS SON LOS ANGULOS DE CADA SERVO (LO MISMO QUE RECIBE LA ESP32)
+            self.poner_servos(self.SLIDER_1.value(), self.SLIDER_2.value(), self.SLIDER_3.value())
 
-            
-            #self.simulacion.plotter.clear() 
-            self.simulacion.plotter.renderer.SetInteractive(False)
-            #                  |    1    |            |    2    |        |   3    |      |     4     |      |    5    |      |    6     |
-            #t1, t2, t3 = self.simulacion.CI(t_1, t_2, t_3)
-            #print(str(int(t1))+","+str(int(t2)))
-            #self.enviar_angulos_serial(str(int(t1)) + "," + str(int(180-t2)) +","+ str(int(t3-180)))
-            self.VS_1.setText(str(t1))
-            self.VS_2.setText(str(-(t2-180)))
-            self.VS_3.setText(str((t3)))
-
-            self.simulacion.COSECHADOR(t1, t2, t3)
-            # self.simulacion.R7(t1,0,140,0,     t2,0,140,180,      0,d3,1,0,      90,20,0,0)
-            #self.simulacion.R7(t1,352,0,0,     t2-90,0,70,-90,      t3,0,360,0,      t4,380,0,-90,     t5,0,1,-90,     t6-180,65,0,-90)
-            self.simulacion.plotter.renderer.SetInteractive(True)
-            self.simulacion.plotter.update()
-            #self.simulacion.plotter.enable_render()
-            #self.simulacion.plotter.write_frame() #---------------- PARA PODER HACER EL GIF
-            #self.simulacion.plotter.camera.zoom(0.85)
-            self.simulacion.plotter.reset_camera()
-            #self.simulacion.plotter.render() 
-            #time.sleep(0.02) #-------------------------------------- PARA EL GIF
-        
         def aplicar_ci():
-            # Abrir el GIF al inicio de la función
-            self.simulacion.plotter.open_gif("SIMULACION.gif")
-            
             try:
-                x_f = int(self.TE_X.toPlainText())
-                y_f = int(self.TE_Y.toPlainText())
-                z_f = int(self.TE_Z.toPlainText())
-                
-                if self.simulacion.punto_en_volumen(x_f, y_f, z_f):
-                    x_h, y_h, z_h = 0, 0, 1065  # Posición home
-                    
-                    # Configurar posición inicial
-                    t1, t2, t3 = self.simulacion.CI(x_h, y_h, z_h)
-                    self.simulacion.COSECHADOR(t1, t2, t3)
-                    #self.simulacion.plotter.write_frame()  # Capturar frame inicial
-                    
-                    # Movimiento hacia el objetivo
-                    for x, y, z in zip(np.linspace(x_h, x_f, 20),
-                                    np.linspace(y_h, y_f, 20),
-                                    np.linspace(z_h, z_f, 20)):
-                        t1, t2, t3 = self.simulacion.CI(x, y, z)
-                        self.simulacion.COSECHADOR(t1, t2, t3)
-                        
-                        # Actualizar visualización y capturar frame
-                        self.simulacion.plotter.update()
-                        #self.simulacion.plotter.write_frame()
-                        QtTest.QTest.qWait(50)
-                    
-                    # Movimiento de regreso a home
-                    for x, y, z in zip(np.linspace(x_f, x_h, 20),
-                                    np.linspace(y_f, y_h, 20),
-                                    np.linspace(z_f, z_h, 20)):
-                        t1, t2, t3 = self.simulacion.CI(x, y, z)
-                        self.simulacion.COSECHADOR(t1, t2, t3)
-                        
-                        # Actualizar visualización y capturar frame
-                        self.simulacion.plotter.update()
-                        #self.simulacion.plotter.write_frame()
-                        QtTest.QTest.qWait(50)
-                else:
-                    print("Punto fuera del volumen de trabajo...")
-                    
+                destino = (float(self.TE_X.toPlainText()), float(self.TE_Y.toPlainText()),
+                           float(self.TE_Z.toPlainText()))
+            except ValueError:
+                self.avisar("Escribe números en X, Y y Z (en mm).")
+                return
+            if not self.simulacion.punto_en_volumen(*destino):
+                self.avisar(f"Punto fuera del volumen de trabajo: {destino}")
+                return
+            self.ocupado(True)
+            try:
+                # VA AL OBJETIVO Y REGRESA A HOME
+                if self.trayectoria(destino):
+                    self.trayectoria(HOME)
             finally:
-                print("finalizado")
-                # Cerrar el GIF al final, asegurándose que siempre se ejecute
-                #self.simulacion.plotter.close_gif()
-                #print("GIF guardado como 'SIMULACION.gif'")
+                self.ocupado(False)
 
         def ver_volumen():
-            self.simulacion.volumen_trabajo(progresbar = self.PROCESO)
-            
+            self.simulacion.volumen_trabajo(progresbar=self.PROCESO)
+            self.simulacion.plotter.reset_camera()
 
         self.CALCULAR.clicked.connect(aplicar_ci)
         self.VER_VOLUMEN.clicked.connect(ver_volumen)
 
-        self.SLIDER_1.setRange(0, 180)
-        self.SLIDER_1.setValue(0)
-        self.SLIDER_1.valueChanged.connect(actualizar_robot)
+        for slider, (lo, hi) in zip((self.SLIDER_1, self.SLIDER_2, self.SLIDER_3), LIMITES_SERVO):
+            slider.setRange(lo, hi)
+        self.sincronizar_sliders(*self.simulacion.angulos_servo(*HOME))
+        for slider in (self.SLIDER_1, self.SLIDER_2, self.SLIDER_3):
+            slider.valueChanged.connect(actualizar_robot)
 
-        self.SLIDER_2.setRange(20, 180)
-        self.SLIDER_2.setValue(45)
-        self.SLIDER_2.valueChanged.connect(actualizar_robot)
-
-        self.SLIDER_3.setRange(0, 180)
-        self.SLIDER_3.setValue(45)
-        self.SLIDER_3.valueChanged.connect(actualizar_robot)
-
-        
-        #self.SLIDER_4.valueChanged.connect(actualizar_robot)
-    
     def GUARDAR_COORDENADAS(self):
+        # EN EL SIGUIENTE FRAME, DETECTAR_FRUTA AGREGA LOS PEDUNCULOS DETECTADOS A LA LISTA
         self.CONTADOR = 1
-        QtTest.QTest.qWait(50)
         self.COSECHAR.setEnabled(True)
 
-    def COSECHAR_FRUTAS(self):
-        print(self.COORDENADAS_X)
-        print(self.COORDENADAS_Y)
-        print(self.COORDENADAS_Z)
-        for x_f, y_f, z_f in zip(self.COORDENADAS_X, self.COORDENADAS_Y, self.COORDENADAS_Z):
-            if self.simulacion.punto_en_volumen(x_f, y_f, z_f):
-                x_h = 0
-                y_h = 0
-                z_h = 1065
-
-                t1, t2, t3 = self.simulacion.CI(0, 0, 1065)
-                self.simulacion.COSECHADOR(t1, t2, t3)
-                x_val = np.linspace(x_h, x_f, 20)
-                y_val = np.linspace(y_h, y_f, 20)
-                z_val = np.linspace(z_h, z_f, 20)
-
-                for x, y, z in zip(x_val, y_val, z_val):
-                    t1, t2, t3 = self.simulacion.CI(x, y, z)
-                    self.simulacion.COSECHADOR(t1, t2, t3)
-
-                    self.simulacion.plotter.renderer.SetInteractive(True)
-                    self.simulacion.plotter.update()
-                    self.simulacion.plotter.reset_camera()
-                    QtTest.QTest.qWait(50)
-
-                x_val = np.linspace(x_f, x_h, 20)
-                y_val = np.linspace(y_f, y_h, 20)
-                z_val = np.linspace(z_f, z_h, 20)
-
-                for x, y, z in zip(x_val, y_val, z_val):
-                    t1, t2, t3 = self.simulacion.CI(x, y, z)
-                    self.simulacion.COSECHADOR(t1, t2, t3)
-
-                    self.simulacion.plotter.renderer.SetInteractive(True)
-                    self.simulacion.plotter.update()
-                    self.simulacion.plotter.reset_camera()
-                    QtTest.QTest.qWait(50)
-                
-            else:
-                print("Punto fuera del volumen de trabajo...")
-        self.COORDENADAS_X.clear()
-        self.COORDENADAS_Y.clear()
-        self.COORDENADAS_Z.clear()
-    
     def ACTUALIZAR_FRAME(self):
         ret, frame = self.video.read()
         if not ret:
@@ -305,8 +255,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def closeEvent(self, event):
         
+        self.timer.stop()
         self.simulacion.plotter.close()
-        self.video.release()
+        if self.video is not None:
+            self.video.release()
+        self.enlace.close()
         cv2.destroyAllWindows()
         event.accept()
 
@@ -416,9 +369,33 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                     cv2.drawContours(resultado, [cnt], -1, (255, 0, 0), 2)
                     cv2.putText(resultado, "D", (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
 
-        return i, resultado, mascara_verde, mascara_cafe
+        return i - 1, resultado, mascara_verde, mascara_cafe
+
+def preparar_opengl():
+    """En macOS VTK necesita un contexto OpenGL 3.2+ ("core profile"); sin esto los shaders
+    fallan (version '150' is not supported) y no se dibujan las articulaciones ni el volumen.
+    Debe llamarse ANTES de crear QApplication."""
+    formato = QSurfaceFormat()
+    formato.setRenderableType(QSurfaceFormat.OpenGL)
+    formato.setVersion(3, 2)
+    formato.setProfile(QSurfaceFormat.CoreProfile)
+    formato.setDepthBufferSize(24)
+    formato.setStencilBufferSize(8)
+    formato.setSamples(4)
+    QSurfaceFormat.setDefaultFormat(formato)
+
+
+def _mostrar_error(tipo, valor, tb):
+    # SIN ESTO, UNA EXCEPCION DENTRO DE UN BOTON CIERRA TODA LA APP (PyQt5 >= 5.5)
+    traceback.print_exception(tipo, valor, tb)
+    for ventana in QApplication.topLevelWidgets():
+        if isinstance(ventana, VentanaPrincipal):
+            ventana.statusBar().showMessage(f"Error: {valor}")
+
 
 if __name__ == "__main__":
+    sys.excepthook = _mostrar_error
+    preparar_opengl()
     app = QApplication(sys.argv)
     ventana = VentanaPrincipal()
     ventana.show()
