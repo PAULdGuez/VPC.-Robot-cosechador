@@ -19,6 +19,12 @@ from cosechador.robot.cinematica import matrices, rot_z
 
 ALCANCE_REFERENCIA = 2050.0  # LAS PIEZAS PROVISIONALES SE DISEÑARON PARA EL COSECHADOR; SE ESCALAN
 
+# EJES CON LA CONVENCIÓN DE CAD Y ROS: X ROJO, Y VERDE, Z AZUL
+COLORES_EJES = {"X": "#d62728", "Y": "#2ca02c", "Z": "#1f77b4"}
+COLOR_PLAN, COLOR_RECORRIDO = "#2c6fbb", "#e07b22"
+MAXIMO_RECORRIDO = 5000          # PUNTOS DE LA ESTELA (LOS MÁS VIEJOS SE DESCARTAN)
+DISTANCIA_MINIMA_ESTELA = 0.5    # mm: NO SE AGREGAN PUNTOS REPETIDOS
+
 
 def piezas_del_robot(robot):
     """[(nombre, Pieza), ...] en orden: base, una por articulación, efector."""
@@ -92,6 +98,69 @@ class Escena:
             malla, origen = cargar_pieza(robot, indice, pieza)
             self.origen_piezas[nombre] = origen
             self.actores.append(self.plotter.add_mesh(malla, color=pieza.color, smooth_shading=True, specular=0.4))
+        self._dibujar_ejes()
+        self._plan = self._recorrido = None
+        self._actor_plan = self._actor_recorrido = None
+        self.puntos_recorrido = []
+        self.trayectoria_visible = True
+
+    def _dibujar_ejes(self):
+        """Flechas X/Y/Z en el origen de la base, con su letra, y el cubo de orientación en la esquina."""
+        largo = 0.3 * self.robot.alcance
+        for eje, direccion in (("X", (1, 0, 0)), ("Y", (0, 1, 0)), ("Z", (0, 0, 1))):
+            self.plotter.add_mesh(pv.Arrow(start=(0, 0, 0), direction=direccion, scale=largo, tip_length=0.15,
+                                           shaft_radius=0.012, tip_radius=0.04), color=COLORES_EJES[eje])
+            self.plotter.add_point_labels(np.array([direccion], dtype=float) * largo * 1.12, [eje], font_size=18,
+                                          text_color=COLORES_EJES[eje], shape=None, show_points=False, always_visible=True)
+        self.plotter.add_axes(interactive=False, line_width=3)
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TRAYECTORIA DE LA PUNTA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def _linea(self, malla, actor, puntos, color, ancho, opacidad):
+        puntos = np.asarray(puntos, dtype=float)
+        if len(puntos) < 2:
+            if actor is not None:
+                actor.SetVisibility(False)
+            return malla, actor
+        nueva = pv.lines_from_points(puntos)
+        if malla is None:
+            malla = nueva
+            actor = self.plotter.add_mesh(malla, color=color, line_width=ancho, opacity=opacidad)
+        else:
+            malla.copy_from(nueva)
+        actor.SetVisibility(self.trayectoria_visible)
+        return malla, actor
+
+    def mostrar_plan(self, puntos):
+        """Línea tenue con lo que va a recorrer la punta."""
+        self._plan, self._actor_plan = self._linea(self._plan, self._actor_plan, puntos, COLOR_PLAN, 3, 0.55)
+        self.plotter.render()
+
+    def reiniciar_recorrido(self, punto_inicial):
+        self.puntos_recorrido = [np.asarray(punto_inicial, dtype=float)]
+        self._recorrido, self._actor_recorrido = self._linea(self._recorrido, self._actor_recorrido,
+                                                             self.puntos_recorrido, COLOR_RECORRIDO, 5, 1.0)
+
+    def agregar_al_recorrido(self, punto):
+        """Estela sólida de lo que ya recorrió la punta (se llama en cada paso)."""
+        punto = np.asarray(punto, dtype=float)
+        if self.puntos_recorrido and np.linalg.norm(punto - self.puntos_recorrido[-1]) < DISTANCIA_MINIMA_ESTELA:
+            return
+        self.puntos_recorrido.append(punto)
+        del self.puntos_recorrido[:-MAXIMO_RECORRIDO]
+        self._recorrido, self._actor_recorrido = self._linea(self._recorrido, self._actor_recorrido,
+                                                             self.puntos_recorrido, COLOR_RECORRIDO, 5, 1.0)
+
+    def limpiar_trayectoria(self, punto_actual):
+        self.mostrar_plan([])
+        self.reiniciar_recorrido(punto_actual)
+        self.plotter.render()
+
+    def mostrar_trayectoria(self, visible):
+        self.trayectoria_visible = bool(visible)
+        for actor, malla in ((self._actor_plan, self._plan), (self._actor_recorrido, self._recorrido)):
+            if actor is not None:
+                actor.SetVisibility(self.trayectoria_visible and malla is not None and malla.n_points >= 2)
+        self.plotter.render()
 
     def dibujar(self, q):
         """Pone cada pieza en su lugar para los ángulos DH q."""
