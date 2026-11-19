@@ -127,11 +127,14 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._configurar_sliders()
         self._configurar_programas()
         self._configurar_vision()
+        self.CHK_TRAYECTORIA.toggled.connect(self.escena.mostrar_trayectoria)
+        self.BTN_LIMPIAR_TRAYECTORIA.clicked.connect(lambda: self.escena.limpiar_trayectoria(self.posicion))
         self.CALCULAR.clicked.connect(self.ir_y_volver)
         self.COSECHAR.clicked.connect(self.cosechar)
         self.VER_VOLUMEN.clicked.connect(self.ver_volumen)
 
         self._ir_a_home()
+        self.escena.reiniciar_recorrido(self.posicion)
         self.escena.encuadrar()
 
         self.video = abrir_camara(fuente_camara if fuente_camara is not None else os.environ.get("ROBOT_CAMARA"))
@@ -164,6 +167,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """Dibuja el robot con esos ángulos de servo y se los manda a la placa."""
         self.servos = tuple(servos)
         self.escena.dibujar(servo_a_dh(self.robot, self.servos))
+        self.escena.agregar_al_recorrido(self.posicion)
         self.poner_etiquetas()
         comando, respuestas = self.enlace.enviar(*self.servos)
         for respuesta in respuestas:
@@ -188,6 +192,12 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """
         if not bloquear:
             self.cola.clear()
+        # LO QUE VA A RECORRER LA PUNTA, ANTES DE MOVERSE. UN MOVIMIENTO «COMPLETO» (PROGRAMA, COSECHA,
+        # CALCULAR) EMPIEZA ESTELA NUEVA; EL JOG Y LOS SLIDERS LA SIGUEN ALARGANDO.
+        camino = [self.posicion] + [posicion(self.robot, p.servos) for p in plan if p.servos is not None]
+        self.escena.mostrar_plan(camino)
+        if bloquear:
+            self.escena.reiniciar_recorrido(self.posicion)
         self._origen_plan = origen
         self.cola.extend(plan)
         self._ocupado(bloquear)
@@ -376,6 +386,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         for area in (self.LISTA_REGISTRO, self.DETALLE_REGISTRO):
             area.verticalScrollBar().setStyleSheet(ESTILO_BARRA)
         self.DETALLE_REGISTRO.setViewportMargins(0, 0, 10, 0)  # QUE EL TEXTO NO QUEDE BAJO LA BARRA
+        self.DETALLE_REGISTRO.setPlaceholderText("Elige un evento para ver sus datos.")
+        self._nuevos_sin_ver = 0
+        self.BTN_NUEVOS_REGISTRO.hide()
+        self.BTN_NUEVOS_REGISTRO.clicked.connect(self._ir_al_ultimo)
+        self.LISTA_REGISTRO.verticalScrollBar().valueChanged.connect(self._registro_desplazado)
         self.registro.suscribir(self._evento_registrado)
         self.BTN_DETENER.setEnabled(False)  # SOLO SE ENCIENDE MIENTRAS ALGO SE MUEVE
 
@@ -387,17 +402,40 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         item.setToolTip(evento.mensaje)
         return item
 
+    def _al_final(self):
+        barra = self.LISTA_REGISTRO.verticalScrollBar()
+        return barra.value() >= barra.maximum() - 2
+
     def _evento_registrado(self, evento):
+        """Lo más nuevo va abajo y la lista lo sigue sola, como una terminal. Si la persona subió a
+        leer algo, no se le mueve la lista: aparece «↓ N nuevos» para regresar."""
         if evento.nivel not in self.FILTRO_REGISTRO.currentData():
             return
-        self.LISTA_REGISTRO.insertItem(0, self._item_de(evento))  # LO MÁS NUEVO ARRIBA
+        seguir = self._al_final()
+        self.LISTA_REGISTRO.addItem(self._item_de(evento))
         while self.LISTA_REGISTRO.count() > reg.MAXIMO_EN_MEMORIA:
-            self.LISTA_REGISTRO.takeItem(self.LISTA_REGISTRO.count() - 1)
+            self.LISTA_REGISTRO.takeItem(0)
+        if seguir:
+            self.LISTA_REGISTRO.scrollToBottom()
+        else:
+            self._nuevos_sin_ver += 1
+            self.BTN_NUEVOS_REGISTRO.setText(f"↓ {self._nuevos_sin_ver} nuevo{'s' if self._nuevos_sin_ver > 1 else ''}")
+            self.BTN_NUEVOS_REGISTRO.show()
+
+    def _registro_desplazado(self, _valor):
+        if self._al_final() and self._nuevos_sin_ver:
+            self._nuevos_sin_ver = 0
+            self.BTN_NUEVOS_REGISTRO.hide()
+
+    def _ir_al_ultimo(self):
+        self.LISTA_REGISTRO.scrollToBottom()
+        self._registro_desplazado(None)
 
     def _repintar_registro(self):
         self.LISTA_REGISTRO.clear()
-        for evento in reversed(self.registro.filtrar(self.FILTRO_REGISTRO.currentData())):
+        for evento in self.registro.filtrar(self.FILTRO_REGISTRO.currentData()):
             self.LISTA_REGISTRO.addItem(self._item_de(evento))
+        self._ir_al_ultimo()
 
     def _mostrar_detalle(self, item, _anterior=None):
         if item is None:
@@ -413,7 +451,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             + (f"<table style='margin-top:4px'>{filas}</table>" if filas else "<br><i style='color:#888'>Sin datos</i>"))
 
     def eventos_visibles(self):
-        return [self.LISTA_REGISTRO.item(i).data(QtCore.Qt.UserRole) for i in range(self.LISTA_REGISTRO.count())][::-1]
+        """En orden cronológico (como en la lista y en el archivo)."""
+        return [self.LISTA_REGISTRO.item(i).data(QtCore.Qt.UserRole) for i in range(self.LISTA_REGISTRO.count())]
 
     def copiar_registro(self):
         """Copia el evento elegido (o todos los visibles) como JSON Lines al portapapeles."""
@@ -512,6 +551,17 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.SLIDER_color_2.valueChanged.connect(lambda v: self.LABEL2.setText(str(v)))
         self.GUARDAR.clicked.connect(self.guardar_detecciones)
         self.CARGA.clicked.connect(self.cargar_imagen)
+        self.BTN_CONTRAER_VISION.clicked.connect(lambda: self.contraer_vision(True))
+        self.FRANJA_VISION.clicked.connect(lambda: self.contraer_vision(False))
+        self.contraer_vision(str(self.ajustes.value("vision/contraida", "false")).lower() == "true", recordar=False)
+
+    def contraer_vision(self, contraida, recordar=True):
+        """Oculta la columna de visión a la izquierda (queda la franja «▸ VISIÓN»). La simulación toma
+        el espacio; el panel derecho tiene ancho fijo, así que no se mueve. Se recuerda al reabrir."""
+        self.FONDO_VISION.setVisible(not contraida)
+        self.FRANJA_VISION.setVisible(contraida)
+        if recordar:
+            self.ajustes.setValue("vision/contraida", "true" if contraida else "false")
 
     def guardar_detecciones(self):
         # EN EL SIGUIENTE FRAME, LOS PEDÚNCULOS DETECTADOS REEMPLAZAN LA LISTA DE COSECHA
