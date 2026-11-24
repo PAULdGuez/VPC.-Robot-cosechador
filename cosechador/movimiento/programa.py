@@ -130,15 +130,23 @@ class _Volcador(yaml.SafeDumper):
 _Volcador.add_representer(_Lista, lambda d, v: d.represent_sequence("tag:yaml.org,2002:seq", v, flow_style=True))
 
 
+def _en_una_linea(servos):
+    """Los servos de una pose, listos para el YAML: en una línea y como números normales.
+
+    Después de un movimiento los servos son números de numpy (np.float64) y el volcador seguro de YAML no
+    sabe escribirlos: sin el float() el guardado truena con «cannot represent an object».
+    """
+    return _Lista(round(float(s), 6) for s in servos)
+
+
 def programa_a_dict(programa):
     datos = {"formato": FORMATO, "nombre": programa.nombre, "tipo": programa.tipo,
              "robot": programa.robot, "gdl": programa.gdl}
     if programa.tipo == "puntos":
-        datos["puntos"] = [{"servos": _Lista(round(s, 6) for s in p.servos), "movimiento": p.movimiento,
+        datos["puntos"] = [{"servos": _en_una_linea(p.servos), "movimiento": p.movimiento,
                             "velocidad": p.velocidad} for p in programa.puntos]
     else:
-        datos["muestras"] = [{"t": round(m.t, 4), "servos": _Lista(round(s, 6) for s in m.servos)}
-                             for m in programa.muestras]
+        datos["muestras"] = [{"t": round(m.t, 4), "servos": _en_una_linea(m.servos)} for m in programa.muestras]
     return datos
 
 
