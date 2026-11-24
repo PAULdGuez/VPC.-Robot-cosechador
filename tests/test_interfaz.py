@@ -47,6 +47,7 @@ def ui():
     w.LISTA_REGISTRO.addItems(["17:21:03  ⚠ AVISO · Jog\nNo se mueve: el camino pasa por una zona que el robot no alcanza"] * 4)
     w.BTN_NUEVOS_REGISTRO.hide()
     w.FRANJA_VISION.hide()
+    w.FONDO_PUNTOS.hide()        # EL EDITOR DE PUNTOS NACE CERRADO (SUS ESTADOS: test_editor_puntos.py)
     w.resize(1440, 860)
     w.show()
     app.processEvents()

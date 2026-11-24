@@ -63,6 +63,11 @@ MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
 # PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
 TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:", "Grabación")}
+# EDITOR DE PUNTOS
+MOTIVO_NO_SE_EDITA = "Una grabación son muestras por tiempo:\nno se edita por puntos."
+INVITACION_SIN_PUNTOS = ("Sin puntos.\n\nLleva el robot a una pose con las pestañas Servos o Punta X Y Z "
+                         "y pulsa «+ Punto»: se guarda la pose actual.")
+PASO_VELOCIDAD_PUNTO = 5  # LA VELOCIDAD DE UN PUNTO SE ELIGE DE 5 EN 5 %
 
 
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
@@ -117,12 +122,17 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.imagen_fija = None
         self.cola = deque()
         self.grabadora = Grabadora()  # ANTES DEL PRIMER poner_servos: AHÍ SE ENGANCHA LA GRABACIÓN
+        self.tipo_elegido = None      # DEL PROGRAMA ELEGIDO EN EL SELECTOR: "puntos" | "grabacion" (None: NINGUNO, O ILEGIBLE)
+        self.editado = None           # EL Programa ABIERTO EN EL EDITOR DE PUNTOS (None: EDITOR CERRADO)
+        self.archivo_editado = None   # SU ARCHIVO, DENTRO DE carpeta_programas
+        self._vision_contraida_antes = False
         self.temporizador_movimiento = QtCore.QTimer(self)
         self.temporizador_movimiento.setTimerType(QtCore.Qt.PreciseTimer)  # LAS GRABACIONES RESPETAN SUS TIEMPOS
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
 
         self._configurar_selectores()
         self._configurar_sliders()
+        self._configurar_editor()
         self._configurar_programas()
         self._configurar_vision()
         self.CHK_TRAYECTORIA.toggled.connect(self.escena.mostrar_trayectoria)
@@ -525,23 +535,33 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._programa_elegido()
 
     def _programa_elegido(self):
-        nombre = self.SELECTOR_PROGRAMA.currentData()
+        """Pinta el resumen del programa elegido en el selector. El editor de puntos, si está abierto, lo sigue."""
+        nombre, p = self.SELECTOR_PROGRAMA.currentData(), None
         self.BTN_REPRODUCIR.setEnabled(nombre is not None)
         if nombre is None:
             self.INFO_PROGRAMA.setText("No hay programas guardados")
             self.INFO_PROGRAMA.setToolTip(self.carpeta_programas)
-            return
-        self.ajustes.setValue("programa/ultimo", nombre)
-        try:
-            p = programas.cargar(os.path.join(self.carpeta_programas, nombre), self.robot)
-        except programas.ErrorPrograma as e:
-            self.INFO_PROGRAMA.setText("⚠ No se puede leer (ver registro)")
-            self.avisar(str(e), "error", "Programa", archivo=nombre)
-            return
-        if p.tipo == "puntos":
-            self.INFO_PROGRAMA.setText(f"Por puntos · {len(p.puntos)} puntos")
         else:
-            self.INFO_PROGRAMA.setText(f"Grabación · {len(p.muestras)} muestras · {p.duracion:.1f} s")
+            self.ajustes.setValue("programa/ultimo", nombre)
+            try:
+                p = programas.cargar(os.path.join(self.carpeta_programas, nombre), self.robot)
+                self.INFO_PROGRAMA.setText(self._resumen(p))
+            except programas.ErrorPrograma as e:
+                self.INFO_PROGRAMA.setText("⚠ No se puede leer (ver registro)")
+                self.avisar(str(e), "error", "Programa", archivo=nombre)
+        self.tipo_elegido = p.tipo if p is not None else None
+        if self.editando and self.tipo_elegido == "puntos":
+            self._editar(p, nombre)
+        else:
+            self.cerrar_editor()  # UNA GRABACIÓN (O NINGÚN PROGRAMA) NO TIENE PUNTOS QUE ENSEÑAR
+        self._actualizar_editor()
+
+    @staticmethod
+    def _resumen(p):
+        """Lo que dice la pestaña Programa del programa elegido."""
+        if p.tipo == "puntos":
+            return f"Por puntos · {len(p.puntos)} puntos"
+        return f"Grabación · {len(p.muestras)} muestras · {p.duracion:.1f} s"
 
     def programa_elegido(self):
         """El Programa elegido en el selector, o None (y avisa por qué)."""
@@ -666,6 +686,145 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self, titulo, pregunta, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
         return respuesta == QtWidgets.QMessageBox.Yes
 
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EDITOR DE PUNTOS (COLUMNA PUNTOS) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def _configurar_editor(self):
+        """La columna PUNTOS nace oculta: aparece con «✎ Editar», en el lugar de VISIÓN."""
+        self.FONDO_PUNTOS.hide()
+        self._ayuda_editar = self.BTN_EDITAR_PUNTOS.toolTip()
+        lista = self.LISTA_PUNTOS  # MISMA RECETA QUE LA LISTA DEL REGISTRO (_configurar_registro)
+        lista.setWordWrap(True)
+        lista.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        lista.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        lista.setItemDelegate(_RenglonDelRegistro(lista))
+        lista.setResizeMode(QtWidgets.QListView.Adjust)
+        lista.itemSelectionChanged.connect(self._punto_elegido_cambio)
+        # QListWidget NO TRAE TEXTO DE «LISTA VACÍA» EN Qt 5: LA INVITACIÓN VA ENCIMA, SIN ESTORBARLE AL RATÓN
+        self.nota_sin_puntos = QtWidgets.QLabel(INVITACION_SIN_PUNTOS)
+        self.nota_sin_puntos.setProperty("rol", "nota")
+        self.nota_sin_puntos.setAlignment(QtCore.Qt.AlignCenter)
+        self.nota_sin_puntos.setWordWrap(True)
+        self.nota_sin_puntos.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        diseno = QtWidgets.QVBoxLayout(lista.viewport())
+        diseno.setContentsMargins(8, 4, 8, 4)
+        diseno.addWidget(self.nota_sin_puntos)
+        for movimiento in programas.MOVIMIENTOS:  # LOS DEL FORMATO, NO ESCRITOS A MANO
+            self.SELECTOR_TIPO_PUNTO.addItem(movimiento.capitalize(), movimiento)
+        # EL SLIDER CUENTA DE 5 EN 5: CADA UNIDAD SUYA ES UN 5 %, DENTRO DEL RANGO QUE VALIDA programa.py
+        self.SLIDER_VELOCIDAD_PUNTO.setRange(math.ceil(programas.VELOCIDAD_MIN / PASO_VELOCIDAD_PUNTO),
+                                             programas.VELOCIDAD_MAX // PASO_VELOCIDAD_PUNTO)
+        self.SLIDER_VELOCIDAD_PUNTO.setPageStep(1)
+        hueco = self.VS_VELOCIDAD_PUNTO.sizePolicy()
+        hueco.setRetainSizeWhenHidden(True)  # SIN PUNTO ELEGIDO EL VALOR SE ESCONDE Y LA FILA NO SE MUEVE
+        self.VS_VELOCIDAD_PUNTO.setSizePolicy(hueco)
+        self.BTN_EDITAR_PUNTOS.clicked.connect(self.abrir_editor)
+        self.BTN_CERRAR_PUNTOS.clicked.connect(self.cerrar_editor)
+
+    @property
+    def editando(self):
+        return self.editado is not None
+
+    def fila_elegida(self):
+        """La fila del punto elegido en la lista (la primera es 0), o None.
+
+        Se pregunta por la SELECCIÓN, no por el renglón «actual»: Qt vuelve actual el primer renglón con solo
+        darle el foco a la lista, sin que nadie haya elegido nada.
+        """
+        filas = self.LISTA_PUNTOS.selectionModel().selectedRows()
+        return filas[0].row() if filas else None
+
+    def abrir_editor(self):
+        """✎ Editar: la columna PUNTOS, con los puntos del programa elegido. Una grabación no se edita por puntos."""
+        p = self.programa_elegido()
+        if p is None:
+            return
+        if p.tipo != "puntos":
+            self.avisar(MOTIVO_NO_SE_EDITA.replace("\n", " "), "aviso", "Programa", programa=p.nombre)
+            return
+        self._editar(p, self.SELECTOR_PROGRAMA.currentData())
+
+    def _editar(self, programa, archivo):
+        """Pone `programa` en el editor, y lo abre si estaba cerrado."""
+        fila = self.fila_elegida() if self.editando and archivo == self.archivo_editado else None
+        if not self.editando:
+            # VISIÓN LE CEDE SU LUGAR. NO SE TOCA LO QUE LA PERSONA TIENE RECORDADO: AL CERRAR, VUELVE COMO ESTABA
+            self._vision_contraida_antes = self.FONDO_VISION.isHidden()
+            self.contraer_vision(True, recordar=False)
+            self.FONDO_PUNTOS.show()
+        self.editado, self.archivo_editado = programa, archivo
+        self._pintar_puntos(fila if fila is not None and fila < len(programa.puntos) else None)
+
+    def cerrar_editor(self):
+        """✕ Cerrar: la pantalla queda como estaba antes de abrir el editor."""
+        if not self.editando:
+            return
+        self.editado = self.archivo_editado = None
+        self.FONDO_PUNTOS.hide()
+        self.contraer_vision(self._vision_contraida_antes, recordar=False)
+        self._actualizar_editor()
+
+    def _abrir_vision(self):
+        """Clic en la franja «▸ VISIÓN». PUNTOS ocupa el lugar de VISIÓN: con el editor abierto, primero se cierra."""
+        self.cerrar_editor()
+        self.contraer_vision(False)
+
+    def _pintar_puntos(self, elegir=None):
+        """La lista y su nota, desde self.editado. elegir: la fila que queda elegida (None = ninguna)."""
+        puntos, lista = self.editado.puntos, self.LISTA_PUNTOS
+        lista.blockSignals(True)  # SE AVISA UNA SOLA VEZ, AL FINAL
+        lista.clear()
+        for numero, punto in enumerate(puntos, start=1):
+            lista.addItem(QtWidgets.QListWidgetItem(f"{numero}   {punto.movimiento.capitalize()} · {punto.velocidad} %"))
+        lista.setCurrentRow(-1 if elegir is None else elegir)
+        lista.blockSignals(False)
+        self.nota_sin_puntos.setVisible(not puntos)
+        cuantos = "sin puntos" if not puntos else "1 punto" if len(puntos) == 1 else f"{len(puntos)} puntos"
+        nota = f"{self.archivo_editado or 'Programa nuevo'} · {cuantos}"
+        # UN NOMBRE DE ARCHIVO LARGO NO ENSANCHA LA COLUMNA: SE RECORTA POR EN MEDIO Y VA COMPLETO EN LA AYUDA
+        self.NOTA_PUNTOS.ensurePolished()
+        margenes = self.FONDO_PUNTOS.layout().contentsMargins()
+        ancho = self.FONDO_PUNTOS.minimumWidth() - margenes.left() - margenes.right()
+        self.NOTA_PUNTOS.setText(self.NOTA_PUNTOS.fontMetrics().elidedText(nota, QtCore.Qt.ElideMiddle, ancho))
+        self.NOTA_PUNTOS.setToolTip(nota)
+        self._punto_elegido_cambio()
+
+    def _punto_elegido_cambio(self):
+        """La fila «del punto elegido» muestra su tipo y su velocidad, o se apaga si no hay ninguno elegido."""
+        if not self.editando:
+            return
+        fila = self.fila_elegida()
+        punto = self.editado.puntos[fila] if fila is not None else None
+        self.SUB_PUNTO_ELEGIDO.setText(f"PUNTO {fila + 1}" if punto else "NINGÚN PUNTO ELEGIDO")
+        for control in (self.SELECTOR_TIPO_PUNTO, self.SLIDER_VELOCIDAD_PUNTO):
+            control.blockSignals(True)  # AQUÍ SOLO SE PINTA: NO ES UN CAMBIO DE LA PERSONA
+        self.SELECTOR_TIPO_PUNTO.setCurrentIndex(self.SELECTOR_TIPO_PUNTO.findData(punto.movimiento) if punto else -1)
+        self.SLIDER_VELOCIDAD_PUNTO.setValue(round(punto.velocidad / PASO_VELOCIDAD_PUNTO) if punto
+                                             else self.SLIDER_VELOCIDAD_PUNTO.minimum())
+        for control in (self.SELECTOR_TIPO_PUNTO, self.SLIDER_VELOCIDAD_PUNTO):
+            control.blockSignals(False)
+        self.VS_VELOCIDAD_PUNTO.setText(f"{punto.velocidad} %" if punto else "")
+        self.VS_VELOCIDAD_PUNTO.setVisible(punto is not None)
+        self._actualizar_editor()
+
+    def _actualizar_editor(self):
+        """UN solo lugar decide qué está encendido en el editor, según el programa y el punto elegidos."""
+        self.BTN_EDITAR_PUNTOS.setEnabled(self.tipo_elegido == "puntos")
+        self.BTN_EDITAR_PUNTOS.setToolTip(MOTIVO_NO_SE_EDITA if self.tipo_elegido == "grabacion" else self._ayuda_editar)
+        if not self.editando:
+            return
+        cuantos, fila = len(self.editado.puntos), self.fila_elegida()
+        elegido = fila is not None
+        self.BTN_REENSENAR.setEnabled(elegido)
+        self.BTN_QUITAR_PUNTO.setEnabled(elegido and cuantos > 1)  # EL FORMATO PIDE AL MENOS UN PUNTO
+        self.BTN_SUBIR_PUNTO.setEnabled(elegido and fila > 0)
+        self.BTN_BAJAR_PUNTO.setEnabled(elegido and fila < cuantos - 1)
+        for control in (self.ETIQUETA_TIPO_PUNTO, self.SELECTOR_TIPO_PUNTO, self.ETIQUETA_VELOCIDAD_PUNTO,
+                        self.SLIDER_VELOCIDAD_PUNTO):
+            control.setEnabled(elegido)
+        # SIN PUNTO ELEGIDO, EL PASO ADELANTE VA AL PRIMERO Y EL PASO ATRÁS AL ÚLTIMO
+        self.BTN_PASO_ATRAS.setEnabled(cuantos > 0 and fila != 0)
+        self.BTN_PASO_ADELANTE.setEnabled(cuantos > 0 and fila != cuantos - 1)
+        self.BTN_VISTA_PREVIA.setEnabled(cuantos > 0)
+
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):
         verde = self.robot.vision.verde.minimo
@@ -680,7 +839,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.GUARDAR.clicked.connect(self.guardar_detecciones)
         self.CARGA.clicked.connect(self.cargar_imagen)
         self.BTN_CONTRAER_VISION.clicked.connect(lambda: self.contraer_vision(True))
-        self.FRANJA_VISION.clicked.connect(lambda: self.contraer_vision(False))
+        self.FRANJA_VISION.clicked.connect(self._abrir_vision)
         self.contraer_vision(str(self.ajustes.value("vision/contraida", "false")).lower() == "true", recordar=False)
 
     def contraer_vision(self, contraida, recordar=True):
@@ -749,7 +908,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.LISTA_REGISTRO.scheduleDelayedItemsLayout()  # LOS RENGLONES SE VUELVEN A MEDIR CON EL ANCHO NUEVO
+        for lista in (self.LISTA_REGISTRO, self.LISTA_PUNTOS):
+            lista.scheduleDelayedItemsLayout()  # LOS RENGLONES SE VUELVEN A MEDIR CON EL ANCHO NUEVO
 
     def closeEvent(self, event):
         self.temporizador_video.stop()

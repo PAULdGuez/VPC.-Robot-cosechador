@@ -11,10 +11,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np
 import pytest
 import yaml
+from PyQt5 import QtCore, QtGui, QtWidgets
 
+import auditoria_interfaz as au
+from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
+from cosechador.movimiento.programa import Punto
 from cosechador.movimiento.trayectorias import posicion, servos_del_plan, tramo_a_punto, tramo_articular
 from cosechador.robot.cinematica_inversa import angulos_servo
+from cosechador.ui import tema
+from test_grabacion_ventana import correr, eventos, otro_programa, ventana  # noqa: F401 (ventana ES EL FIXTURE)
 
 
 # LA RECTA DE A A B CRUZA EL EJE DE LA BASE: NO SE PUEDE RECORRER (EL MISMO CASO DE test_trayectorias.py)
@@ -26,6 +32,42 @@ IDA, VUELTA = (800, 300, 900), (-800, 300, 900)
 @pytest.fixture(scope="module")
 def home_s(robot):
     return angulos_servo(robot, robot.home)
+
+
+@pytest.fixture(scope="module")
+def poses(robot, home_s):
+    """Servos de poses que el robot alcanza (las de test_programas.py) y las cuatro de arriba."""
+    xyz = {"arriba": (356, 711, 1150), "corte": (356, 711, 1014), "a": A, "b": B, "ida": IDA, "vuelta": VUELTA}
+    return {"home": home_s, **{nombre: angulos_servo(robot, punto) for nombre, punto in xyz.items()}}
+
+
+def guardar_programa(w, archivo, *puntos):
+    """Deja en la carpeta de la ventana un programa por puntos, elegido en el selector."""
+    prog.guardar(prog.Programa(archivo[:-5], "puntos", w.robot.nombre, w.robot.gdl, puntos=tuple(puntos)),
+                 os.path.join(w.carpeta_programas, archivo))
+    w.ajustes.setValue("programa/ultimo", archivo)
+    w.recargar_programas()
+
+
+def abrir(w, archivo, *puntos):
+    guardar_programa(w, archivo, *puntos)
+    w.BTN_EDITAR_PUNTOS.click()
+    assert w.editando
+
+
+def en_disco(w, archivo):
+    return prog.cargar(os.path.join(w.carpeta_programas, archivo), w.robot)
+
+
+def elegir(w, numero):
+    """Deja elegido el punto `numero` (el primero es el 1), o ninguno con None."""
+    w.LISTA_PUNTOS.setCurrentRow(-1 if numero is None else numero - 1)
+    if numero is None:
+        w.LISTA_PUNTOS.clearSelection()
+
+
+def renglones(w):
+    return [w.LISTA_PUNTOS.item(i).text() for i in range(w.LISTA_PUNTOS.count())]
 
 
 def lejos_de_la_recta(robot, servos, desde, hasta):
@@ -73,3 +115,52 @@ def test_b3_8_a_un_punto_se_llega_con_su_tipo_y_su_velocidad(robot):
 
     nada, motivo = tramo_a_punto(robot, angulos_servo(robot, A), prog.Punto(angulos_servo(robot, B), "lineal", 100))
     assert nada is None and motivo.startswith("el camino pasa por") and "no alcanza" in motivo
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.1: ABRIR Y CERRAR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_1_editar_abre_la_columna_puntos_donde_va_vision_y_cerrar_la_quita(ventana, poses):
+    w = ventana
+    assert w.FONDO_PUNTOS.isHidden() and not w.FONDO_VISION.isHidden() and not w.editando
+    guardar_programa(w, "cosecha.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["home"]))
+    recordado = w.ajustes.value("vision/contraida")
+
+    w.BTN_EDITAR_PUNTOS.click()
+    assert not w.FONDO_PUNTOS.isHidden() and w.FONDO_VISION.isHidden() and not w.FRANJA_VISION.isHidden()
+    assert w.lay_columnas.indexOf(w.FONDO_PUNTOS) == w.lay_columnas.indexOf(w.FONDO_VISION) + 1   # EN EL LUGAR DE VISIÓN
+    assert renglones(w) == ["1   Articular · 100 %", "2   Lineal · 20 %", "3   Articular · 100 %"]
+    assert w.NOTA_PUNTOS.text() == "cosecha.yaml · 3 puntos"
+    assert w.fila_elegida() is None and w.SUB_PUNTO_ELEGIDO.text() == "NINGÚN PUNTO ELEGIDO"
+
+    w.BTN_CERRAR_PUNTOS.click()
+    assert w.FONDO_PUNTOS.isHidden() and not w.FONDO_VISION.isHidden() and w.FRANJA_VISION.isHidden() and not w.editando
+    assert w.ajustes.value("vision/contraida") == recordado      # ABRIR Y CERRAR EL EDITOR NO CAMBIA LO QUE SE RECUERDA
+
+
+def test_b3_1_cerrar_deja_la_vision_como_estaba_tambien_si_estaba_oculta(ventana, poses):
+    w = ventana
+    guardar_programa(w, "uno.yaml", Punto(poses["home"]))
+    w.contraer_vision(True)                                       # LA PERSONA TENÍA LA VISIÓN GUARDADA EN SU FRANJA
+    w.BTN_EDITAR_PUNTOS.click()
+    w.BTN_CERRAR_PUNTOS.click()
+    assert w.FONDO_VISION.isHidden() and not w.FRANJA_VISION.isHidden() and w.ajustes.value("vision/contraida") == "true"
+    # LA FRANJA «▸ VISIÓN» CON EL EDITOR ABIERTO: VISIÓN Y PUNTOS OCUPAN EL MISMO LUGAR, ASÍ QUE EL EDITOR SE CIERRA
+    w.BTN_EDITAR_PUNTOS.click()
+    w.FRANJA_VISION.click()
+    assert w.FONDO_PUNTOS.isHidden() and not w.FONDO_VISION.isHidden() and w.FRANJA_VISION.isHidden()
+
+
+def test_b3_1_con_una_grabacion_elegida_editar_sale_apagado_y_dice_por_que(ventana, poses):
+    w = ventana
+    otro_programa(w)                                              # «otra.yaml»: UNA GRABACIÓN, Y QUEDA ELEGIDA
+    assert w.SELECTOR_PROGRAMA.currentData() == "otra.yaml" and not w.BTN_EDITAR_PUNTOS.isEnabled()
+    assert w.BTN_EDITAR_PUNTOS.toolTip() == "Una grabación son muestras por tiempo:\nno se edita por puntos."
+    w.abrir_editor()                                              # NI LLAMÁNDOLO SIN EL BOTÓN
+    assert w.FONDO_PUNTOS.isHidden()
+    # CON UN PROGRAMA POR PUNTOS SE ENCIENDE, CON SU AYUDA DE SIEMPRE
+    guardar_programa(w, "puntos.yaml", Punto(poses["home"]))
+    assert w.BTN_EDITAR_PUNTOS.isEnabled() and w.BTN_EDITAR_PUNTOS.toolTip() == "Abre el editor de puntos del programa elegido"
+    # Y SI CON EL EDITOR ABIERTO SE ELIGE LA GRABACIÓN, EL EDITOR SE CIERRA: NO HAY PUNTOS QUE ENSEÑAR
+    w.BTN_EDITAR_PUNTOS.click()
+    w.SELECTOR_PROGRAMA.setCurrentIndex(w.SELECTOR_PROGRAMA.findData("otra.yaml"))
+    assert w.FONDO_PUNTOS.isHidden() and not w.BTN_EDITAR_PUNTOS.isEnabled()

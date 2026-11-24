@@ -110,7 +110,7 @@
           </widget>
         </item>
         <item>
-          <layout class="QHBoxLayout" name="lay_columnas" stretch="0,0,1,0">
+          <layout class="QHBoxLayout" name="lay_columnas" stretch="0,0,0,1,0">
             <property name="leftMargin">
               <number>0</number>
             </property>
@@ -614,6 +614,445 @@ N</string>
                           </property>
                           <property name="rol" stdset="0">
                             <string>accion</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                </layout>
+              </widget>
+            </item>
+            <item>
+              <widget class="QFrame" name="FONDO_PUNTOS">
+                <property name="minimumSize">
+                  <size>
+                    <width>272</width>
+                    <height>0</height>
+                  </size>
+                </property>
+                <property name="maximumSize">
+                  <size>
+                    <width>272</width>
+                    <height>16777215</height>
+                  </size>
+                </property>
+                <property name="rol" stdset="0">
+                  <string>panel</string>
+                </property>
+                <layout class="QVBoxLayout" name="lay_puntos" stretch="0,0,1,0,0,0,0,0,0">
+                  <property name="leftMargin">
+                    <number>8</number>
+                  </property>
+                  <property name="topMargin">
+                    <number>8</number>
+                  </property>
+                  <property name="rightMargin">
+                    <number>8</number>
+                  </property>
+                  <property name="bottomMargin">
+                    <number>8</number>
+                  </property>
+                  <property name="spacing">
+                    <number>8</number>
+                  </property>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_puntos_cabeza">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="spacing">
+                        <number>8</number>
+                      </property>
+                      <item>
+                        <widget class="QLabel" name="ETIQUETA_PUNTOS">
+                          <property name="text">
+                            <string>PUNTOS</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>seccion</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <spacer name="resorte_puntos">
+                          <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                          </property>
+                          <property name="sizeHint">
+                            <size>
+                              <width>8</width>
+                              <height>8</height>
+                            </size>
+                          </property>
+                        </spacer>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="BTN_CERRAR_PUNTOS">
+                          <property name="text">
+                            <string>✕ Cerrar</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Cierra el editor y vuelve a mostrar la visión</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <widget class="QLabel" name="NOTA_PUNTOS">
+                      <property name="sizePolicy">
+                        <sizepolicy hsizetype="Ignored" vsizetype="Preferred">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                        </sizepolicy>
+                      </property>
+                      <property name="text">
+                        <string></string>
+                      </property>
+                      <property name="rol" stdset="0">
+                        <string>nota</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <widget class="QListWidget" name="LISTA_PUNTOS">
+                    </widget>
+                  </item>
+                  <item>
+                    <layout class="QGridLayout" name="lay_punto_elegido" columnstretch="0,1,0">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="horizontalSpacing">
+                        <number>8</number>
+                      </property>
+                      <property name="verticalSpacing">
+                        <number>4</number>
+                      </property>
+                      <item row="0" column="0" colspan="3">
+                        <widget class="QLabel" name="SUB_PUNTO_ELEGIDO">
+                          <property name="text">
+                            <string>NINGÚN PUNTO ELEGIDO</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>subtitulo</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="1" column="0">
+                        <widget class="QLabel" name="ETIQUETA_TIPO_PUNTO">
+                          <property name="minimumSize">
+                            <size>
+                              <width>64</width>
+                              <height>24</height>
+                            </size>
+                          </property>
+                          <property name="text">
+                            <string>Tipo</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>etiqueta</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="1" column="1" colspan="2">
+                        <widget class="QComboBox" name="SELECTOR_TIPO_PUNTO">
+                          <property name="sizePolicy">
+                            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                            </sizepolicy>
+                          </property>
+                          <property name="minimumSize">
+                            <size>
+                              <width>0</width>
+                              <height>26</height>
+                            </size>
+                          </property>
+                          <property name="toolTip">
+                            <string>Cómo llega el robot a este punto</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="2" column="0">
+                        <widget class="QLabel" name="ETIQUETA_VELOCIDAD_PUNTO">
+                          <property name="minimumSize">
+                            <size>
+                              <width>64</width>
+                              <height>24</height>
+                            </size>
+                          </property>
+                          <property name="text">
+                            <string>Velocidad
+del punto</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>etiqueta</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="2" column="1">
+                        <widget class="QSlider" name="SLIDER_VELOCIDAD_PUNTO">
+                          <property name="minimumSize">
+                            <size>
+                              <width>120</width>
+                              <height>24</height>
+                            </size>
+                          </property>
+                          <property name="toolTip">
+                            <string>Velocidad con la que el robot llega a este punto (% de la máxima segura)</string>
+                          </property>
+                          <property name="orientation">
+                            <enum>Qt::Horizontal</enum>
+                          </property>
+                        </widget>
+                      </item>
+                      <item row="2" column="2">
+                        <widget class="QLabel" name="VS_VELOCIDAD_PUNTO">
+                          <property name="minimumSize">
+                            <size>
+                              <width>56</width>
+                              <height>24</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>56</width>
+                              <height>24</height>
+                            </size>
+                          </property>
+                          <property name="text">
+                            <string></string>
+                          </property>
+                          <property name="alignment">
+                            <set>Qt::AlignCenter</set>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>chip</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_puntos_editar" stretch="1,1,1">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="spacing">
+                        <number>4</number>
+                      </property>
+                      <item>
+                        <widget class="QPushButton" name="BTN_PUNTO_NUEVO">
+                          <property name="text">
+                            <string>+ Punto</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Guarda la pose actual después del punto elegido</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>suave</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="BTN_REENSENAR">
+                          <property name="text">
+                            <string>Re-enseñar</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Reemplaza el punto elegido con la pose actual</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="BTN_QUITAR_PUNTO">
+                          <property name="text">
+                            <string>Quitar</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Quita el punto elegido</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_puntos_orden" stretch="1,1">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="spacing">
+                        <number>4</number>
+                      </property>
+                      <item>
+                        <widget class="QPushButton" name="BTN_SUBIR_PUNTO">
+                          <property name="text">
+                            <string>▲ Subir</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Sube el punto elegido un lugar</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="BTN_BAJAR_PUNTO">
+                          <property name="text">
+                            <string>▼ Bajar</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Baja el punto elegido un lugar</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <widget class="QLabel" name="SUB_PASO_A_PASO">
+                      <property name="text">
+                        <string>PASO A PASO</string>
+                      </property>
+                      <property name="rol" stdset="0">
+                        <string>subtitulo</string>
+                      </property>
+                    </widget>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_puntos_pasos" stretch="1,1">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="spacing">
+                        <number>4</number>
+                      </property>
+                      <item>
+                        <widget class="QPushButton" name="BTN_PASO_ATRAS">
+                          <property name="text">
+                            <string>◀ Paso atrás</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Paso atrás: lleva el robot al punto anterior</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="BTN_PASO_ADELANTE">
+                          <property name="text">
+                            <string>Paso adelante ▶</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Paso adelante: lleva el robot al punto siguiente</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_puntos_previa" stretch="0,1">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="spacing">
+                        <number>8</number>
+                      </property>
+                      <item>
+                        <widget class="QPushButton" name="BTN_VISTA_PREVIA">
+                          <property name="text">
+                            <string>Vista previa</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Recorre el programa solo en la simulación; no se manda nada a la placa</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>mini</string>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="NOTA_VISTA_PREVIA">
+                          <property name="text">
+                            <string>Solo en la simulación</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>El robot real no se mueve: no se manda nada a la placa</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>nota</string>
                           </property>
                         </widget>
                       </item>
@@ -1249,6 +1688,16 @@ N</string>
                                       <width>200</width>
                                       <height>26</height>
                                     </size>
+                                  </property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QPushButton" name="BTN_EDITAR_PUNTOS">
+                                  <property name="text">
+                                    <string>✎ Editar</string>
+                                  </property>
+                                  <property name="toolTip">
+                                    <string>Abre el editor de puntos del programa elegido</string>
                                   </property>
                                 </widget>
                               </item>
