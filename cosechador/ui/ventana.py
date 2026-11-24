@@ -22,7 +22,8 @@ from cosechador.hardware.enlace import abrir_enlace
 from cosechador.movimiento import programa as programas
 from cosechador.movimiento.grabadora import Grabadora, programa_de_grabacion
 from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_grabacion, plan_ir_y_volver,
-                                                plan_puntos, posicion, tramo_articular, tramo_continuo)
+                                                plan_puntos, posicion, tramo_a_punto, tramo_articular,
+                                                tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
 from cosechador.robot.espacio_trabajo import barrer
@@ -743,6 +744,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_QUITAR_PUNTO.clicked.connect(self.quitar_punto)
         self.BTN_SUBIR_PUNTO.clicked.connect(lambda: self.mover_punto(-1))
         self.BTN_BAJAR_PUNTO.clicked.connect(lambda: self.mover_punto(+1))
+        self.BTN_PASO_ATRAS.clicked.connect(lambda: self.paso(-1))
+        self.BTN_PASO_ADELANTE.clicked.connect(lambda: self.paso(+1))
         self.SELECTOR_TIPO_PUNTO.currentIndexChanged.connect(
             lambda: self._cambiar_el_elegido(movimiento=self.SELECTOR_TIPO_PUNTO.currentData()))
         # AL ARRASTRAR SE VE EL VALOR, Y SE GUARDA UNA SOLA VEZ: AL SOLTAR (CON EL TECLADO, EN CADA PASO)
@@ -961,6 +964,30 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if self._cambiar_puntos(puntos, elegir=fila):
             self.avisar(f"Punto {fila + 1}: {cambiado.movimiento}, {cambiado.velocidad} %.", "ok", "Editor",
                         archivo=self.archivo_editado)
+
+    def paso(self, sentido):
+        """Paso adelante (+1) y Paso atrás (-1): el robot va al punto siguiente o al anterior, y ahí se detiene.
+
+        Se llega con el tipo y la velocidad DEL PUNTO AL QUE SE LLEGA, también hacia atrás: lo decide
+        tramo_a_punto, igual que al reproducir. El punto queda elegido en la lista: ahí va el robot.
+        Sin punto elegido, adelante va al primero y atrás al último.
+        """
+        if not self._puede_editar() or not self._puede_planear():
+            return
+        cuantos, fila = len(self.editado.puntos), self.fila_elegida()
+        destino = fila + sentido if fila is not None else 0 if sentido > 0 else cuantos - 1
+        if not 0 <= destino < cuantos:
+            return
+        punto = self.editado.puntos[destino]
+        tramo, motivo = tramo_a_punto(self.robot, self.servos, punto, self.postura)
+        if tramo is None:  # NO SE MUEVE, Y LA LISTA SIGUE DICIENDO DÓNDE ESTÁ
+            self.avisar(f"No se mueve: Punto {destino + 1} ({punto.movimiento}): {motivo}", "aviso", "Paso a paso",
+                        archivo=self.archivo_editado, desde_mm=self.posicion, postura=self.postura)
+            return
+        self.LISTA_PUNTOS.setCurrentRow(destino)
+        self.avisar(f"Paso al punto {destino + 1} de {cuantos} ({punto.movimiento}, {punto.velocidad} %)", "info",
+                    "Paso a paso", archivo=self.archivo_editado, velocidad=self.velocidad, postura=self.postura)
+        self.ejecutar(tramo, origen="Paso a paso")
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):

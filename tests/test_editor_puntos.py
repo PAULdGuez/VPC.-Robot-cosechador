@@ -443,3 +443,71 @@ def test_b3_7_tambien_se_revisa_al_cambiar_el_modo_de_postura(ventana, robot):
     assert "cambiar de postura" in w.LISTA_PUNTOS.item(1).text() and "«negar»" in w.LISTA_PUNTOS.item(1).text()
     postura.setCurrentIndex(postura.findData("despacio"))
     assert imposibles(w) == []
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.8: PASO A PASO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_8_paso_adelante_y_paso_atras_llevan_el_robot_al_punto_y_se_detienen(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"]))
+    antes = len(w.enviados)
+    w.BTN_PASO_ADELANTE.click()                                   # NINGUNO ELEGIDO: VA AL PRIMERO
+    assert w.fila_elegida() == 0 and w.en_movimiento              # LA LISTA MARCA A DÓNDE VA DESDE QUE ARRANCA
+    correr(w)
+    assert w.servos == pytest.approx(poses["arriba"]) and not w.cola and not w.en_movimiento   # LLEGÓ Y SE DETUVO AHÍ
+    assert len(w.enviados) > antes                                # EL ROBOT REAL SÍ SE MUEVE (NO ES LA VISTA PREVIA)
+    w.BTN_PASO_ADELANTE.click()
+    correr(w)
+    assert w.fila_elegida() == 1 and posicion(w.robot, w.servos) == pytest.approx((356, 711, 1014), abs=0.5)
+    w.BTN_PASO_ADELANTE.click()
+    correr(w)
+    assert w.fila_elegida() == 2 and w.servos == pytest.approx(poses["ida"])
+    assert not w.BTN_PASO_ADELANTE.isEnabled()                    # ES EL ÚLTIMO: NO HAY SIGUIENTE
+    w.paso(+1)
+    assert not w.cola and w.fila_elegida() == 2
+    w.BTN_PASO_ATRAS.click()
+    correr(w)
+    assert w.fila_elegida() == 1 and posicion(w.robot, w.servos) == pytest.approx((356, 711, 1014), abs=0.5)
+    w.BTN_PASO_ATRAS.click()
+    correr(w)
+    assert w.fila_elegida() == 0 and w.servos == pytest.approx(poses["arriba"])
+    assert not w.BTN_PASO_ATRAS.isEnabled() and w.BTN_PASO_ADELANTE.isEnabled()         # ES EL PRIMERO: NO HAY ANTERIOR
+    assert len(en_disco(w, "p.yaml").puntos) == 3                 # DAR PASOS NO CAMBIA EL PROGRAMA
+
+
+def test_b3_8_paso_atras_se_mueve_con_el_tipo_del_punto_al_que_llega(ventana, robot, poses):
+    """La trampa de UR: hacia atrás se iba siempre en articular. Aquí IDA es lineal y VUELTA es articular."""
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["ida"], "lineal", 50), Punto(poses["vuelta"], "articular", 100))
+    llevar(w, poses["vuelta"])
+    elegir(w, 2)
+    assert w.velocidad == 100                                     # LA GENERAL, AL 100 %: LO QUE SE MIDE ES LA DEL PUNTO
+    antes = len(w.enviados)
+    w.BTN_PASO_ATRAS.click()                                      # DE VUELTA A IDA: SE LLEGA A UN PUNTO LINEAL
+    correr(w)
+    horas, recorrido = zip(*w.enviados[antes:])
+    assert max(lejos_de_la_recta(robot, recorrido, VUELTA, IDA)) < 0.5                  # EN RECTA
+    assert posicion(robot, w.servos) == pytest.approx(IDA, abs=0.5) and w.fila_elegida() == 0
+    paso_s = robot.movimiento.ms_por_paso / 1000
+    assert {round(b - a, 3) for a, b in zip(horas, horas[1:])} == {round(2 * paso_s, 3)}   # Y A SU 50 %: EL DOBLE POR PASO
+
+    antes = len(w.enviados)
+    w.BTN_PASO_ADELANTE.click()                                   # DE IDA A VUELTA: SE LLEGA A UN PUNTO ARTICULAR
+    correr(w)
+    horas, recorrido = zip(*w.enviados[antes:])
+    assert max(lejos_de_la_recta(robot, recorrido, IDA, VUELTA)) > 50                   # LA PUNTA NO VA EN RECTA
+    assert w.servos == pytest.approx(poses["vuelta"]) and w.fila_elegida() == 1
+    assert {round(b - a, 3) for a, b in zip(horas, horas[1:])} == {round(paso_s, 3)}
+
+
+def test_b3_8_si_no_se_puede_llegar_el_paso_no_mueve_el_robot_y_dice_por_que(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["a"]), Punto(poses["b"], "lineal", 40))
+    w.BTN_PASO_ADELANTE.click()
+    correr(w)                                                     # AL 1 (ARTICULAR) SÍ LLEGA
+    antes = len(w.enviados)
+    w.BTN_PASO_ADELANTE.click()                                   # AL 2: LA RECTA DESDE EL 1 NO SE PUEDE RECORRER
+    assert not w.cola and not w.en_movimiento and len(w.enviados) == antes
+    assert w.fila_elegida() == 0                                  # LA LISTA SIGUE DICIENDO DÓNDE ESTÁ EL ROBOT
+    assert eventos(w, "aviso")[-1].mensaje == ("No se mueve: Punto 2 (lineal): el camino pasa por (-87, 0, 630), "
+                                                "una zona que el robot no alcanza")
