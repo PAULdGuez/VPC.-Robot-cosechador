@@ -121,14 +121,24 @@ class Escena:
         piso = pv.Plane(i_size=lado, j_size=lado, i_resolution=20, j_resolution=20)
         self.plotter.add_mesh(piso, style="wireframe", color="gray", opacity=0.3)
         for indice, (nombre, pieza) in enumerate(piezas_del_robot(robot)):
-            malla, origen = cargar_pieza(robot, indice, pieza)
-            self.origen_piezas[nombre] = origen
-            self.actores.append(self.plotter.add_mesh(malla, color=pieza.color, smooth_shading=True, specular=0.4))
+            self.actores.append(self._agregar_pieza(indice, nombre, pieza))
         self._dibujar_ejes()
         self._plan = self._recorrido = None
         self._actor_plan = self._actor_recorrido = None
         self.puntos_recorrido = []
         self.trayectoria_visible = True
+
+    def _agregar_pieza(self, indice, nombre, pieza, **opciones):
+        malla, self.origen_piezas[nombre] = cargar_pieza(self.robot, indice, pieza)
+        return self.plotter.add_mesh(malla, color=pieza.color, smooth_shading=True, specular=0.4, **opciones)
+
+    def cambiar_herramienta(self, robot):
+        """El mismo robot con otro largo de herramienta: se rehace solo la pieza del efector, donde estaba."""
+        self.robot = robot
+        vieja = self.actores[-1]
+        self.actores[-1] = self._agregar_pieza(robot.gdl + 1, "efector", robot.efector, reset_camera=False)
+        self.actores[-1].user_matrix = vieja.user_matrix
+        self.plotter.remove_actor(vieja)
 
     def _dibujar_ejes(self):
         """Flechas X/Y/Z en el origen de la base, con su letra, y el cubo de orientación en la esquina."""

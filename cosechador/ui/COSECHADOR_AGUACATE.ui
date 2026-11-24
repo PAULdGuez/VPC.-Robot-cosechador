@@ -1519,6 +1519,39 @@ N</string>
                           </widget>
                         </item>
                         <item>
+                          <layout class="QHBoxLayout" name="lay_herramienta">
+                            <property name="spacing">
+                              <number>8</number>
+                            </property>
+                            <item>
+                              <widget class="QLabel" name="ETIQUETA_HERRAMIENTA">
+                                <property name="minimumSize">
+                                  <size>
+                                    <width>0</width>
+                                    <height>24</height>
+                                  </size>
+                                </property>
+                                <property name="text">
+                                  <string>Herramienta (mm)</string>
+                                </property>
+                                <property name="buddy">
+                                  <cstring>TE_HERRAMIENTA</cstring>
+                                </property>
+                                <property name="rol" stdset="0">
+                                  <string>etiqueta</string>
+                                </property>
+                              </widget>
+                            </item>
+                            <item>
+                              <widget class="QLineEdit" name="TE_HERRAMIENTA">
+                                <property name="toolTip">
+                                  <string>Largo de la herramienta: del extremo del antebrazo a su punta</string>
+                                </property>
+                              </widget>
+                            </item>
+                          </layout>
+                        </item>
+                        <item>
                           <widget class="QPushButton" name="VER_VOLUMEN">
                             <property name="text">
                               <string>VOLUMEN DE TRABAJO</string>
