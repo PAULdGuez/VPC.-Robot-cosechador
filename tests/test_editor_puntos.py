@@ -768,3 +768,23 @@ def test_b3_en_cada_estado_del_editor_nada_se_encima_se_corta_ni_pierde_contrast
     minimo = w.minimumSizeHint()                                  # CON EL EDITOR ABIERTO, LA VENTANA SIGUE CABIENDO
     assert minimo.width() <= 1280 and minimo.height() <= 720, (minimo.width(), minimo.height())
     assert (w.width(), w.height()) == (1280, 720)
+
+
+def test_b3_6_si_la_escritura_falla_a_medias_el_programa_guardado_queda_entero(robot, tmp_path, monkeypatch):
+    """El editor guarda en cada cambio: un fallo a media escritura no deja truncado lo que ya estaba guardado."""
+    ruta = os.path.join(tmp_path, "p.yaml")
+    prog.guardar(prog.Programa("Bueno", "puntos", robot.nombre, robot.gdl, puntos=(Punto((90.0, 90.0, 90.0)),)), ruta)
+    with open(ruta, encoding="utf-8") as f:
+        antes = f.read()
+
+    def a_medias(datos, archivo, **_):
+        archivo.write("formato: 1\nnombre: a med")  # ALCANZÓ A ESCRIBIR UN PEDAZO Y SE CAYÓ
+        raise OSError("disco lleno")
+
+    monkeypatch.setattr(yaml, "dump", a_medias)
+    with pytest.raises(OSError):
+        prog.guardar(prog.Programa("Otro", "puntos", robot.nombre, robot.gdl, puntos=(Punto((80.0, 100.0, 60.0)),)), ruta)
+    with open(ruta, encoding="utf-8") as f:
+        assert f.read() == antes
+    assert os.listdir(tmp_path) == ["p.yaml"]  # Y NO QUEDA UN ARCHIVO A MEDIAS EN LA CARPETA DE PROGRAMAS
+    assert prog.cargar(ruta, robot).nombre == "Bueno"

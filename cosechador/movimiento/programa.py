@@ -151,8 +151,19 @@ def programa_a_dict(programa):
 
 
 def guardar(programa, ruta):
-    with open(ruta, "w", encoding="utf-8") as f:
-        yaml.dump(programa_a_dict(programa), f, Dumper=_Volcador, allow_unicode=True, sort_keys=False)
+    """Escribe el programa entero o no toca el que ya estaba.
+
+    Se escribe primero en un archivo temporal junto al destino y, ya completo, se pone en su lugar. El editor
+    de puntos guarda en cada cambio: escribiendo directo, un fallo a media escritura dejaba truncado el programa.
+    """
+    temporal = f"{ruta}.tmp"
+    try:
+        with open(temporal, "w", encoding="utf-8") as f:
+            yaml.dump(programa_a_dict(programa), f, Dumper=_Volcador, allow_unicode=True, sort_keys=False)
+        os.replace(temporal, ruta)
+    finally:
+        if os.path.exists(temporal):  # SOLO QUEDA SI ALGO FALLÓ: EL PEDAZO A MEDIAS NO SE DEJA TIRADO
+            os.remove(temporal)
 
 
 def cargar(ruta, robot):
