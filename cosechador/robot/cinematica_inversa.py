@@ -102,4 +102,7 @@ def angulos_servo_cercanos(robot, punto, servos_actuales):
     except FueraDeAlcance:
         return None
     validas = [s for s in (dh_a_servo(robot, q) for q in candidatas) if servos_en_rango(robot, s)]
-    return min(validas, key=lambda s: salto(s, servos_actuales)) if validas else None
+    # SI DOS ACOMODOS QUEDAN IGUAL DE CERCA (LA BASE A 0° O A 180° CON LA PUNTA SOBRE SU EJE, COMO EN HOME), GANA EL
+    # PRIMERO: EL ORDEN DE PREFERENCIA DEL SOLVER. SIN REDONDEAR, 1e-14 mm DE RUIDO NUMÉRICO DECIDÍAN SI EL BRAZO
+    # SALÍA DE HOME DE FRENTE O DE ESPALDAS AL PUNTO (CON HERRAMIENTA DE 120 mm, DE ESPALDAS).
+    return min(validas, key=lambda s: round(salto(s, servos_actuales), 6)) if validas else None

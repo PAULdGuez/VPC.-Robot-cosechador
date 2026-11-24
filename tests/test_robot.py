@@ -11,7 +11,7 @@ from cosechador.robot import ErrorConfiguracion, cargar_robot, robot_desde_dict
 from cosechador.robot.cinematica import (TOLERANCIA_SERVO, cinematica_directa, dh_a_servo, matrices, servo_a_dh,
                                          servos_en_rango)
 from cosechador.robot.cinematica_inversa import (FueraDeAlcance, SinSolver, alcanzable, angulos_servo,
-                                                 soluciones)
+                                                 angulos_servo_cercanos, soluciones)
 from cosechador.robot.config import ROBOT_POR_OMISION
 from cosechador.robot.espacio_trabajo import barrer, rangos_servo, total_puntos
 
@@ -54,6 +54,16 @@ def test_ci_usa_la_altura_de_la_base(robot):
     assert soluciones(robot, (0.001, 0, d1 + a2 + a3 - 1))
     with pytest.raises(FueraDeAlcance):
         soluciones(robot, (0, 0, d1 + a2 + a3 + 10))
+
+
+def test_un_empate_de_acomodos_no_lo_decide_el_ruido(robot):
+    # A UN LADO DE HOME, LA BASE A 0° Y A 180° QUEDAN IGUAL DE LEJOS (90°): GANA LA QUE MIRA AL PUNTO, AUNQUE EL
+    # RUIDO NUMÉRICO PONGA EL PUNTO UN PELO DEL OTRO LADO DE y = 0. (SI NO, EL BRAZO SALE DE HOME DE ESPALDAS AL
+    # PUNTO Y A LOS POCOS CENTÍMETROS TIENE QUE CAMBIAR DE POSTURA.)
+    home = angulos_servo(robot, robot.home)
+    for ruido in (-1e-13, 0.0, 1e-13):
+        assert angulos_servo_cercanos(robot, (0.4, ruido, 1065), home)[0] == pytest.approx(0, abs=1e-6)
+        assert angulos_servo_cercanos(robot, (-0.4, ruido, 1065), home)[0] == pytest.approx(180, abs=1e-6)
 
 
 def test_punto_fuera_de_alcance(robot):
