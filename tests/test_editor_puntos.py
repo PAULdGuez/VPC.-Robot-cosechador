@@ -18,6 +18,7 @@ from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
 from cosechador.movimiento.programa import Punto
 from cosechador.movimiento.trayectorias import posicion, servos_del_plan, tramo_a_punto, tramo_articular
+from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import angulos_servo
 from cosechador.ui import tema
 from test_grabacion_ventana import correr, eventos, otro_programa, ventana  # noqa: F401 (ventana ES EL FIXTURE)
@@ -511,3 +512,65 @@ def test_b3_8_si_no_se_puede_llegar_el_paso_no_mueve_el_robot_y_dice_por_que(ven
     assert w.fila_elegida() == 0                                  # LA LISTA SIGUE DICIENDO DÓNDE ESTÁ EL ROBOT
     assert eventos(w, "aviso")[-1].mensaje == ("No se mueve: Punto 2 (lineal): el camino pasa por (-87, 0, 630), "
                                                 "una zona que el robot no alcanza")
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.9: VISTA PREVIA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def espiar_el_dibujo(w):
+    """Todo lo que se le pide dibujar a la simulación (ángulos del modelo), en orden."""
+    dibujados, dibujar = [], w.escena.dibujar
+    w.escena.dibujar = lambda q: (dibujados.append(tuple(q)), dibujar(q))[1]
+    return dibujados
+
+
+def test_b3_9_la_vista_previa_recorre_el_programa_solo_en_la_simulacion(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"]))
+    dibujados = espiar_el_dibujo(w)
+    antes, pose, etiquetas = len(w.enviados), w.servos, [v.text() for v in (*w.valores_servo, *w.valores_xyz)]
+    w.BTN_VISTA_PREVIA.click()
+    assert w.en_movimiento and w.BTN_DETENER.isEnabled()
+    correr(w)
+    assert len(dibujados) > 20                                    # LA SIMULACIÓN SÍ RECORRIÓ EL PROGRAMA...
+    assert dibujados[-2] == pytest.approx(servo_a_dh(w.robot, poses["ida"]))            # ...HASTA SU ÚLTIMO PUNTO
+    assert len(w.enviados) == antes                               # A LA PLACA NO LE LLEGÓ NADA
+    assert w.servos == pose and [v.text() for v in (*w.valores_servo, *w.valores_xyz)] == etiquetas
+    assert dibujados[-1] == pytest.approx(servo_a_dh(w.robot, pose))                    # EL DIBUJO VUELVE A DONDE ESTÁ EL ROBOT
+    assert [e.mensaje for e in eventos(w) if e.origen == "Vista previa"][-1] == "Programa «p» terminado."
+    assert not w.en_movimiento and not w.BTN_DETENER.isEnabled()
+    # CONTROL DE SANIDAD: EL MISMO PROGRAMA, REPRODUCIDO, SÍ LLEGA A LA PLACA (EL CONTADOR SÍ CUENTA)
+    w.BTN_REPRODUCIR.click()
+    correr(w)
+    assert len(w.enviados) > antes + 20 and w.servos == pytest.approx(poses["ida"])
+
+
+def test_b3_9_detener_la_vista_previa_devuelve_el_dibujo_a_donde_esta_el_robot(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"]))
+    dibujados = espiar_el_dibujo(w)
+    antes, pose = len(w.enviados), w.servos
+    w.BTN_VISTA_PREVIA.click()
+    w.temporizador_movimiento.stop()
+    for _ in range(6):
+        w._siguiente_paso()
+    assert w.cola and dibujados[-1] != pytest.approx(servo_a_dh(w.robot, pose))         # EL DIBUJO VA A MEDIO CAMINO
+    w.BTN_DETENER.click()
+    assert not w.cola and len(w.enviados) == antes and w.servos == pose
+    assert dibujados[-1] == pytest.approx(servo_a_dh(w.robot, pose))
+    assert eventos(w, "aviso")[-1].mensaje == "Vista previa detenida: el robot no se movió."
+
+
+def test_b3_9_lo_que_faltaba_de_una_vista_previa_nunca_se_manda_a_la_placa(ventana, poses):
+    """Si un movimiento de verdad llega a media vista previa, lo que quedaba de ella en la cola se tira."""
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"]))
+    antes, pose = len(w.enviados), w.servos
+    w.BTN_VISTA_PREVIA.click()
+    w.temporizador_movimiento.stop()
+    for _ in range(6):
+        w._siguiente_paso()
+    de_verdad = tramo_articular(w.robot, pose, (pose[0] + 12, *pose[1:]))
+    w.ejecutar(de_verdad, origen="Prueba")                        # UN MOVIMIENTO COMPLETO: NO VACÍA LA COLA POR SÍ SOLO
+    correr(w)
+    assert [s for _, s in w.enviados[antes:]] == [pytest.approx(s) for s in servos_del_plan(de_verdad)]
+    assert w.servos == pytest.approx((pose[0] + 12, *pose[1:]))

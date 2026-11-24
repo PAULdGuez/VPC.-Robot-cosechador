@@ -146,6 +146,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.editado = None           # EL Programa ABIERTO EN EL EDITOR DE PUNTOS (None: EDITOR CERRADO)
         self.archivo_editado = None   # SU ARCHIVO, DENTRO DE carpeta_programas
         self._vision_contraida_antes = False
+        self.en_vista_previa = False  # LO QUE HAY EN LA COLA SOLO SE DIBUJA: A LA PLACA NO SE LE MANDA
         self.temporizador_movimiento = QtCore.QTimer(self)
         self.temporizador_movimiento.setTimerType(QtCore.Qt.PreciseTimer)  # LAS GRABACIONES RESPETAN SUS TIEMPOS
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
@@ -204,14 +205,18 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         duracion_s: lo que dura este paso (para la grabación); None = un paso a velocidad 100 %.
         """
         self.servos = tuple(servos)
-        self.escena.dibujar(servo_a_dh(self.robot, self.servos))
-        self.escena.agregar_al_recorrido(self.posicion)
+        self._dibujar(self.servos)
         self.poner_etiquetas()
         comando, respuestas = self.enlace.enviar(*self.servos)
         # SE GRABA AQUÍ, JUSTO DESPUÉS DE MANDARLA: LO GRABADO ES LO QUE RECIBIÓ LA PLACA, NO LO QUE DICEN LOS SLIDERS
         self.grabadora.anotar(self.servos, duracion_s if duracion_s is not None else self.robot.movimiento.ms_por_paso / 1000)
         for respuesta in respuestas:
             self.avisar(respuesta, "aviso", "ESP32", comando=comando, placa=self.enlace.nombre)
+
+    def _dibujar(self, servos):
+        """El robot de la simulación con esos ángulos de servo. Solo el dibujo: a la placa no le llega nada."""
+        self.escena.dibujar(servo_a_dh(self.robot, servos))
+        self.escena.agregar_al_recorrido(tuple(posicion(self.robot, servos)))
 
     def _ir_a_home(self):
         try:
@@ -224,12 +229,16 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._sincronizar_sliders()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EJECUCIÓN DE PLANES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def ejecutar(self, plan, bloquear=True, origen="Movimiento"):
+    def ejecutar(self, plan, bloquear=True, origen="Movimiento", solo_simulacion=False):
         """Encola los pasos del plan; el temporizador los ejecuta uno por uno.
 
         bloquear=False (jog con los sliders): no se bloquean los controles y un movimiento nuevo
         reemplaza lo que faltaba del anterior.
+        solo_simulacion=True (vista previa): los pasos se dibujan y a la placa no se le manda nada.
         """
+        if self.en_vista_previa and not solo_simulacion:
+            self._fin_del_movimiento()  # LO QUE FALTABA DE UNA VISTA PREVIA NUNCA SE MANDA A LA PLACA
+        self.en_vista_previa = solo_simulacion
         if not bloquear:
             self.cola.clear()
         # LO QUE VA A RECORRER LA PUNTA, ANTES DE MOVERSE. UN MOVIMIENTO «COMPLETO» (PROGRAMA, COSECHA,
@@ -247,16 +256,15 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def _siguiente_paso(self):
         if not self.cola:
-            self.temporizador_movimiento.stop()
-            self._sincronizar_sliders()
-            self._ocupado(False)
-            self.BTN_DETENER.setEnabled(False)
+            self._fin_del_movimiento()
             return
         paso = self.cola.popleft()
         # EL SIGUIENTE PASO LLEGA CUANDO TERMINA ESTE: SU DURACIÓN, ESCALADA POR LA VELOCIDAD GENERAL
         ms = paso.ms if paso.ms is not None else (self.robot.movimiento.ms_por_paso if paso.servos is not None else 0)
         intervalo = max(1, int(round(ms * 100 / self.velocidad)))
-        if paso.servos is not None:
+        if paso.servos is not None and self.en_vista_previa:
+            self._dibujar(paso.servos)  # NI PLACA, NI GRABACIÓN, NI self.servos: EL ROBOT NO SE MOVIÓ
+        elif paso.servos is not None:
             self.poner_servos(paso.servos, intervalo / 1000)
         if paso.aviso is not None:
             self.avisar(paso.aviso, paso.nivel, self._origen_plan)
@@ -266,13 +274,25 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """■ Detener: el robot se queda donde iba y no se manda nada más a la placa."""
         if not self.en_movimiento and not self.cola:
             return
+        era_vista_previa = self.en_vista_previa
+        self._fin_del_movimiento()
+        if era_vista_previa:
+            self.avisar("Vista previa detenida: el robot no se movió.", "aviso", self._origen_plan)
+            return
+        self.avisar(f"Detenido en {tuple(int(round(c)) for c in self.posicion)}.", "aviso", self._origen_plan,
+                    posicion_mm=self.posicion, servos=self.servos)
+
+    def _fin_del_movimiento(self):
+        """Lo que pasa siempre que algo deja de moverse, porque terminó o porque se detuvo."""
         self.cola.clear()
         self.temporizador_movimiento.stop()
+        if self.en_vista_previa:  # EL DIBUJO VUELVE A DONDE ESTÁ EL ROBOT DE VERDAD, QUE NO SE MOVIÓ
+            self.en_vista_previa = False
+            self.escena.dibujar(servo_a_dh(self.robot, self.servos))
+            self.escena.reiniciar_recorrido(self.posicion)
         self._sincronizar_sliders()
         self._ocupado(False)
         self.BTN_DETENER.setEnabled(False)
-        self.avisar(f"Detenido en {tuple(int(round(c)) for c in self.posicion)}.", "aviso", self._origen_plan,
-                    posicion_mm=self.posicion, servos=self.servos)
 
     def _ocupado(self, si):
         """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
@@ -608,15 +628,20 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             plan, problemas = plan_puntos(self.robot, self.servos, p, self.postura)
         else:
             plan, problemas = plan_grabacion(self.robot, self.servos, p, self.CHK_QUITAR_PAUSAS.isChecked())
-        if problemas:
-            extra = f" (y {len(problemas) - 1} más)" if len(problemas) > 1 else ""
-            self.avisar(f"No arranca: {problemas[0][1]}{extra}", "aviso", "Programa",
-                        programa=p.nombre, problemas=[m for _, m in problemas])
+        if self._no_arranca(p, problemas, "Programa"):
             return
         segundos = duracion_ms(self.robot, plan) / 1000 * 100 / self.velocidad
         self.avisar(f"Reproduciendo «{p.nombre}» (~{segundos:.1f} s)", "info", "Programa",
                     programa=p.nombre, tipo=p.tipo, duracion_s=segundos, velocidad=self.velocidad, postura=self.postura)
         self.ejecutar(plan, origen="Programa")
+
+    def _no_arranca(self, programa, problemas, origen):
+        """True (y avisa) si el plan del programa tiene problemas: lo que no puede terminar, no arranca."""
+        if problemas:
+            extra = f" (y {len(problemas) - 1} más)" if len(problemas) > 1 else ""
+            self.avisar(f"No arranca: {problemas[0][1]}{extra}", "aviso", origen,
+                        programa=programa.nombre, problemas=[m for _, m in problemas])
+        return bool(problemas)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% GRABACIÓN (PESTAÑA PROGRAMA) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # LA LÓGICA VIVE EN cosechador/movimiento/grabadora.py; AQUÍ SOLO SE CONECTA CON LOS BOTONES Y LOS DIÁLOGOS.
@@ -746,6 +771,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_BAJAR_PUNTO.clicked.connect(lambda: self.mover_punto(+1))
         self.BTN_PASO_ATRAS.clicked.connect(lambda: self.paso(-1))
         self.BTN_PASO_ADELANTE.clicked.connect(lambda: self.paso(+1))
+        self.BTN_VISTA_PREVIA.clicked.connect(self.vista_previa)
         self.SELECTOR_TIPO_PUNTO.currentIndexChanged.connect(
             lambda: self._cambiar_el_elegido(movimiento=self.SELECTOR_TIPO_PUNTO.currentData()))
         # AL ARRASTRAR SE VE EL VALOR, Y SE GUARDA UNA SOLA VEZ: AL SOLTAR (CON EL TECLADO, EN CADA PASO)
@@ -988,6 +1014,22 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.avisar(f"Paso al punto {destino + 1} de {cuantos} ({punto.movimiento}, {punto.velocidad} %)", "info",
                     "Paso a paso", archivo=self.archivo_editado, velocidad=self.velocidad, postura=self.postura)
         self.ejecutar(tramo, origen="Paso a paso")
+
+    def vista_previa(self):
+        """Vista previa: recorre el programa SOLO en la simulación, desde donde está el robot.
+
+        Es el mismo plan que haría Reproducir, pero a la placa no se le manda nada; al terminar (o al detenerla),
+        el dibujo vuelve a donde está el robot de verdad.
+        """
+        if not self._puede_editar() or not self.editado.puntos or not self._puede_planear():
+            return
+        plan, problemas = plan_puntos(self.robot, self.servos, self.editado, self.postura)
+        if self._no_arranca(self.editado, problemas, "Vista previa"):
+            return
+        segundos = duracion_ms(self.robot, plan) / 1000 * 100 / self.velocidad
+        self.avisar(f"Vista previa de «{self.editado.nombre}» (~{segundos:.1f} s): el robot no se mueve.", "info",
+                    "Vista previa", archivo=self.archivo_editado, duracion_s=segundos, velocidad=self.velocidad)
+        self.ejecutar(plan, origen="Vista previa", solo_simulacion=True)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):
