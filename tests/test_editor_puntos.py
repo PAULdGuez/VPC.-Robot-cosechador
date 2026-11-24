@@ -788,3 +788,11 @@ def test_b3_6_si_la_escritura_falla_a_medias_el_programa_guardado_queda_entero(r
         assert f.read() == antes
     assert os.listdir(tmp_path) == ["p.yaml"]  # Y NO QUEDA UN ARCHIVO A MEDIAS EN LA CARPETA DE PROGRAMAS
     assert prog.cargar(ruta, robot).nombre == "Bueno"
+
+
+def test_b3_con_un_solo_punto_la_pestana_programa_dice_1_punto(ventana, poses):
+    """El conteo en palabras es UNO para la pestaña Programa y para el editor: «1 punto», no «1 puntos»."""
+    w = ventana
+    abrir(w, "uno.yaml", Punto(poses["home"]))
+    assert w.INFO_PROGRAMA.text() == "Por puntos · 1 punto"
+    assert w.NOTA_PUNTOS.text() == "uno.yaml · 1 punto"

@@ -75,6 +75,11 @@ PASO_VELOCIDAD_PUNTO = 5  # LA VELOCIDAD DE UN PUNTO SE ELIGE DE 5 EN 5 %
 MARCA_IMPOSIBLE = "imposible"  # LO QUE LLEVA EN UserRole EL RENGLÓN DE UN PUNTO AL QUE NO SE PUEDE LLEGAR
 
 
+def _cuantos_puntos(n):
+    """«sin puntos», «1 punto», «4 puntos»: el conteo en palabras. Lo dicen igual la pestaña Programa y el editor."""
+    return "sin puntos" if not n else "1 punto" if n == 1 else f"{n} puntos"
+
+
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
     """El alto de cada renglón se calcula SIEMPRE con el ancho real de la lista.
 
@@ -629,7 +634,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _resumen(p):
         """Lo que dice la pestaña Programa del programa elegido."""
         if p.tipo == "puntos":
-            return f"Por puntos · {len(p.puntos)} puntos"
+            return f"Por puntos · {_cuantos_puntos(len(p.puntos))}"
         return f"Grabación · {len(p.muestras)} muestras · {p.duracion:.1f} s"
 
     def programa_elegido(self):
@@ -879,8 +884,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         lista.setCurrentRow(-1 if elegir is None else elegir)
         lista.blockSignals(False)
         self.nota_sin_puntos.setVisible(not puntos)
-        cuantos = "sin puntos" if not puntos else "1 punto" if len(puntos) == 1 else f"{len(puntos)} puntos"
-        nota = f"{self.archivo_editado or 'Programa nuevo'} · {cuantos}"
+        nota = f"{self.archivo_editado or 'Programa nuevo'} · {_cuantos_puntos(len(puntos))}"
         # UN NOMBRE DE ARCHIVO LARGO NO ENSANCHA LA COLUMNA: SE RECORTA POR EN MEDIO Y VA COMPLETO EN LA AYUDA
         self.NOTA_PUNTOS.ensurePolished()
         margenes = self.FONDO_PUNTOS.layout().contentsMargins()
