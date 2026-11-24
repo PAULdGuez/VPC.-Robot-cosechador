@@ -64,7 +64,9 @@ PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
 # PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
-TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:", "Grabación")}
+TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:", "Grabación"),
+                  "puntos": ("Guardar programa", "Nombre del programa:", "Programa")}
+TEXTO_NUEVO_PROGRAMA = "+ Nuevo programa"  # EL ÚLTIMO RENGLÓN DEL SELECTOR, EL ÚNICO QUE NO ES UN ARCHIVO
 # EDITOR DE PUNTOS
 MOTIVO_NO_SE_EDITA = "Una grabación son muestras por tiempo:\nno se edita por puntos."
 INVITACION_SIN_PUNTOS = ("Sin puntos.\n\nLleva el robot a una pose con las pestañas Servos o Punta X Y Z "
@@ -567,7 +569,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.aviso_grabando.setToolTip("Se detiene en la pestaña Programa")
         self.PESTANAS_MOVIMIENTO.setCornerWidget(self.aviso_grabando, QtCore.Qt.TopRightCorner)
         self.aviso_grabando.hide()
-        self.SELECTOR_PROGRAMA.currentIndexChanged.connect(self._programa_elegido)
+        self.SELECTOR_PROGRAMA.currentIndexChanged.connect(self._selector_cambio)
         self.recargar_programas()
 
     def recargar_programas(self):
@@ -575,18 +577,37 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         ultimo = self.ajustes.value("programa/ultimo", "")
         self.SELECTOR_PROGRAMA.blockSignals(True)
         self.SELECTOR_PROGRAMA.clear()
-        for nombre in programas.listar(self.carpeta_programas):
+        nombres = programas.listar(self.carpeta_programas)
+        for nombre in nombres:
             self.SELECTOR_PROGRAMA.addItem(nombre, nombre)
-        indice = self.SELECTOR_PROGRAMA.findData(ultimo)
-        self.SELECTOR_PROGRAMA.setCurrentIndex(indice if indice >= 0 else 0)
+        self.SELECTOR_PROGRAMA.addItem(TEXTO_NUEVO_PROGRAMA, None)
+        # «NUEVO» SOLO QUEDA ELEGIDO SI LA PERSONA LO ELIGE: SIN PROGRAMAS GUARDADOS, NO QUEDA ELEGIDO NINGUNO
+        self.SELECTOR_PROGRAMA.setCurrentIndex(nombres.index(ultimo) if ultimo in nombres else 0 if nombres else -1)
         self.SELECTOR_PROGRAMA.blockSignals(False)
         self._programa_elegido()
+
+    def _nuevo_elegido(self):
+        """True si en el selector está elegido «+ Nuevo programa» (el único renglón que no es un archivo)."""
+        return self.SELECTOR_PROGRAMA.currentIndex() >= 0 and self.SELECTOR_PROGRAMA.currentData() is None
+
+    def _programa_nuevo(self):
+        """El programa por puntos que todavía no tiene ni puntos ni nombre: se le pide al guardar el primero."""
+        return programas.Programa("", "puntos", self.robot.nombre, self.robot.gdl)
+
+    def _selector_cambio(self):
+        """La persona eligió otro renglón del selector. «+ Nuevo programa» abre el editor, vacío."""
+        self._programa_elegido()
+        if self._nuevo_elegido() and not self.editando:
+            self.abrir_editor()
 
     def _programa_elegido(self):
         """Pinta el resumen del programa elegido en el selector. El editor de puntos, si está abierto, lo sigue."""
         nombre, p = self.SELECTOR_PROGRAMA.currentData(), None
         self.BTN_REPRODUCIR.setEnabled(nombre is not None)
-        if nombre is None:
+        if self._nuevo_elegido():
+            p = self._programa_nuevo()
+            self.INFO_PROGRAMA.setText("Programa nuevo · sin puntos")
+        elif nombre is None:
             self.INFO_PROGRAMA.setText("No hay programas guardados")
             self.INFO_PROGRAMA.setToolTip(self.carpeta_programas)
         else:
@@ -804,6 +825,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def abrir_editor(self):
         """✎ Editar: la columna PUNTOS, con los puntos del programa elegido. Una grabación no se edita por puntos."""
+        if self._nuevo_elegido():
+            self._editar(self._programa_nuevo(), None)
+            return
         p = self.programa_elegido()
         if p is None:
             return
@@ -932,6 +956,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """EL ÚNICO lugar por donde cambia el programa que se edita: se guarda solo (no hay botón de guardar)
         y la lista se vuelve a pintar. Devuelve False si no se pudo guardar: entonces nada cambia."""
         nuevo = dataclasses.replace(self.editado, puntos=tuple(puntos))
+        if self.archivo_editado is None:
+            return self._guardar_el_nuevo(nuevo, elegir)
         ruta = os.path.join(self.carpeta_programas, self.archivo_editado)
         try:
             programas.guardar(nuevo, ruta)
@@ -942,6 +968,22 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.editado = nuevo
         self._pintar_puntos(elegir)
         self.INFO_PROGRAMA.setText(self._resumen(nuevo))
+        return True
+
+    def _guardar_el_nuevo(self, programa, elegir):
+        """El primer punto de un programa nuevo: aquí se le pide el nombre, con las reglas de toda grabación
+        (_guardar_con_nombre). Devuelve False si la persona no le da nombre: entonces el punto no se guarda."""
+        guardado = self._guardar_con_nombre(f"programa-{dt.datetime.now():%Y-%m-%d-%H%M}", "puntos",
+                                            lambda nombre: dataclasses.replace(programa, nombre=nombre))
+        if guardado is None:
+            self.avisar("El punto no se guardó: el programa nuevo se quedó sin nombre.", "aviso", "Editor")
+            return False
+        archivo, _ = guardado
+        self.ajustes.setValue("programa/ultimo", archivo)
+        self.recargar_programas()  # APARECE EN EL SELECTOR Y QUEDA ELEGIDO; EL EDITOR, QUE SIGUE AL SELECTOR, YA ES EL SUYO
+        if self.editando:
+            self._pintar_puntos(elegir)
+        self.avisar(f"Programa guardado: {archivo}", "ok", "Programa", ruta=os.path.join(self.carpeta_programas, archivo))
         return True
 
     def agregar_punto(self):

@@ -626,3 +626,100 @@ def test_b3_10_mover_el_robot_con_los_sliders_no_apaga_la_edicion(ventana, poses
     assert encendidos(w) == list(EDICION)
     correr(w)
     assert encendidos(w) == list(EDICION)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.11: NUEVO PROGRAMA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def elegir_nuevo(w):
+    """Elige «+ Nuevo programa»: el último renglón del selector, el único que no es un archivo."""
+    selector, ultimo = w.SELECTOR_PROGRAMA, w.SELECTOR_PROGRAMA.count() - 1
+    assert selector.itemText(ultimo) == "+ Nuevo programa" and selector.itemData(ultimo) is None
+    selector.setCurrentIndex(ultimo)
+
+
+def pedidos(w):
+    """Lo que se sugiere cada vez que se pide un nombre (la respuesta sale de w.nombres, como en el fixture)."""
+    sugeridos, pedir = [], w._pedir_nombre
+    w._pedir_nombre = lambda sugerido, tipo="grabacion": (sugeridos.append((sugerido, tipo)), pedir(sugerido, tipo))[1]
+    return sugeridos
+
+
+def test_b3_11_nuevo_programa_abre_el_editor_vacio(ventana, poses):
+    w = ventana
+    guardar_programa(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"]))
+    assert not w.editando and w.SELECTOR_PROGRAMA.currentData() == "p.yaml"     # «NUEVO» NUNCA QUEDA ELEGIDO SOLO
+    sugeridos = pedidos(w)
+    elegir_nuevo(w)
+    assert w.editando and not w.FONDO_PUNTOS.isHidden() and w.FONDO_VISION.isHidden()
+    assert renglones(w) == [] and not w.nota_sin_puntos.isHidden()
+    assert w.NOTA_PUNTOS.text() == "Programa nuevo · sin puntos" == w.INFO_PROGRAMA.text()
+    assert encendidos(w) == ["BTN_PUNTO_NUEVO"] and not w.BTN_REPRODUCIR.isEnabled()
+    assert sugeridos == [] and prog.listar(w.carpeta_programas) == ["p.yaml"]   # NI NOMBRE NI ARCHIVO TODAVÍA
+    assert w.ajustes.value("programa/ultimo") == "p.yaml"
+    w.BTN_CERRAR_PUNTOS.click()                                   # CERRARLO SIN PUNTOS NO DEJA NADA
+    assert not w.editando and prog.listar(w.carpeta_programas) == ["p.yaml"] and sugeridos == []
+    w.BTN_EDITAR_PUNTOS.click()                                   # Y «EDITAR» LO VUELVE A ABRIR, VACÍO
+    assert w.editando and renglones(w) == [] and w.archivo_editado is None
+    w.SELECTOR_PROGRAMA.setCurrentIndex(0)                        # EL EDITOR SIGUE AL SELECTOR
+    assert w.editando and len(renglones(w)) == 2 and w.NOTA_PUNTOS.text() == "p.yaml · 2 puntos"
+
+
+def test_b3_11_sin_programas_guardados_el_selector_solo_ofrece_nuevo_programa(ventana):
+    w = ventana
+    assert prog.listar(w.carpeta_programas) == [] and w.SELECTOR_PROGRAMA.count() == 1
+    assert w.SELECTOR_PROGRAMA.currentIndex() == -1 and w.INFO_PROGRAMA.text() == "No hay programas guardados"
+    assert not w.editando and not w.BTN_REPRODUCIR.isEnabled() and not w.BTN_EDITAR_PUNTOS.isEnabled()
+    elegir_nuevo(w)
+    assert w.editando and renglones(w) == [] and not w.BTN_REPRODUCIR.isEnabled()
+
+
+def test_b3_11_el_nombre_se_pide_al_guardar_el_primer_punto(ventana, reabrir):
+    w = ventana
+    elegir_nuevo(w)
+    sugeridos = pedidos(w)
+    w.SLIDER_1.setValue(w.SLIDER_1.value() + 40)                  # EL ROBOT SE LLEVA A LA POSE QUE SE VA A ENSEÑAR
+    correr(w)
+    assert sugeridos == []
+    w.nombres = ["Mi programa 1"]
+    w.BTN_PUNTO_NUEVO.click()
+    assert [tipo for _, tipo in sugeridos] == ["puntos"] and sugeridos[0][0].startswith("programa-")
+    guardado = en_disco(w, "mi-programa-1.yaml")
+    assert (guardado.nombre, guardado.tipo, len(guardado.puntos)) == ("Mi programa 1", "puntos", 1)
+    assert servos_en_disco(w, "mi-programa-1.yaml") == cerca(w.servos)
+    assert w.SELECTOR_PROGRAMA.currentData() == "mi-programa-1.yaml" and w.BTN_REPRODUCIR.isEnabled()
+    assert w.editando and w.archivo_editado == "mi-programa-1.yaml" and w.fila_elegida() == 0
+    assert w.NOTA_PUNTOS.text() == "mi-programa-1.yaml · 1 punto"
+    assert [e.mensaje for e in eventos(w, "ok")][-2:] == ["Programa guardado: mi-programa-1.yaml",
+                                                         "Punto 1 guardado con la pose actual."]
+    w.BTN_PUNTO_NUEVO.click()                                     # EL SEGUNDO PUNTO YA NO PREGUNTA NADA
+    assert len(sugeridos) == 1 and len(en_disco(w, "mi-programa-1.yaml").puntos) == 2
+    assert reabrir(w).SELECTOR_PROGRAMA.currentData() == "mi-programa-1.yaml"
+
+
+def test_b3_11_sin_nombre_el_punto_no_se_guarda(ventana):
+    w = ventana
+    elegir_nuevo(w)
+    w.nombres = []                                                # LA PERSONA CANCELA EL DIÁLOGO DEL NOMBRE
+    w.BTN_PUNTO_NUEVO.click()
+    assert prog.listar(w.carpeta_programas) == [] and renglones(w) == []
+    assert w.editando and w.archivo_editado is None               # SIGUE EN EL PROGRAMA NUEVO, VACÍO
+    assert eventos(w, "aviso")[-1].mensaje == "El punto no se guardó: el programa nuevo se quedó sin nombre."
+    assert not [e for e in eventos(w, "ok") if e.origen == "Editor"]
+
+
+def test_b3_11_el_nombre_sigue_las_reglas_de_la_grabacion(ventana, poses):
+    w = ventana
+    guardar_programa(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"]))
+    elegir_nuevo(w)
+    sugeridos = pedidos(w)
+    w.nombres, w.respuesta_sobrescribir = ["¿?", "P", "Otro"], False
+    w.BTN_PUNTO_NUEVO.click()
+    assert len(sugeridos) == 3                                    # «¿?» NO SIRVE; «P» YA EXISTE Y SE CONTESTÓ QUE NO
+    assert eventos(w, "aviso")[-1].mensaje == "El nombre necesita al menos una letra o un número."
+    assert w.preguntas == ["p.yaml"] and len(en_disco(w, "p.yaml").puntos) == 2
+    assert w.archivo_editado == "otro.yaml" and prog.listar(w.carpeta_programas) == ["otro.yaml", "p.yaml"]
+    elegir_nuevo(w)                                               # Y SI SE CONTESTA QUE SÍ, LO REEMPLAZA
+    w.nombres, w.respuesta_sobrescribir = ["p"], True
+    w.BTN_PUNTO_NUEVO.click()
+    assert w.preguntas == ["p.yaml", "p.yaml"] and w.archivo_editado == "p.yaml"
+    assert len(en_disco(w, "p.yaml").puntos) == 1
