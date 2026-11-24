@@ -22,6 +22,8 @@ ALCANCE_REFERENCIA = 2050.0  # LAS PIEZAS PROVISIONALES SE DISEÑARON PARA EL CO
 # EJES CON LA CONVENCIÓN DE CAD Y ROS: X ROJO, Y VERDE, Z AZUL
 COLORES_EJES = {"X": "#d62728", "Y": "#2ca02c", "Z": "#1f77b4"}
 COLOR_PLAN, COLOR_RECORRIDO = "#2c6fbb", "#e07b22"
+VISTAS = {"iso": lambda p: p.view_isometric(), "arriba": lambda p: p.view_xy(),
+          "frente": lambda p: p.view_xz(), "lado": lambda p: p.view_yz()}
 MAXIMO_RECORRIDO = 5000          # PUNTOS DE LA ESTELA (LOS MÁS VIEJOS SE DESCARTAN)
 DISTANCIA_MINIMA_ESTELA = 0.5    # mm: NO SE AGREGAN PUNTOS REPETIDOS
 
@@ -178,6 +180,12 @@ class Escena:
         self.plotter.render()
 
     def encuadrar(self, zoom=1.8):
-        """Encuadra la escena; el zoom acerca al robot porque el encuadre incluye todo el piso."""
+        """Encuadra la escena sin cambiar el ángulo; el zoom acerca al robot porque el encuadre incluye todo el piso."""
         self.plotter.reset_camera()
         self.plotter.camera.zoom(zoom)
+
+    def vista(self, nombre):
+        """Pone la cámara en una vista fija: iso, arriba (plano X-Y), frente (X-Z) o lado (Y-Z)."""
+        VISTAS[nombre](self.plotter)
+        self.encuadrar(1.8 if nombre == "iso" else 1.4)
+        self.plotter.render()

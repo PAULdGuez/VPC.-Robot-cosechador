@@ -86,3 +86,13 @@ def test_u2_ejes_en_el_origen(robot):
     Escena(plotter, robot)
     # PISO + PIEZAS + 3 FLECHAS + 3 ETIQUETAS (MÍNIMO)
     assert len(plotter.renderer.actors) - antes >= 1 + robot.gdl + 2 + 6
+
+
+@pytest.mark.parametrize("nombre, desde", [("iso", (0.58, 0.58, 0.58)), ("arriba", (0, 0, 1)),
+                                            ("frente", (0, -1, 0)), ("lado", (1, 0, 0))])
+def test_k6_cada_vista_pone_la_camara_donde_dice(robot, nombre, desde):
+    escena = Escena(pv.Plotter(off_screen=True), robot)
+    escena.vista(nombre)
+    camara = escena.plotter.camera
+    direccion = np.array(camara.position) - np.array(camara.focal_point)
+    assert direccion / np.linalg.norm(direccion) == pytest.approx(desde, abs=0.01)
