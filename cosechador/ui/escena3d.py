@@ -28,6 +28,7 @@ MAXIMO_RECORRIDO = 5000          # PUNTOS DE LA ESTELA (LOS MÁS VIEJOS SE DESCA
 DISTANCIA_MINIMA_ESTELA = 0.5    # mm: NO SE AGREGAN PUNTOS REPETIDOS
 # VOLUMEN DE TRABAJO: SUPERFICIE TRANSLÚCIDA (EL ROBOT Y LA TRAYECTORIA SE VEN A TRAVÉS) Y SU CONTORNO
 COLOR_VOLUMEN, COLOR_BORDE_VOLUMEN, OPACIDAD_VOLUMEN = "#1aa3a3", "#0b4f6c", 0.3
+COLOR_BAJO_LA_BASE = "#8a8a8a"   # LO QUE EL ROBOT ALCANZA POR DEBAJO DEL NIVEL DE SU BASE (z = 0, EL PISO DE LA ESCENA)
 GRADOS_POR_GAJO = 2              # LA SUPERFICIE DE GIRO SE ARMA CON GAJOS PLANOS DE ESTE ÁNGULO, COMO MUCHO
 
 
@@ -215,10 +216,21 @@ class Escena:
                                                   point_size=2, render_points_as_spheres=True))
 
     def mostrar_superficie(self, lazos, giro):
-        """Dibuja el volumen de trabajo como superficie translúcida, con su contorno (ver superficie_de_giro)."""
+        """Dibuja el volumen de trabajo como superficie translúcida, con su contorno (ver superficie_de_giro).
+
+        Se dibuja TODO lo que el robot alcanza, sin recortar. Lo que queda por debajo del nivel de su base (z = 0,
+        donde está el piso de la escena) va en gris, y ese nivel queda marcado con una línea sobre la superficie.
+        """
         superficie, bordes = superficie_de_giro(lazos, giro)
-        self._poner_volumen(self.plotter.add_mesh(superficie, color=COLOR_VOLUMEN, opacity=OPACIDAD_VOLUMEN),
-                            self.plotter.add_mesh(bordes, color=COLOR_BORDE_VOLUMEN, line_width=2))
+        # DOS COLORES SEGÚN LA ALTURA, CON LA ESCALA SIMÉTRICA: EL CAMBIO DE COLOR CAE JUSTO EN z = 0
+        superficie["altura"] = superficie.points[:, 2]
+        tope = max(float(np.abs(superficie.points[:, 2]).max()), 1.0)
+        nivel_de_la_base = superficie.slice(normal="z", origin=(0, 0, 0))
+        self._poner_volumen(
+            self.plotter.add_mesh(superficie, scalars="altura", cmap=[COLOR_BAJO_LA_BASE, COLOR_VOLUMEN], n_colors=2,
+                                  clim=(-tope, tope), interpolate_before_map=True, show_scalar_bar=False,
+                                  opacity=OPACIDAD_VOLUMEN),
+            self.plotter.add_mesh(bordes + nivel_de_la_base, color=COLOR_BORDE_VOLUMEN, line_width=2))
 
     def encuadrar(self, zoom=1.8):
         """Encuadra la escena sin cambiar el ángulo; el zoom acerca al robot porque el encuadre incluye todo el piso."""

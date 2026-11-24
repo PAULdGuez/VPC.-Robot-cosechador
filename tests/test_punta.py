@@ -166,6 +166,28 @@ def foto(escena):
     return escena.plotter.screenshot(return_img=True).astype(int)
 
 
+def pixel_de(plotter, punto):
+    """(fila, columna) de la imagen donde cae un punto del mundo, con la cámara como está."""
+    coordenada = vtkCoordinate()
+    coordenada.SetCoordinateSystemToWorld()
+    coordenada.SetValue(*(float(c) for c in punto))
+    columna, desde_abajo = coordenada.GetComputedDisplayValue(plotter.renderer)
+    return plotter.window_size[1] - 1 - desde_abajo, columna
+
+
+def tinte(pixel):
+    """Qué le hizo la superficie translúcida a un pixel de fondo blanco: 'nada', 'gris' (le quita lo mismo a los
+    tres canales) o 'color' (le quita más a unos que a otros).
+
+    La diferencia se mide en niveles, no en proporción: donde la superficie se ve de canto la sombra oscurece el
+    color y la proporción baja. Medido el 24-nov: en lo gris los canales difieren 3 niveles o menos; en el color, 11 o más.
+    """
+    quita = 255 - np.asarray(pixel, dtype=float)
+    if quita.sum() < 15:
+        return "nada"
+    return "gris" if quita.max() - quita.min() <= 5 else "color"
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ROBOTS Y VENTANAS DE PRUEBA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 @pytest.fixture
 def datos_yaml():
@@ -531,6 +553,86 @@ def test_p7_el_brazo_de_4_articulaciones_queda_como_hoy(robot_4gdl):
     for servos, _ in HOY_4GDL_DIRECTA:
         assert posicion(con, servos) == pytest.approx(punta_a_mano(con, servos), abs=1e-6)
         assert np.linalg.norm(posicion(con, servos) - posicion(robot_4gdl, servos)) == pytest.approx(55)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% V7: BAJO EL NIVEL DE LA BASE SE DIBUJA TODO, EN GRIS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def de_lado(robot, lazos):
+    """Un volumen visto de lado y sin perspectiva: en la imagen, la altura de un pixel es la altura (z) de todo
+    lo que se ve en él. Fondo blanco, sin el robot ni la rejilla, para leer el color."""
+    escena = Escena(pv.Plotter(off_screen=True, window_size=(800, 600)), robot)
+    escena.mostrar_superficie(lazos, giro_de_la_base(robot))
+    for actor in escena.actores:
+        actor.SetVisibility(False)
+    escena.plotter.remove_bounds_axes()
+    escena.plotter.set_background("white")
+    escena.plotter.enable_parallel_projection()
+    escena.vista("frente")
+    return escena
+
+
+@pytest.fixture
+def volumen_de_lado(robot):
+    """El volumen del cosechador, visto de lado (ver de_lado), y el contorno de su corte."""
+    lazos = contorno_del_corte(robot)
+    return de_lado(robot, lazos), lazos
+
+
+def test_v7_lo_que_baja_del_nivel_de_la_base_se_dibuja_y_va_en_gris(robot, volumen_de_lado):
+    escena, lazos = volumen_de_lado
+    superficie = escena.actores_volumen[0].mapper.dataset
+    abajo = min(lazo[:, 1].min() for lazo in lazos)
+    assert abajo < -100                                            # ESTE ROBOT SÍ BAJA DEL NIVEL DE LA BASE (z = 0)
+    assert superficie.bounds[4] == pytest.approx(abajo, abs=1e-6)  # Y SE DIBUJA TODO: NO SE RECORTA
+
+    # PUNTOS BIEN ADENTRO DEL CORTE (A MÁS DE 40 mm DE SU CONTORNO Y DEL NIVEL DE LA BASE), LEJOS DE LAS FLECHAS DE LOS EJES
+    contorno = lados(lazos)
+    rng = np.random.default_rng(7)
+    candidatos = rng.uniform((900, abajo), contorno.max(axis=(0, 1)), size=(6000, 2))
+    candidatos = candidatos[dentro(contorno, candidatos) & (distancia(contorno, candidatos) > 40)
+                            & (np.abs(candidatos[:, 1]) > 40)]
+    imagen = foto(escena)
+    assert imagen.shape[:2] == (600, 800)
+    al_frente = frente(robot, robot.articulaciones[0].servo.minimo)
+    tintes = {"abajo": [], "arriba": []}
+    for alcance, altura in candidatos:
+        fila, columna = pixel_de(escena.plotter, alcance * al_frente + (0, 0, altura))
+        tintes["abajo" if altura < 0 else "arriba"].append(tinte(imagen[fila, columna]))
+    assert len(tintes["abajo"]) > 100 and len(tintes["arriba"]) > 100
+    assert set(tintes["abajo"]) == {"gris"}     # DEBAJO DEL NIVEL DE LA BASE, EN GRIS
+    assert set(tintes["arriba"]) == {"color"}   # ARRIBA, DEL COLOR DEL VOLUMEN
+
+
+def test_v7_el_cambio_de_color_cae_en_el_nivel_de_la_base_aunque_el_corte_sea_burdo(robot):
+    # UN CORTE DE CUATRO VÉRTICES, DE 500 mm BAJO LA BASE A 500 mm SOBRE ELLA: NINGUNO CERCA DE z = 0. SI EL COLOR SE
+    # DECIDIERA VÉRTICE POR VÉRTICE, LAS PAREDES IRÍAN DEGRADADAS DE ABAJO A ARRIBA EN VEZ DE CAMBIAR EN EL NIVEL DE LA BASE.
+    escena = de_lado(robot, [np.array([(600.0, -500.0), (1600.0, -500.0), (1600.0, 500.0), (600.0, 500.0)])])
+    imagen = foto(escena)
+    al_frente = frente(robot, robot.articulaciones[0].servo.minimo)
+
+    def tintes(alcance, alturas):
+        return [tinte(imagen[pixel_de(escena.plotter, alcance * al_frente + (0, 0, altura))]) for altura in alturas]
+
+    for alcance in (800, 1100, 1400):
+        assert tintes(alcance, (-400, -250, -100, -30)) == ["gris"] * 4, alcance
+        assert tintes(alcance, (30, 100, 250, 400)) == ["color"] * 4, alcance
+
+
+def test_v7_el_nivel_de_la_base_queda_marcado_a_lo_largo_de_todo_el_giro(robot, volumen_de_lado):
+    escena, lazos = volumen_de_lado
+    lineas = escena.actores_volumen[1].mapper.dataset
+    en_el_piso = lineas.points[np.abs(lineas.points[:, 2]) < 1e-6]
+    radios = np.hypot(en_el_piso[:, 0], en_el_piso[:, 1])
+    hacia = np.degrees(np.arctan2(en_el_piso[:, 1], en_el_piso[:, 0]))
+    # DÓNDE CRUZA EL CONTORNO DEL CORTE EL NIVEL DE LA BASE, LADO POR LADO Y A MANO
+    cruces = [a[0] + (b[0] - a[0]) * (0 - a[1]) / (b[1] - a[1]) for a, b in lados(lazos) if (a[1] < 0) != (b[1] < 0)]
+    assert len(cruces) >= 2
+    desde, hasta = sorted(giro_de_la_base(robot))
+    for cruce in cruces:  # CADA CRUCE TIENE SU ARCO, DE UN EXTREMO AL OTRO DEL GIRO DE LA BASE
+        del_arco = hacia[np.abs(radios - abs(cruce)) < 0.01]
+        del_arco = np.where(cruce < 0, (del_arco + 360) % 360 - 180, del_arco)  # LO DE ATRÁS QUEDA GIRADO 180°
+        assert len(del_arco) > 20, cruce
+        assert (del_arco.min(), del_arco.max()) == pytest.approx((desde, hasta), abs=0.01), cruce
+    assert escena.actores_volumen[1].GetVisibility()
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% V8: EL BOTÓN DEL VOLUMEN TAMBIÉN LO OCULTA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
