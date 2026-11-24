@@ -574,3 +574,55 @@ def test_b3_9_lo_que_faltaba_de_una_vista_previa_nunca_se_manda_a_la_placa(venta
     correr(w)
     assert [s for _, s in w.enviados[antes:]] == [pytest.approx(s) for s in servos_del_plan(de_verdad)]
     assert w.servos == pytest.approx((pose[0] + 12, *pose[1:]))
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.10: OCUPADO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+EDICION = ("BTN_PUNTO_NUEVO", "BTN_REENSENAR", "BTN_QUITAR_PUNTO", "BTN_SUBIR_PUNTO", "BTN_BAJAR_PUNTO",
+           "SELECTOR_TIPO_PUNTO", "SLIDER_VELOCIDAD_PUNTO", "BTN_PASO_ATRAS", "BTN_PASO_ADELANTE", "BTN_VISTA_PREVIA")
+
+
+def encendidos(w):
+    return [nombre for nombre in EDICION if getattr(w, nombre).isEnabled()]
+
+
+@pytest.mark.parametrize("ocupacion", ["reproducir", "vista previa", "paso", "grabar"])
+def test_b3_10_mientras_se_reproduce_se_graba_o_hay_vista_previa_la_edicion_queda_apagada(ventana, poses, ocupacion):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"]))
+    elegir(w, 2)
+    assert encendidos(w) == list(EDICION) and w.BTN_EDITAR_PUNTOS.isEnabled()    # EL 2 DE 3 ELEGIDO: TODO ENCENDIDO
+    empezar = {"reproducir": w.BTN_REPRODUCIR, "vista previa": w.BTN_VISTA_PREVIA, "paso": w.BTN_PASO_ATRAS,
+               "grabar": w.BTN_GRABAR}[ocupacion]
+    empezar.click()
+    assert (w.grabadora.grabando if ocupacion == "grabar" else w.en_movimiento)  # SÍ EMPEZÓ
+    assert encendidos(w) == [] and not w.BTN_EDITAR_PUNTOS.isEnabled()
+    assert w.LISTA_PUNTOS.isEnabled() and w.BTN_CERRAR_PUNTOS.isEnabled()        # MIRAR LA LISTA Y CERRAR, SÍ
+    contestar(w, True)                                            # NI LLAMANDO A LAS ACCIONES SIN SUS BOTONES
+    guardado = en_disco(w, "p.yaml")
+    elegir(w, 2)
+    for accion in (w.agregar_punto, w.reensenar_punto, w.quitar_punto, lambda: w.mover_punto(-1),
+                   lambda: w._cambiar_el_elegido(velocidad=55)):
+        accion()
+    assert en_disco(w, "p.yaml") == guardado and len(renglones(w)) == 3
+
+    if ocupacion == "grabar":
+        w.BTN_GRABAR.click()                                      # SE DETIENE (SIN MOVIMIENTO NO HAY NADA QUE GUARDAR)
+    else:
+        correr(w)
+    elegir(w, 2)
+    assert encendidos(w) == list(EDICION) and w.BTN_EDITAR_PUNTOS.isEnabled()    # AL TERMINAR, VUELVEN
+
+
+def test_b3_10_mover_el_robot_con_los_sliders_no_apaga_la_edicion(ventana, poses):
+    """Enseñar es mover y guardar: el movimiento de los sliders no cuenta como «ocupado»."""
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"]))
+    elegir(w, 2)
+    w.SLIDER_1.setValue(w.SLIDER_1.value() + 40)
+    assert w.cola and w.en_movimiento and encendidos(w) == list(EDICION)
+    w.BTN_PUNTO_NUEVO.click()                                     # CON EL ROBOT TODAVÍA EN CAMINO, SE GUARDA DONDE VA
+    assert w.en_movimiento and len(en_disco(w, "p.yaml").puntos) == 4 and w.fila_elegida() == 2
+    assert encendidos(w) == list(EDICION)
+    correr(w)
+    assert encendidos(w) == list(EDICION)

@@ -146,6 +146,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.editado = None           # EL Programa ABIERTO EN EL EDITOR DE PUNTOS (None: EDITOR CERRADO)
         self.archivo_editado = None   # SU ARCHIVO, DENTRO DE carpeta_programas
         self._vision_contraida_antes = False
+        self.ocupado = False          # UN MOVIMIENTO COMPLETO EN CURSO (PROGRAMA, PASO, VISTA PREVIA, COSECHA, CALCULAR)
         self.en_vista_previa = False  # LO QUE HAY EN LA COLA SOLO SE DIBUJA: A LA PLACA NO SE LE MANDA
         self.temporizador_movimiento = QtCore.QTimer(self)
         self.temporizador_movimiento.setTimerType(QtCore.Qt.PreciseTimer)  # LAS GRABACIONES RESPETAN SUS TIEMPOS
@@ -296,6 +297,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def _ocupado(self, si):
         """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
+        self.ocupado = si
         for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA,
                         self.BTN_GRABAR, *self.sliders_servo, *self.sliders_xyz):
             control.setEnabled(not si)
@@ -304,6 +306,12 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if self.grabadora.grabando:  # MIENTRAS SE GRABA, SOLO SE MUEVE CON LOS SLIDERS
             for control in (self.CALCULAR, self.COSECHAR, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA):
                 control.setEnabled(False)
+        self._actualizar_editor()  # LOS BOTONES DEL EDITOR SE APAGAN Y SE ENCIENDEN CON LO MISMO
+
+    def _libre(self):
+        """True si no corre un movimiento completo ni se está grabando: solo entonces se edita un programa.
+        El movimiento de los sliders no cuenta: enseñar un punto es mover el robot y guardar."""
+        return not self.ocupado and not self.grabadora.grabando
 
     def _grabando_avisa(self):
         """True (y avisa) si hay una grabación en curso: entonces no se reproduce, calcula ni cosecha."""
@@ -894,13 +902,16 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._actualizar_editor()
 
     def _actualizar_editor(self):
-        """UN solo lugar decide qué está encendido en el editor, según el programa y el punto elegidos."""
-        self.BTN_EDITAR_PUNTOS.setEnabled(self.tipo_elegido == "puntos")
+        """UN solo lugar decide qué está encendido en el editor: según el programa y el punto elegidos, y
+        apagado todo lo que edita o mueve mientras se reproduce, se graba o corre la vista previa."""
+        libre = self._libre()
+        self.BTN_EDITAR_PUNTOS.setEnabled(libre and self.tipo_elegido == "puntos")
         self.BTN_EDITAR_PUNTOS.setToolTip(MOTIVO_NO_SE_EDITA if self.tipo_elegido == "grabacion" else self._ayuda_editar)
         if not self.editando:
             return
         cuantos, fila = len(self.editado.puntos), self.fila_elegida()
-        elegido = fila is not None
+        elegido = libre and fila is not None
+        self.BTN_PUNTO_NUEVO.setEnabled(libre)
         self.BTN_REENSENAR.setEnabled(elegido)
         self.BTN_QUITAR_PUNTO.setEnabled(elegido and cuantos > 1)  # EL FORMATO PIDE AL MENOS UN PUNTO
         self.BTN_QUITAR_PUNTO.setToolTip("Un programa necesita al menos un punto" if cuantos == 1 else self._ayuda_quitar)
@@ -910,12 +921,12 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                         self.SLIDER_VELOCIDAD_PUNTO):
             control.setEnabled(elegido)
         # SIN PUNTO ELEGIDO, EL PASO ADELANTE VA AL PRIMERO Y EL PASO ATRÁS AL ÚLTIMO
-        self.BTN_PASO_ATRAS.setEnabled(cuantos > 0 and fila != 0)
-        self.BTN_PASO_ADELANTE.setEnabled(cuantos > 0 and fila != cuantos - 1)
-        self.BTN_VISTA_PREVIA.setEnabled(cuantos > 0)
+        self.BTN_PASO_ATRAS.setEnabled(libre and cuantos > 0 and fila != 0)
+        self.BTN_PASO_ADELANTE.setEnabled(libre and cuantos > 0 and fila != cuantos - 1)
+        self.BTN_VISTA_PREVIA.setEnabled(libre and cuantos > 0)
 
     def _puede_editar(self):
-        return self.editando
+        return self.editando and self._libre()
 
     def _cambiar_puntos(self, puntos, elegir=None):
         """EL ÚNICO lugar por donde cambia el programa que se edita: se guarda solo (no hay botón de guardar)
