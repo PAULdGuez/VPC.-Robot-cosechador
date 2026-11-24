@@ -723,3 +723,48 @@ def test_b3_11_el_nombre_sigue_las_reglas_de_la_grabacion(ventana, poses):
     w.BTN_PUNTO_NUEVO.click()
     assert w.preguntas == ["p.yaml", "p.yaml"] and w.archivo_editado == "p.yaml"
     assert len(en_disco(w, "p.yaml").puntos) == 1
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LA INTERFAZ, MEDIDA EN CADA ESTADO DEL EDITOR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def _tres(poses):
+    return Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["ida"])
+
+
+def _con_imposible(poses):
+    return Punto(poses["a"]), Punto(poses["b"], "lineal", 40), Punto(poses["home"])
+
+
+# ESTADO: (CÓMO SE LLEGA, FILA ELEGIDA, PUNTOS IMPOSIBLES, «EDITAR» ENCENDIDO)
+ESTADOS_DEL_EDITOR = {
+    "editor abierto, ninguno elegido": (lambda w, poses: abrir(w, "p.yaml", *_tres(poses)), None, [], True),
+    "punto elegido": (lambda w, poses: (abrir(w, "p.yaml", *_tres(poses)), elegir(w, 2)), 1, [], True),
+    "punto imposible": (lambda w, poses: abrir(w, "p.yaml", *_con_imposible(poses)), None, [2], True),
+    "punto imposible elegido": (lambda w, poses: (abrir(w, "p.yaml", *_con_imposible(poses)), elegir(w, 2)), 1, [2], True),
+    "lista vacía": (lambda w, poses: elegir_nuevo(w), None, [], True),
+    "grabación elegida": (lambda w, poses: otro_programa(w), None, [], False),
+    "vista previa en curso": (lambda w, poses: (abrir(w, "p.yaml", *_tres(poses)), elegir(w, 2), w.BTN_VISTA_PREVIA.click(),
+                                                w.temporizador_movimiento.stop()), 1, [], False),
+}
+
+
+@pytest.mark.parametrize("estado", list(ESTADOS_DEL_EDITOR))
+def test_b3_en_cada_estado_del_editor_nada_se_encima_se_corta_ni_pierde_contraste(ventana, poses, estado):
+    """El auditor de tests/auditoria_interfaz.py sobre la ventana REAL, a 1280×720, con la pestaña Programa a la vista."""
+    from cosechador.ui.ventana import PESTANA_PROGRAMA
+    w = ventana
+    llegar, fila, rojos, editar = ESTADOS_DEL_EDITOR[estado]
+    w.PESTANAS_MOVIMIENTO.setCurrentIndex(PESTANA_PROGRAMA)
+    w.resize(1280, 720)
+    w.show()                                                      # OFFSCREEN: NO SE ABRE NADA A LA VISTA
+    llegar(w, poses)
+    for _ in range(8):
+        QtWidgets.QApplication.processEvents()
+    # EL ESTADO ES EL QUE DICE SER (SI NO, SE AUDITARÍA OTRA COSA)
+    assert w.editando == (estado != "grabación elegida") and w.FONDO_PUNTOS.isVisible() == w.editando
+    assert (w.fila_elegida(), imposibles(w), w.BTN_EDITAR_PUNTOS.isEnabled()) == (fila, rojos, editar)
+    assert w.nota_sin_puntos.isVisible() == (estado == "lista vacía")
+    assert au.auditar(w) == []
+    minimo = w.minimumSizeHint()                                  # CON EL EDITOR ABIERTO, LA VENTANA SIGUE CABIENDO
+    assert minimo.width() <= 1280 and minimo.height() <= 720, (minimo.width(), minimo.height())
+    assert (w.width(), w.height()) == (1280, 720)
