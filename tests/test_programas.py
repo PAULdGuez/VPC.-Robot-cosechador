@@ -109,11 +109,12 @@ def test_b1_4_reproducir_puntos(robot, home_s):
 
 
 def test_b1_5_programa_imposible_no_arranca(robot):
-    # DE (-1400, 150, 1300) A (-1400, -150, 1300) EN LÍNEA RECTA HAY QUE VOLTEAR LA BASE: EN «negar» NO SE PUEDE
+    # DE (-1400, 150, 1500) A (-1400, -150, 1500) EN LÍNEA RECTA HAY QUE VOLTEAR LA BASE: EN «negar» NO SE PUEDE
+    # (A z = 1300, COMO ANTES DE LA HERRAMIENTA, EL SEGUNDO PUNTO YA NO SE ALCANZA: EL HOMBRO BAJARÍA DE SU LÍMITE)
     p = programa_puntos(robot,
-                        Punto(angulos_servo(robot, (-1400, 150, 1300)), "articular", 100),
-                        Punto(angulos_servo(robot, (-1400, -150, 1300)), "lineal", 100))
-    inicio = angulos_servo(robot, (-1400, 150, 1300))
+                        Punto(angulos_servo(robot, (-1400, 150, 1500)), "articular", 100),
+                        Punto(angulos_servo(robot, (-1400, -150, 1500)), "lineal", 100))
+    inicio = angulos_servo(robot, (-1400, 150, 1500))
     plan, problemas = plan_puntos(robot, inicio, p, postura="negar")
     assert plan is None
     assert [n for n, _ in problemas] == [2] and "«negar»" in problemas[0][1]

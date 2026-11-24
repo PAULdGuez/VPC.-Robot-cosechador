@@ -343,10 +343,18 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
         self.sliders_xyz = (self.SLIDER_X, self.SLIDER_Y, self.SLIDER_Z)
         self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
-        alcance = int(math.ceil(self.robot.alcance))
-        for slider, (lo, hi) in zip(self.sliders_xyz, ((-alcance, alcance), (-alcance, alcance), (0, alcance))):
-            slider.setRange(lo, hi)
+        self._poner_rangos_xyz()
+        for slider in self.sliders_xyz:
             slider.valueChanged.connect(self._jog_cartesiano)
+
+    def _poner_rangos_xyz(self):
+        """Los sliders de la punta llegan hasta donde llega la punta de la herramienta. Con las señales calladas:
+        si el rango se encoge y recorta el valor de un slider, eso no es una orden de moverse."""
+        alcance = int(math.ceil(self.robot.alcance_de_la_punta))
+        for slider, (lo, hi) in zip(self.sliders_xyz, ((-alcance, alcance), (-alcance, alcance), (0, alcance))):
+            slider.blockSignals(True)
+            slider.setRange(lo, hi)
+            slider.blockSignals(False)
 
     def poner_etiquetas(self):
         for etiqueta, valor in zip(self.valores_servo, self.servos):

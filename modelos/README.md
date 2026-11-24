@@ -27,7 +27,8 @@ Si el origen queda en otro lado, la pieza aparece desfasada o girada.
   (el codo). El eje del hombro es **Z**.
 - **antebrazo**: origen **en el eje del codo**; se extiende sobre **+X** hasta **700 mm**. El eje
   del codo es **Z**.
-- **efector**: origen en la punta del antebrazo, apuntando a **+X**.
+- **efector**: origen en el extremo del antebrazo, apuntando a **+X**; su punta queda a `efector.largo` mm del origen
+  (el largo que dice el archivo del robot: a esa punta van las coordenadas que se piden).
 
 En general, para cualquier robot del YAML: **la pieza de la articulación i tiene su origen en el eje
 de giro i (que es Z), sube `d` sobre Z y luego avanza `a` sobre +X** hasta el eje de la siguiente.

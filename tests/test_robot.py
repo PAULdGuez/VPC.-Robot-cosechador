@@ -25,9 +25,9 @@ def datos_yaml():
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CINEMATICA (COMPORTAMIENTO DE SIEMPRE) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 def test_home_es_alcanzable_y_coincide_con_los_sliders(robot):
-    # HOME ESTA SOBRE EL EJE DE LA BASE: LA BASE VA AL CENTRO DE SU RANGO (90°); BRAZO Y ANTEBRAZO
-    # COMO LOS SLIDERS ORIGINALES (45, 45)
-    assert tuple(round(s) for s in angulos_servo(robot, robot.home)) == (90, 46, 46)
+    # HOME ESTA SOBRE EL EJE DE LA BASE: LA BASE VA AL CENTRO DE SU RANGO (90°). A HOME LLEGA LA PUNTA DE LA
+    # HERRAMIENTA (120 mm): BRAZO Y ANTEBRAZO YA NO QUEDAN COMO LOS SLIDERS ORIGINALES (45, 45), QUE ERA (90, 46, 46)
+    assert tuple(round(s) for s in angulos_servo(robot, robot.home)) == (90, 36, 45)
 
 
 @pytest.mark.parametrize("servos", [(0, 20, 0), (90, 45, 45), (180, 180, 180), (30, 100, 120), (150, 60, 10)])
@@ -51,9 +51,10 @@ def test_ci_es_la_inversa_de_cd(robot):
 
 def test_ci_usa_la_altura_de_la_base(robot):
     d1, a2, a3 = robot.articulaciones[0].d, robot.articulaciones[1].a, robot.articulaciones[2].a
-    assert soluciones(robot, (0.001, 0, d1 + a2 + a3 - 1))
+    estirado = d1 + a2 + a3 + robot.efector.largo  # HASTA DONDE LLEGA LA PUNTA DE LA HERRAMIENTA
+    assert soluciones(robot, (0.001, 0, estirado - 1))
     with pytest.raises(FueraDeAlcance):
-        soluciones(robot, (0, 0, d1 + a2 + a3 + 10))
+        soluciones(robot, (0, 0, estirado + 10))
 
 
 def test_un_empate_de_acomodos_no_lo_decide_el_ruido(robot):
@@ -110,10 +111,10 @@ def test_c2_medida_del_yaml_llega_a_todo(datos_yaml):
     datos_yaml["articulaciones"][2]["dh"]["a"] = 900
     largo = robot_desde_dict(datos_yaml)
     estirado = cinematica_directa(largo, (0, 0, 0))
-    assert estirado == pytest.approx((1900, 0, 350))
+    assert estirado == pytest.approx((2020, 0, 350))  # 1000 + 900 + LOS 120 mm DE LA HERRAMIENTA
     assert alcanzable(largo, (1850, 10, 400))
     assert not alcanzable(cargar_robot(), (1850, 10, 400))
-    assert np.max(np.linalg.norm(barrer(largo, paso=30) - (0, 0, 350), axis=1)) == pytest.approx(1900, rel=1e-6)
+    assert np.max(np.linalg.norm(barrer(largo, paso=30) - (0, 0, 350), axis=1)) == pytest.approx(2020, rel=1e-6)
 
 
 def test_c3_mapeo_servos_igual_al_original(robot):
@@ -184,9 +185,11 @@ def test_movimiento_por_omision_si_el_yaml_no_lo_trae(robot_4gdl):
 def test_home_redondeado_de_un_archivo_sigue_sobre_el_eje(robot):
     # 18-NOV: EL HOME DE UN PROGRAMA GUARDADO (SERVOS CON 4 DECIMALES) QUEDA A 0.0005 mm DEL EJE; CON
     # TOLERANCIAS DE 1e-6 EL JOG HACIA +X FALLABA A LOS 350 mm EN LUGAR DE A LOS 1545 mm
+    # (24-NOV: CON LA HERRAMIENTA DE 120 mm HOME ES (90, 35.9155, 44.9249) Y LA PUNTA LLEGA HASTA LOS 1675 mm)
     from cosechador.movimiento.trayectorias import tramo_continuo
-    redondeado = (90.0, 45.573, 45.6432)
+    redondeado = tuple(round(s, 4) for s in angulos_servo(robot, robot.home))
+    assert redondeado == (90.0, 35.9155, 44.9249)
     plan, motivo = tramo_continuo(robot, redondeado, (2050, 0, 1065), "despacio", pasos=411)
-    assert "(1545, 0, 1065)" in motivo or "(1544, 0, 1065)" in motivo
+    assert "(1675, 0, 1065)" in motivo or "(1674, 0, 1065)" in motivo
     assert servos_en_rango(robot, dh_a_servo(robot, (-6e-5, 90, -90)))
     assert dh_a_servo(robot, (-6e-5, 90, -90))[0] == 0.0  # SE RECORTA AL BORDE: A LA PLACA LLEGA EN RANGO

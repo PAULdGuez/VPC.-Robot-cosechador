@@ -2,7 +2,7 @@
 
     punto_base = pose_camara @ punto_camara
 
-- Montaje "efector" (eye-in-hand): pose_camara = pose del efector (cinemática directa) @ matriz_montaje.
+- Montaje "efector" (eye-in-hand): pose_camara = pose del extremo del último eslabón (pose_efector) @ matriz_montaje.
 - Montaje "fija": pose_camara = matriz_montaje (la pose de la cámara respecto a la base).
 - La profundidad se estima por el tamaño aparente del objeto: Z = fx * diametro / ancho_en_pixeles.
 
@@ -46,6 +46,8 @@ def transformar(T, p):
 def pose_camara(robot, q):
     """Pose 4x4 de la cámara en el marco de la base, con el brazo en los ángulos DH q."""
     if robot.camara.montaje == "efector":
+        # LA CÁMARA VA ATORNILLADA AL EXTREMO DEL ÚLTIMO ESLABÓN, NO A LA PUNTA DE LA HERRAMIENTA
+        # (cinematica_directa): CAMBIAR EL LARGO DE LA HERRAMIENTA NO LA MUEVE.
         return pose_efector(robot, q) @ robot.camara.matriz_montaje
     return robot.camara.matriz_montaje
 

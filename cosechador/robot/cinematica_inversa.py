@@ -1,4 +1,4 @@
-"""Cinemática inversa: posición del efector -> ángulos.
+"""Cinemática inversa: posición de la punta de la herramienta -> ángulos.
 
 Cada topología tiene su solver; el YAML del robot dice cuál usar en 'cinematica_inversa'.
 Hoy existe el analítico 'antropomorfico_3r' (base vertical + hombro + codo). Un robot sin solver
@@ -27,7 +27,8 @@ def _antropomorfico_3r(robot, x, y, z):
     """Hasta 4 soluciones (grados DH), en orden de preferencia:
     base mirando al punto con codo arriba / codo abajo, y luego base girada 180°."""
     j1, j2, j3 = robot.articulaciones
-    d1, a2, a3 = j1.d, j2.a, j3.a
+    # LA HERRAMIENTA PROLONGA EL ANTEBRAZO EN LÍNEA RECTA: PARA LLEVAR SU PUNTA AL PUNTO, EL ÚLTIMO ESLABÓN MIDE ESO MÁS
+    d1, a2, a3 = j1.d, j2.a, j3.a + robot.efector.largo
 
     # Distancia plana y altura MEDIDA DESDE EL HOMBRO (encima de la base, a d1)
     r = np.hypot(x, y)

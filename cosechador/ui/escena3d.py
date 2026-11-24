@@ -8,7 +8,7 @@ CONVENCIÓN DE CADA PIEZA (su propio origen y ejes; ver modelos/README.md):
 - base:            fija; origen en el centro del piso, Z hacia arriba.
 - articulación i:  gira con su servo. Origen en SU eje de giro (que es Z). La pieza sube d_i sobre Z
                    y luego avanza a_i sobre +X, hasta el eje de la siguiente articulación.
-- efector:         origen en la punta del último eslabón, apuntando a +X.
+- efector:         origen en el extremo del último eslabón, apuntando a +X; su punta queda a `efector.largo` mm.
 """
 import os
 
@@ -56,8 +56,10 @@ def pieza_provisional(robot, indice):
     if indice == 0:
         return _cilindro((0, 0, 30 * escala), (0, 0, 1), 180 * escala, 60 * escala)
     if indice == robot.gdl + 1:
-        # TIJERA PROVISIONAL: UN CONO QUE APUNTA AL FRENTE (+X)
-        return pv.Cone(center=(60 * escala, 0, 0), direction=(1, 0, 0), height=120 * escala,
+        # HERRAMIENTA PROVISIONAL: UN CONO QUE NACE EN EL EXTREMO DEL ÚLTIMO ESLABÓN, APUNTA AL FRENTE (+X) Y MIDE LO
+        # QUE DICE EL DATO DEL ROBOT (efector.largo, EN mm REALES): SU PUNTA ES LA QUE DA cinematica_directa
+        largo = robot.efector.largo
+        return pv.Cone(center=(largo / 2, 0, 0), direction=(1, 0, 0), height=largo,
                        radius=35 * escala, resolution=32).triangulate()
 
     j = robot.articulaciones[indice - 1]

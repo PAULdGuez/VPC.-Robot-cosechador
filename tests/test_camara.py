@@ -5,6 +5,7 @@ import pytest
 
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import alcanzable, angulos_servo
+from cosechador.robot.config import con_herramienta
 from cosechador.vision.camara import camara_a_pixel, matriz_camara, pedunculo_en_base, pixel_a_camara
 from cosechador.vision.deteccion import detectar_aguacates
 
@@ -17,8 +18,10 @@ def K(robot):
 
 
 @pytest.fixture(scope="module")
-def q_home(robot):
-    return servo_a_dh(robot, angulos_servo(robot, robot.home))
+def q_de_frente(robot):
+    # LA POSTURA QUE DEJA LA CÁMARA (EL EXTREMO DEL ANTEBRAZO) EN EL PUNTO DE HOME, MIRANDO DE FRENTE: LA DE HOME SIN
+    # HERRAMIENTA. CON HERRAMIENTA, A ESE PUNTO VA LA PUNTA: EN HOME LA CÁMARA QUEDA MÁS ATRÁS Y MIRANDO HACIA ARRIBA.
+    return servo_a_dh(robot, angulos_servo(con_herramienta(robot, 0), robot.home))
 
 
 @pytest.fixture(scope="module")
@@ -38,9 +41,9 @@ def detectar_uno(robot):
 
 
 @pytest.fixture(scope="module")
-def en_base(robot, q_home):
+def en_base(robot, q_de_frente):
     def convertir(det):
-        return pedunculo_en_base(det, ANCHO, ALTO, robot, q_home)
+        return pedunculo_en_base(det, ANCHO, ALTO, robot, q_de_frente)
     return convertir
 
 
@@ -63,7 +66,7 @@ def test_ida_y_vuelta_pixel_camara(K):
 @pytest.mark.parametrize("distancia", [500, 800, 1200])
 def test_estima_la_profundidad_por_el_tamano(distancia, foto, detectar_uno, en_base):
     p = en_base(detectar_uno(foto(np.array([0.0, 0.0, distancia]))))
-    # EN HOME LA CAMARA ESTA EN (0, 0, 1065) MIRANDO A +Y: LA Y DEL PEDUNCULO ES LA DISTANCIA.
+    # CON q_de_frente LA CAMARA ESTA EN (0, 0, 1065) MIRANDO A +Y: LA Y DEL PEDUNCULO ES LA DISTANCIA.
     # 5 %: LA PRECISION REALISTA DE ESTIMAR DISTANCIA POR TAMAÑO (1-2 PX DE BORDE EN ~50 PX)
     assert p[1] == pytest.approx(distancia, rel=0.05)
 

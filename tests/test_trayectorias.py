@@ -37,10 +37,11 @@ def test_cada_punto_de_la_cosecha_se_visita(robot, home_s):
 
 
 def test_la_recta_que_cruza_el_eje_pasa_por_home(robot):
-    # DE (-1656, 0, 630) A (1656, 0, 630) LA RECTA PASA DEMASIADO CERCA DEL EJE DE LA BASE: INALCANZABLE
-    assert tramo_recto(robot, (-1656, 0, 630), (1656, 0, 630)) is None
-    inicio = angulos_servo(robot, (-1656, 0, 630))
-    plan, cosechados = plan_cosecha(robot, inicio, [(1656, 0, 630)])
+    # DE (-1656, 0, 500) A (1656, 0, 500) LA RECTA PASA DEMASIADO CERCA DEL EJE DE LA BASE: INALCANZABLE
+    # (A z = 630, COMO ANTES DE LA HERRAMIENTA, YA SE PUEDE: CON EL BRAZO DOBLADO LA PUNTA LLEGA 120 mm MÁS CERCA DEL HOMBRO)
+    assert tramo_recto(robot, (-1656, 0, 500), (1656, 0, 500)) is None
+    inicio = angulos_servo(robot, (-1656, 0, 500))
+    plan, cosechados = plan_cosecha(robot, inicio, [(1656, 0, 500)])
     assert cosechados == 1
     visitadas = [posicion(robot, s) for s in servos_del_plan(plan)]
     assert min(np.linalg.norm(v - robot.home) for v in visitadas) < 1e-6
@@ -105,12 +106,12 @@ def test_c1_rectas_aleatorias_continuas(robot):
 
 
 def test_c2_cruzar_y_cero_respeta_el_modo(robot):
-    # DE (-1400, 150, 1300) A (-1400, -150, 1300): TODO ES ALCANZABLE, PERO LA BASE (0-180°) TIENE QUE
+    # DE (-1400, 150, 1500) A (-1400, -150, 1500): TODO ES ALCANZABLE, PERO LA BASE (0-180°) TIENE QUE
     # VOLTEARSE PARA CRUZAR y = 0 (EL BRAZO PASA A INCLINARSE HACIA ATRAS)
-    inicio = angulos_servo(robot, (-1400, 150, 1300))
-    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1300), "negar")
+    inicio = angulos_servo(robot, (-1400, 150, 1500))
+    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1500), "negar")
     assert plan is None and "«negar»" in motivo
-    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1300), "despacio")
+    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1500), "despacio")
     assert motivo is None
     assert any("Cambio de postura" in a for a in avisos_del_plan(plan))
     assert salto_maximo(inicio, plan) <= robot.movimiento.salto_max_por_paso + 1e-9
