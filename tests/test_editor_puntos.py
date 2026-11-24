@@ -70,6 +70,46 @@ def renglones(w):
     return [w.LISTA_PUNTOS.item(i).text() for i in range(w.LISTA_PUNTOS.count())]
 
 
+def servos_en_disco(w, archivo):
+    return [p.servos for p in en_disco(w, archivo).puntos]
+
+
+def cerca(*servos):
+    """Para comparar con lo guardado: el archivo redondea los servos a 6 decimales."""
+    return [pytest.approx(s, abs=1e-5) for s in servos]
+
+
+def llevar(w, servos):
+    """Lleva el robot a esos servos con un movimiento de la app (así quedan como números de numpy)."""
+    w.ejecutar(tramo_articular(w.robot, w.servos, servos), bloquear=False, origen="Prueba")
+    correr(w)
+
+
+def contestar(w, respuesta):
+    """Las preguntas de sí o no se contestan desde la prueba. Devuelve la lista de lo que se va preguntando."""
+    preguntado = []
+    w._confirmar = lambda titulo, pregunta: (preguntado.append((titulo, pregunta)), respuesta)[1]
+    return preguntado
+
+
+@pytest.fixture
+def reabrir(robot):
+    """«Cerrar la app y volver a abrirla»: otra ventana, con la misma carpeta de programas y los mismos ajustes."""
+    from cosechador.ui.ventana import VentanaPrincipal
+    abiertas = []
+
+    def abrir_otra(w):
+        w.ajustes.sync()
+        ajustes = QtCore.QSettings(w.ajustes.fileName(), QtCore.QSettings.IniFormat)
+        abiertas.append(VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=w.carpeta_programas,
+                                         registro=reg.Registro(carpeta=None)))
+        return abiertas[-1]
+
+    yield abrir_otra
+    for otra in abiertas:
+        otra.close()
+
+
 def lejos_de_la_recta(robot, servos, desde, hasta):
     """Cuántos mm se aleja la punta, en cada pose, de la recta desde → hasta."""
     a, b = np.asarray(desde, float), np.asarray(hasta, float)
@@ -164,3 +204,153 @@ def test_b3_1_con_una_grabacion_elegida_editar_sale_apagado_y_dice_por_que(venta
     w.BTN_EDITAR_PUNTOS.click()
     w.SELECTOR_PROGRAMA.setCurrentIndex(w.SELECTOR_PROGRAMA.findData("otra.yaml"))
     assert w.FONDO_PUNTOS.isHidden() and not w.BTN_EDITAR_PUNTOS.isEnabled()
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.2: + PUNTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_2_mas_punto_guarda_la_postura_actual_despues_del_elegido_o_al_final(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20))
+    w.SLIDER_1.setValue(w.SLIDER_1.value() + 40)                  # LA PERSONA MUEVE EL ROBOT CON LA PESTAÑA SERVOS
+    correr(w)
+    primera = tuple(w.servos)
+    assert type(primera[0]) is np.float64                         # LA TRAMPA: ASÍ QUEDA LA POSE DESPUÉS DE MOVER
+    w.BTN_PUNTO_NUEVO.click()                                     # NINGUNO ELEGIDO: VA AL FINAL
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["corte"], primera)
+    nuevo = en_disco(w, "p.yaml").puntos[2]
+    assert (nuevo.movimiento, nuevo.velocidad) == ("articular", 100)
+    assert w.fila_elegida() == 2 and renglones(w)[2] == "3   Articular · 100 %"       # Y QUEDA ELEGIDO
+    with open(os.path.join(w.carpeta_programas, "p.yaml"), encoding="utf-8") as f:
+        assert all(type(s) is float for s in yaml.safe_load(f)["puntos"][2]["servos"])  # NÚMEROS NORMALES EN EL ARCHIVO
+
+    llevar(w, poses["ida"])
+    elegir(w, 1)
+    w.BTN_PUNTO_NUEVO.click()                                     # CON EL 1 ELEGIDO: VA DESPUÉS DEL 1
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["ida"], poses["corte"], primera)
+    assert w.fila_elegida() == 1 and w.NOTA_PUNTOS.text() == "p.yaml · 4 puntos"
+    assert w.INFO_PROGRAMA.text() == "Por puntos · 4 puntos"      # LA PESTAÑA PROGRAMA TAMBIÉN SE ENTERA
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.3: RE-ENSEÑAR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_3_re_ensenar_cambia_el_punto_elegido_por_la_postura_actual_despues_de_confirmar(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["home"]))
+    llevar(w, poses["ida"])
+    assert not w.BTN_REENSENAR.isEnabled()                        # SIN PUNTO ELEGIDO NO HAY QUÉ RE-ENSEÑAR
+    elegir(w, 2)
+    preguntado = contestar(w, False)
+    w.BTN_REENSENAR.click()
+    assert preguntado == [("Re-enseñar", "¿Reemplazar el punto 2 con la pose actual del robot?")]
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["corte"], poses["home"])   # DIJO QUE NO
+
+    contestar(w, True)
+    w.BTN_REENSENAR.click()
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["ida"], poses["home"])
+    cambiado = en_disco(w, "p.yaml").puntos[1]
+    assert (cambiado.movimiento, cambiado.velocidad) == ("lineal", 20)   # CONSERVA SU TIPO Y SU VELOCIDAD
+    assert w.fila_elegida() == 1 and len(renglones(w)) == 3
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.4: QUITAR, SUBIR Y BAJAR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_4_quitar_actua_sobre_el_punto_elegido(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20), Punto(poses["home"]))
+    assert not w.BTN_QUITAR_PUNTO.isEnabled()                     # NINGUNO ELEGIDO
+    w.quitar_punto()
+    assert len(en_disco(w, "p.yaml").puntos) == 3
+    elegir(w, 2)
+    w.BTN_QUITAR_PUNTO.click()
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["home"])
+    assert w.fila_elegida() == 1 and renglones(w) == ["1   Articular · 100 %", "2   Articular · 100 %"]
+    w.BTN_QUITAR_PUNTO.click()                                    # EL ÚLTIMO DE LA LISTA: QUEDA ELEGIDO EL DE ARRIBA
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"]) and w.fila_elegida() == 0
+    # UN PROGRAMA NECESITA AL MENOS UN PUNTO (ASÍ LO PIDE EL FORMATO): EL ÚNICO QUE QUEDA NO SE QUITA
+    assert not w.BTN_QUITAR_PUNTO.isEnabled() and w.BTN_QUITAR_PUNTO.toolTip() == "Un programa necesita al menos un punto"
+    w.quitar_punto()
+    assert len(en_disco(w, "p.yaml").puntos) == 1
+
+
+def test_b3_4_subir_y_bajar_mueven_el_punto_elegido(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["ida"], "lineal", 20), Punto(poses["home"], "articular", 50))
+    assert not w.BTN_SUBIR_PUNTO.isEnabled() and not w.BTN_BAJAR_PUNTO.isEnabled()    # NINGUNO ELEGIDO
+    elegir(w, 2)
+    w.BTN_SUBIR_PUNTO.click()
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["ida"], poses["arriba"], poses["home"])
+    assert w.fila_elegida() == 0 and not w.BTN_SUBIR_PUNTO.isEnabled()                # LA SELECCIÓN SIGUE AL PUNTO
+    w.BTN_BAJAR_PUNTO.click()
+    w.BTN_BAJAR_PUNTO.click()
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["home"], poses["ida"])
+    assert w.fila_elegida() == 2 and not w.BTN_BAJAR_PUNTO.isEnabled()
+    assert renglones(w) == ["1   Articular · 100 %", "2   Articular · 50 %", "3   Lineal · 20 %"]
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.5: TIPO Y VELOCIDAD DEL PUNTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_5_el_tipo_del_punto_elegido_se_cambia_en_su_fila(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20))
+    tipo = w.SELECTOR_TIPO_PUNTO
+    assert [tipo.itemText(i) for i in range(tipo.count())] == ["Articular", "Lineal"]
+    assert not tipo.isEnabled() and tipo.currentIndex() == -1     # NINGÚN PUNTO ELEGIDO: LA FILA ESTÁ APAGADA
+    elegir(w, 2)
+    assert tipo.isEnabled() and tipo.currentData() == "lineal" and w.SUB_PUNTO_ELEGIDO.text() == "PUNTO 2"
+    tipo.setCurrentIndex(tipo.findData("articular"))
+    assert [(p.movimiento, p.velocidad) for p in en_disco(w, "p.yaml").puntos] == [("articular", 100), ("articular", 20)]
+    assert renglones(w)[1] == "2   Articular · 20 %" and w.fila_elegida() == 1
+    assert servos_en_disco(w, "p.yaml") == cerca(poses["arriba"], poses["corte"])     # LA POSE NO SE TOCA
+    elegir(w, 1)                                                  # MIRAR OTRO PUNTO NO CAMBIA NINGUNO
+    tipo.setCurrentIndex(tipo.findData("lineal"))
+    assert [p.movimiento for p in en_disco(w, "p.yaml").puntos] == ["lineal", "articular"]
+
+
+def test_b3_5_la_velocidad_del_punto_elegido_se_cambia_de_5_en_5(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20))
+    assert w.ETIQUETA_VELOCIDAD_PUNTO.text().split() == ["Velocidad", "del", "punto"]   # NO ES LA VELOCIDAD GENERAL
+    velocidad, general = w.SLIDER_VELOCIDAD_PUNTO, w.velocidad
+    assert not velocidad.isEnabled() and not w.VS_VELOCIDAD_PUNTO.isVisibleTo(w)
+    elegir(w, 2)
+    assert velocidad.isEnabled() and w.VS_VELOCIDAD_PUNTO.text() == "20 %"
+
+    def guardada():
+        return en_disco(w, "p.yaml").puntos[1].velocidad
+
+    velocidad.triggerAction(QtWidgets.QAbstractSlider.SliderSingleStepAdd)             # UN PASO DEL SLIDER
+    assert guardada() == 25 and type(guardada()) is int
+    assert w.VS_VELOCIDAD_PUNTO.text() == "25 %" and renglones(w)[1] == "2   Lineal · 25 %" and w.fila_elegida() == 1
+    velocidad.setSliderDown(True)                                 # ARRASTRANDO: EL VALOR SE VE, PERO TODAVÍA NO SE GUARDA
+    velocidad.setSliderPosition(11)
+    assert w.VS_VELOCIDAD_PUNTO.text() == "55 %" and guardada() == 25
+    velocidad.setSliderDown(False)                                # AL SOLTAR
+    assert guardada() == 55 and renglones(w)[1] == "2   Lineal · 55 %"
+    # DE UN EXTREMO AL OTRO: SIEMPRE MÚLTIPLOS DE 5, DENTRO DE LO QUE ACEPTA EL FORMATO
+    posibles = []
+    for posicion_slider in range(velocidad.minimum(), velocidad.maximum() + 1):
+        velocidad.setValue(posicion_slider)
+        posibles.append(guardada())
+    assert posibles == list(range(prog.VELOCIDAD_MIN, prog.VELOCIDAD_MAX + 1, 5))
+    assert en_disco(w, "p.yaml").puntos[0].velocidad == 100 and w.velocidad == general  # NI EL OTRO PUNTO NI LA GENERAL
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.6: SE GUARDA SOLO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_6_todo_cambio_se_guarda_solo_y_sigue_ahi_al_reabrir_la_app(ventana, poses, reabrir):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 20))
+    assert not [b.text() for b in w.FONDO_PUNTOS.findChildren(QtWidgets.QPushButton) if "guardar" in b.text().lower()]
+    llevar(w, poses["ida"])
+    w.BTN_PUNTO_NUEVO.click()                                     # + PUNTO (QUEDA ELEGIDO EL 3)
+    w.SELECTOR_TIPO_PUNTO.setCurrentIndex(w.SELECTOR_TIPO_PUNTO.findData("lineal"))
+    w.SLIDER_VELOCIDAD_PUNTO.setValue(7)
+    w.BTN_SUBIR_PUNTO.click()
+    esperado = ["1   Articular · 100 %", "2   Lineal · 35 %", "3   Lineal · 20 %"]
+    assert renglones(w) == esperado
+
+    otra = reabrir(w)                                             # NADIE PULSÓ «GUARDAR»: NO EXISTE
+    assert otra.SELECTOR_PROGRAMA.currentData() == "p.yaml" and otra.INFO_PROGRAMA.text() == "Por puntos · 3 puntos"
+    otra.BTN_EDITAR_PUNTOS.click()
+    assert renglones(otra) == esperado
+    assert [p.servos for p in otra.editado.puntos] == cerca(poses["arriba"], poses["ida"], poses["corte"])

@@ -3,6 +3,7 @@
 Aquí no se calcula nada: los movimientos los planea cosechador.movimiento y esta ventana solo
 ejecuta el plan paso a paso con un temporizador (sin bucles que bloqueen la interfaz).
 """
+import dataclasses
 import datetime as dt
 import math
 import os
@@ -690,7 +691,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _configurar_editor(self):
         """La columna PUNTOS nace oculta: aparece con «✎ Editar», en el lugar de VISIÓN."""
         self.FONDO_PUNTOS.hide()
-        self._ayuda_editar = self.BTN_EDITAR_PUNTOS.toolTip()
+        self._ayuda_editar, self._ayuda_quitar = self.BTN_EDITAR_PUNTOS.toolTip(), self.BTN_QUITAR_PUNTO.toolTip()
         lista = self.LISTA_PUNTOS  # MISMA RECETA QUE LA LISTA DEL REGISTRO (_configurar_registro)
         lista.setWordWrap(True)
         lista.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
@@ -718,6 +719,19 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.VS_VELOCIDAD_PUNTO.setSizePolicy(hueco)
         self.BTN_EDITAR_PUNTOS.clicked.connect(self.abrir_editor)
         self.BTN_CERRAR_PUNTOS.clicked.connect(self.cerrar_editor)
+        self.BTN_PUNTO_NUEVO.clicked.connect(self.agregar_punto)
+        self.BTN_REENSENAR.clicked.connect(self.reensenar_punto)
+        self.BTN_QUITAR_PUNTO.clicked.connect(self.quitar_punto)
+        self.BTN_SUBIR_PUNTO.clicked.connect(lambda: self.mover_punto(-1))
+        self.BTN_BAJAR_PUNTO.clicked.connect(lambda: self.mover_punto(+1))
+        self.SELECTOR_TIPO_PUNTO.currentIndexChanged.connect(
+            lambda: self._cambiar_el_elegido(movimiento=self.SELECTOR_TIPO_PUNTO.currentData()))
+        # AL ARRASTRAR SE VE EL VALOR, Y SE GUARDA UNA SOLA VEZ: AL SOLTAR (CON EL TECLADO, EN CADA PASO)
+        self.SLIDER_VELOCIDAD_PUNTO.setTracking(False)
+        self.SLIDER_VELOCIDAD_PUNTO.sliderMoved.connect(
+            lambda valor: self.VS_VELOCIDAD_PUNTO.setText(f"{valor * PASO_VELOCIDAD_PUNTO} %"))
+        self.SLIDER_VELOCIDAD_PUNTO.valueChanged.connect(
+            lambda valor: self._cambiar_el_elegido(velocidad=valor * PASO_VELOCIDAD_PUNTO))
 
     @property
     def editando(self):
@@ -815,6 +829,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         elegido = fila is not None
         self.BTN_REENSENAR.setEnabled(elegido)
         self.BTN_QUITAR_PUNTO.setEnabled(elegido and cuantos > 1)  # EL FORMATO PIDE AL MENOS UN PUNTO
+        self.BTN_QUITAR_PUNTO.setToolTip("Un programa necesita al menos un punto" if cuantos == 1 else self._ayuda_quitar)
         self.BTN_SUBIR_PUNTO.setEnabled(elegido and fila > 0)
         self.BTN_BAJAR_PUNTO.setEnabled(elegido and fila < cuantos - 1)
         for control in (self.ETIQUETA_TIPO_PUNTO, self.SELECTOR_TIPO_PUNTO, self.ETIQUETA_VELOCIDAD_PUNTO,
@@ -824,6 +839,83 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_PASO_ATRAS.setEnabled(cuantos > 0 and fila != 0)
         self.BTN_PASO_ADELANTE.setEnabled(cuantos > 0 and fila != cuantos - 1)
         self.BTN_VISTA_PREVIA.setEnabled(cuantos > 0)
+
+    def _puede_editar(self):
+        return self.editando
+
+    def _cambiar_puntos(self, puntos, elegir=None):
+        """EL ÚNICO lugar por donde cambia el programa que se edita: se guarda solo (no hay botón de guardar)
+        y la lista se vuelve a pintar. Devuelve False si no se pudo guardar: entonces nada cambia."""
+        nuevo = dataclasses.replace(self.editado, puntos=tuple(puntos))
+        ruta = os.path.join(self.carpeta_programas, self.archivo_editado)
+        try:
+            programas.guardar(nuevo, ruta)
+        except OSError as e:
+            self.avisar(f"No se pudo guardar {self.archivo_editado}: {e}", "error", "Editor", ruta=ruta)
+            self._pintar_puntos(self.fila_elegida())  # LA FILA VUELVE A DECIR LO QUE SÍ ESTÁ GUARDADO
+            return False
+        self.editado = nuevo
+        self._pintar_puntos(elegir)
+        self.INFO_PROGRAMA.setText(self._resumen(nuevo))
+        return True
+
+    def agregar_punto(self):
+        """+ Punto: la pose actual del robot, después del punto elegido (o al final si no hay ninguno elegido)."""
+        if not self._puede_editar():
+            return
+        puntos, fila = list(self.editado.puntos), self.fila_elegida()
+        lugar = len(puntos) if fila is None else fila + 1
+        puntos.insert(lugar, programas.Punto(tuple(self.servos)))
+        if self._cambiar_puntos(puntos, elegir=lugar):
+            self.avisar(f"Punto {lugar + 1} guardado con la pose actual.", "ok", "Editor",
+                        archivo=self.archivo_editado, servos=self.servos, posicion_mm=self.posicion)
+
+    def reensenar_punto(self):
+        """Re-enseñar: el punto elegido toma la pose actual del robot. Conserva su tipo y su velocidad."""
+        fila = self.fila_elegida()
+        if not self._puede_editar() or fila is None:
+            return
+        if not self._confirmar("Re-enseñar", f"¿Reemplazar el punto {fila + 1} con la pose actual del robot?"):
+            return
+        puntos = list(self.editado.puntos)
+        puntos[fila] = dataclasses.replace(puntos[fila], servos=tuple(self.servos))
+        if self._cambiar_puntos(puntos, elegir=fila):
+            self.avisar(f"Punto {fila + 1} re-enseñado con la pose actual.", "ok", "Editor",
+                        archivo=self.archivo_editado, servos=self.servos, posicion_mm=self.posicion)
+
+    def quitar_punto(self):
+        """Quitar: el punto elegido. El único punto de un programa no se quita (el formato pide al menos uno)."""
+        fila = self.fila_elegida()
+        if not self._puede_editar() or fila is None or len(self.editado.puntos) < 2:
+            return
+        puntos = list(self.editado.puntos)
+        del puntos[fila]
+        if self._cambiar_puntos(puntos, elegir=min(fila, len(puntos) - 1)):
+            self.avisar(f"Punto {fila + 1} quitado.", "ok", "Editor", archivo=self.archivo_editado)
+
+    def mover_punto(self, lugares):
+        """▲ Subir (-1) y ▼ Bajar (+1): el punto elegido cambia de lugar con su vecino, y sigue elegido."""
+        fila = self.fila_elegida()
+        if not self._puede_editar() or fila is None or not 0 <= fila + lugares < len(self.editado.puntos):
+            return
+        puntos, destino = list(self.editado.puntos), fila + lugares
+        puntos[fila], puntos[destino] = puntos[destino], puntos[fila]
+        if self._cambiar_puntos(puntos, elegir=destino):
+            self.avisar(f"Punto {fila + 1} movido al lugar {destino + 1}.", "ok", "Editor", archivo=self.archivo_editado)
+
+    def _cambiar_el_elegido(self, **cambios):
+        """El tipo (movimiento=) o la velocidad (velocidad=) del punto elegido, desde su fila."""
+        fila = self.fila_elegida()
+        if not self._puede_editar() or fila is None:
+            return
+        puntos = list(self.editado.puntos)
+        cambiado = dataclasses.replace(puntos[fila], **cambios)
+        if cambiado == puntos[fila]:
+            return
+        puntos[fila] = cambiado
+        if self._cambiar_puntos(puntos, elegir=fila):
+            self.avisar(f"Punto {fila + 1}: {cambiado.movimiento}, {cambiado.velocidad} %.", "ok", "Editor",
+                        archivo=self.archivo_editado)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):
