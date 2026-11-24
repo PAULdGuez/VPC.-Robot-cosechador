@@ -194,12 +194,20 @@ class Escena:
         self.plotter.render()
 
     def _poner_volumen(self, *actores):
-        """El volumen de trabajo recién dibujado reemplaza al anterior (nube o superficie) en vez de apilarse."""
+        """El volumen de trabajo recién dibujado reemplaza al anterior (nube o superficie) en vez de apilarse.
+        Sin actores, el volumen se quita, con todo y su rejilla de medidas."""
         for actor in self.actores_volumen:
             self.plotter.remove_actor(actor)
         self.actores_volumen = list(actores)
-        self.plotter.show_grid()
+        if actores:
+            self.plotter.show_grid()
+        else:
+            self.plotter.remove_bounds_axes()
         self.plotter.render()
+
+    def ocultar_volumen(self):
+        """Quita el volumen de trabajo de la escena: queda como antes de dibujarlo."""
+        self._poner_volumen()
 
     def mostrar_volumen(self, puntos):
         """Dibuja el volumen de trabajo como nube de puntos: para el robot cuyo corte no se puede girar."""

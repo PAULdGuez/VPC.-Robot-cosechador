@@ -61,6 +61,7 @@ POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al
 PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
+TEXTO_VER_VOLUMEN, TEXTO_OCULTAR_VOLUMEN = "VOLUMEN DE TRABAJO", "OCULTAR VOLUMEN"
 
 
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
@@ -288,6 +289,15 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.ejecutar(plan, origen="Cosecha")
 
     def ver_volumen(self):
+        """Botón del volumen de trabajo: lo dibuja; con el volumen a la vista, lo oculta."""
+        if self.escena.actores_volumen:
+            self.escena.ocultar_volumen()
+            self.PROCESO.setValue(0)
+        else:
+            self._dibujar_volumen()
+        self.VER_VOLUMEN.setText(TEXTO_OCULTAR_VOLUMEN if self.escena.actores_volumen else TEXTO_VER_VOLUMEN)
+
+    def _dibujar_volumen(self):
         def avance(hechos, total):
             self.PROCESO.setRange(0, total)
             self.PROCESO.setValue(hechos)

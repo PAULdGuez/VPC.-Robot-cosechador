@@ -265,10 +265,12 @@ def test_v4_si_cambian_los_limites_el_dibujo_cambia_solo(robot, datos_yaml, abri
         assert dentro_por(tajada(superficie_dibujada(w), recortado, servo_base), ya_no).max() <= PROMETE_DE_MAS_MM
 
 
-def test_v4_presionarlo_dos_veces_no_lo_encima(con_volumen):
+def test_v4_volver_a_dibujarlo_no_lo_encima(con_volumen):
     plotter = con_volumen.escena.plotter
     dibujado = len(plotter.renderer.actors), superficie_dibujada(con_volumen).n_points
-    con_volumen.VER_VOLUMEN.click()
+    con_volumen.VER_VOLUMEN.click()  # (V8, 24-NOV) CON EL VOLUMEN A LA VISTA, EL BOTÓN LO OCULTA...
+    assert con_volumen.escena.actores_volumen == []
+    con_volumen.VER_VOLUMEN.click()  # ...Y AL PEDIRLO OTRA VEZ QUEDA DIBUJADO UNA SOLA VEZ
     assert (len(plotter.renderer.actors), superficie_dibujada(con_volumen).n_points) == dibujado
     assert len(con_volumen.escena.actores_volumen) == 2  # LA SUPERFICIE Y SU CONTORNO, UNA SOLA VEZ
 

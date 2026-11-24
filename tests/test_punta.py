@@ -161,6 +161,11 @@ def herramienta_dibujada(escena):
     return malla.bounds[:2], en_el_mundo
 
 
+def foto(escena):
+    escena.plotter.render()
+    return escena.plotter.screenshot(return_img=True).astype(int)
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ROBOTS Y VENTANAS DE PRUEBA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 @pytest.fixture
 def datos_yaml():
@@ -526,3 +531,38 @@ def test_p7_el_brazo_de_4_articulaciones_queda_como_hoy(robot_4gdl):
     for servos, _ in HOY_4GDL_DIRECTA:
         assert posicion(con, servos) == pytest.approx(punta_a_mano(con, servos), abs=1e-6)
         assert np.linalg.norm(posicion(con, servos) - posicion(robot_4gdl, servos)) == pytest.approx(55)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% V8: EL BOTÓN DEL VOLUMEN TAMBIÉN LO OCULTA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_v8_el_boton_del_volumen_tambien_lo_oculta(robot, abrir):
+    w = abrir(robot)
+    actores = lambda: len(w.escena.plotter.renderer.actors)
+    sin_volumen, rotulo = actores(), w.VER_VOLUMEN.text()
+    assert rotulo == "VOLUMEN DE TRABAJO"
+
+    w.VER_VOLUMEN.click()
+    con_volumen = actores()
+    assert len(w.escena.actores_volumen) == 2 and con_volumen > sin_volumen
+    assert w.VER_VOLUMEN.text() == "OCULTAR VOLUMEN"
+    assert w.PROCESO.value() == w.PROCESO.maximum() > 0
+
+    w.VER_VOLUMEN.click()
+    assert w.escena.actores_volumen == [] and actores() == sin_volumen  # NI LA SUPERFICIE, NI SU CONTORNO, NI LA REJILLA
+    assert w.VER_VOLUMEN.text() == rotulo and w.PROCESO.value() == 0
+
+    w.VER_VOLUMEN.click()  # Y SE VUELVE A VER, SIN ENCIMARSE
+    assert len(w.escena.actores_volumen) == 2 and actores() == con_volumen
+    assert w.VER_VOLUMEN.text() == "OCULTAR VOLUMEN"
+
+
+def test_v8_al_ocultarlo_la_escena_se_ve_como_antes(robot):
+    escena = Escena(pv.Plotter(off_screen=True, window_size=(640, 480)), robot)
+    escena.dibujar(servo_a_dh(robot, (60, 110, 100)))
+    escena.vista("iso")
+    escena.encuadrar(zoom=1.0)
+    antes = foto(escena)
+    escena.mostrar_superficie(contorno_del_corte(robot), giro_de_la_base(robot))
+    distintos = lambda imagen: int((np.abs(imagen - antes).sum(axis=2) > 30).sum())
+    assert distintos(foto(escena)) > 5000  # CON EL VOLUMEN, LA IMAGEN CAMBIA
+    escena.ocultar_volumen()
+    assert distintos(foto(escena)) == 0    # Y AL OCULTARLO QUEDA IGUAL QUE ANTES, PIXEL POR PIXEL
