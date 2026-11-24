@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PyQt5 import QtCore, QtWidgets
 
+import auditoria_interfaz as au
 from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
 from cosechador.movimiento.grabadora import Grabadora, programa_de_grabacion
@@ -196,6 +197,32 @@ def test_b2_5_no_se_graba_mientras_se_reproduce(ventana):
     assert not w.grabadora.grabando
     correr(w)
     assert w.BTN_GRABAR.isEnabled()
+
+
+def test_b2_8_mientras_graba_el_aviso_se_ve_desde_las_tres_pestanas(ventana):
+    """El robot se mueve desde Servos y Punta X Y Z: ahí es donde hay que ver que se está grabando."""
+    w = ventana
+    w.resize(1280, 760)
+    w.show()                                              # OFFSCREEN: NO SE ABRE NADA A LA VISTA
+    QtWidgets.QApplication.processEvents()
+    aviso, pestanas = w.aviso_grabando, w.PESTANAS_MOVIMIENTO
+    assert not aviso.isVisible()
+
+    w.alternar_grabacion()
+    for indice in range(pestanas.count()):
+        pestanas.setCurrentIndex(indice)
+        QtWidgets.QApplication.processEvents()
+        donde = pestanas.tabText(indice)
+        assert aviso.isVisible(), donde
+        zona = aviso.geometry()                           # EN COORDENADAS DE LAS PESTAÑAS
+        assert zona.width() >= aviso.sizeHint().width() and zona.height() >= aviso.sizeHint().height(), donde
+        assert pestanas.rect().contains(zona) and not zona.intersects(pestanas.tabBar().geometry()), donde
+        assert au.auditar(w) == [], donde                 # NI SE ENCIMA, NI SE CORTA, NI PIERDE CONTRASTE
+    mover_con_las_dos_pestanas(w)
+    assert aviso.isVisible()                              # SIGUE AHÍ DESPUÉS DE MOVER
+
+    w.alternar_grabacion()                                # SIN NOMBRE: SE DESCARTA
+    assert not aviso.isVisible()
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B2.6 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

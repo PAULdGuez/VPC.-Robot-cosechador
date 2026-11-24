@@ -66,6 +66,8 @@ QFrame#TARJETA_CI QLabel[rol="nota"], QFrame#TARJETA_COSECHA QLabel[rol="nota"] 
 QLabel[rol="titulo-tarjeta"] { color: white; font-weight: bold; }
 QLabel[rol="chip"] { background: $lima; color: $tinta; border-radius: 4px; padding: 0px 6px;
                      min-height: 24px; max-height: 24px; min-width: 40px; }
+QLabel[rol="grabando"] { background: $rojo; color: white; border-radius: 4px; padding: 0px 8px;
+                         font-size: $letra_chica; font-weight: bold; min-height: 20px; max-height: 20px; }
 QLabel[rol="imagen"] { background: $fondo; border: 2px solid $borde; border-radius: 5px; color: $tinta_suave; }
 
 /* %%%%% BOTONES %%%%% */

@@ -499,6 +499,12 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.BTN_GRABAR.setText(texto)
             anchos.append(self.BTN_GRABAR.sizeHint().width())
         self.BTN_GRABAR.setMinimumWidth(max(anchos))
+        # SE GRABA MOVIENDO DESDE LAS OTRAS DOS PESTAÑAS: EL AVISO VA EN LA ESQUINA DE LAS PESTAÑAS, A LA VISTA EN LAS TRES
+        self.aviso_grabando = QtWidgets.QLabel("⏺ Grabando")
+        self.aviso_grabando.setProperty("rol", "grabando")
+        self.aviso_grabando.setToolTip("Se detiene en la pestaña Programa")
+        self.PESTANAS_MOVIMIENTO.setCornerWidget(self.aviso_grabando, QtCore.Qt.TopRightCorner)
+        self.aviso_grabando.hide()
         self.SELECTOR_PROGRAMA.currentIndexChanged.connect(self._programa_elegido)
         self.recargar_programas()
 
@@ -621,7 +627,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                     ruta=ruta, muestras=len(muestras), duracion_s=p.duracion)
 
     def _boton_grabar(self, grabando):
-        """Texto y aspecto del botón (rol «grabando» de tema.py: rojo mientras graba)."""
+        """Aspecto de «grabando» (rol de tema.py): el botón en rojo y el aviso que se ve desde las tres pestañas."""
+        self.aviso_grabando.setVisible(grabando)
         self.BTN_GRABAR.setText(TEXTO_DETENER_GRABACION if grabando else TEXTO_GRABAR)
         self.BTN_GRABAR.setProperty("rol", "grabando" if grabando else "")
         self.BTN_GRABAR.style().unpolish(self.BTN_GRABAR)  # Qt SOLO RELEE LA HOJA AL CAMBIAR UNA PROPIEDAD SI SE LE PIDE
