@@ -247,6 +247,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA,
                         self.BTN_GRABAR, *self.sliders_servo, *self.sliders_xyz):
             control.setEnabled(not si)
+        if self.SELECTOR_PROGRAMA.currentData() is None:  # SIN PROGRAMA ELEGIDO NO HAY QUÉ REPRODUCIR
+            self.BTN_REPRODUCIR.setEnabled(False)
         if self.grabadora.grabando:  # MIENTRAS SE GRABA, SOLO SE MUEVE CON LOS SLIDERS
             for control in (self.CALCULAR, self.COSECHAR, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA):
                 control.setEnabled(False)

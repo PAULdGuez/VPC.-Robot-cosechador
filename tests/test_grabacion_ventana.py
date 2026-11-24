@@ -73,7 +73,8 @@ def mover_con_las_dos_pestanas(w):
 
 def otro_programa(w):
     """Un programa cualquiera en la carpeta, para que Reproducir tenga qué reproducir."""
-    prog.guardar(programa_de_grabacion((prog.Muestra(0.0, w.servos), prog.Muestra(1.0, (100.0, *w.servos[1:]))),
+    inicio = tuple(float(s) for s in w.servos)  # DESPUÉS DE MOVER, LOS SERVOS LLEGAN COMO NÚMEROS DE NUMPY
+    prog.guardar(programa_de_grabacion((prog.Muestra(0.0, inicio), prog.Muestra(1.0, (100.0, *inicio[1:]))),
                                        "otra", w.robot), os.path.join(w.carpeta_programas, "otra.yaml"))
     w.recargar_programas()
 
@@ -251,3 +252,23 @@ def test_b2_6_reproducir_lo_grabado_pasa_por_las_mismas_poses(ventana):
         assert i < len(reproducidas), f"no pasó por {pose}"
     assert salto(reproducidas[-1], grabadas[-1]) <= 0.5
     assert salto(inicio, reproducidas[0]) <= w.robot.movimiento.salto_max_por_paso + 1e-6  # ARRANQUE SUAVE
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% REPRODUCIR SIN PROGRAMAS (DEFECTO DEL 24-NOV) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_reproducir_sigue_apagado_sin_programas_despues_de_mover(ventana):
+    """Sin programas no hay qué reproducir: el botón no se enciende al terminar un movimiento ni al detenerlo."""
+    w = ventana
+    assert not w.BTN_REPRODUCIR.isEnabled()               # LA CARPETA DE LA PRUEBA NACE VACÍA
+    w.SLIDER_1.setValue(w.SLIDER_1.value() + 20)
+    correr(w)
+    assert not w.BTN_REPRODUCIR.isEnabled()
+    w.SLIDER_1.setValue(w.SLIDER_1.value() + 20)          # TAMPOCO AL DETENER A MEDIO MOVIMIENTO
+    w.detener()
+    assert not w.BTN_REPRODUCIR.isEnabled()
+
+    otro_programa(w)                                      # CON UN PROGRAMA SÍ SE ENCIENDE, Y SIGUE ASÍ DESPUÉS DE MOVER
+    assert w.BTN_REPRODUCIR.isEnabled()
+    w.SLIDER_1.setValue(w.SLIDER_1.value() + 20)
+    correr(w)
+    assert w.BTN_REPRODUCIR.isEnabled()
