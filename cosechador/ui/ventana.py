@@ -69,6 +69,7 @@ MOTIVO_NO_SE_EDITA = "Una grabación son muestras por tiempo:\nno se edita por p
 INVITACION_SIN_PUNTOS = ("Sin puntos.\n\nLleva el robot a una pose con las pestañas Servos o Punta X Y Z "
                          "y pulsa «+ Punto»: se guarda la pose actual.")
 PASO_VELOCIDAD_PUNTO = 5  # LA VELOCIDAD DE UN PUNTO SE ELIGE DE 5 EN 5 %
+MARCA_IMPOSIBLE = "imposible"  # LO QUE LLEVA EN UserRole EL RENGLÓN DE UN PUNTO AL QUE NO SE PUEDE LLEGAR
 
 
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
@@ -85,6 +86,23 @@ class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
         rect.setWidth(self.parent().viewport().width() - 10)
         opcion.rect = rect
         return super().sizeHint(opcion, indice)
+
+
+class _RenglonDePunto(_RenglonDelRegistro):
+    """El punto imposible sigue en rojo AUNQUE esté elegido.
+
+    La hoja del tema pone en negro todo renglón elegido (QListWidget::item:selected) y el rojo se perdía justo
+    al elegir el punto para arreglarlo. Aquí el fondo de «elegido» se pinta a mano y el texto se queda con el
+    color del renglón. Mismo rojo y mismo fondo del tema: no es un estilo nuevo.
+    """
+
+    def paint(self, pintor, opcion, indice):
+        elegido = int(opcion.state) & int(QtWidgets.QStyle.State_Selected)
+        if elegido and indice.data(QtCore.Qt.UserRole) == MARCA_IMPOSIBLE:
+            pintor.fillRect(opcion.rect, QtGui.QColor(tema.TOKENS["seleccion"]))
+            opcion = QtWidgets.QStyleOptionViewItem(opcion)
+            opcion.state = QtWidgets.QStyle.State(int(opcion.state) & ~int(QtWidgets.QStyle.State_Selected))
+        super().paint(pintor, opcion, indice)
 
 
 class VentanaPrincipal(QtWidgets.QMainWindow):
@@ -696,9 +714,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         lista.setWordWrap(True)
         lista.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         lista.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        lista.setItemDelegate(_RenglonDelRegistro(lista))
+        lista.setItemDelegate(_RenglonDePunto(lista))
         lista.setResizeMode(QtWidgets.QListView.Adjust)
         lista.itemSelectionChanged.connect(self._punto_elegido_cambio)
+        self.SELECTOR_POSTURA.currentIndexChanged.connect(self._revisar_puntos)
         # QListWidget NO TRAE TEXTO DE «LISTA VACÍA» EN Qt 5: LA INVITACIÓN VA ENCIMA, SIN ESTORBARLE AL RATÓN
         self.nota_sin_puntos = QtWidgets.QLabel(INVITACION_SIN_PUNTOS)
         self.nota_sin_puntos.setProperty("rol", "nota")
@@ -786,8 +805,16 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         puntos, lista = self.editado.puntos, self.LISTA_PUNTOS
         lista.blockSignals(True)  # SE AVISA UNA SOLA VEZ, AL FINAL
         lista.clear()
+        imposibles = self._imposibles(self.editado)  # SE REVISA EN CADA PINTADA: TRAS CADA CAMBIO, PUES
         for numero, punto in enumerate(puntos, start=1):
-            lista.addItem(QtWidgets.QListWidgetItem(f"{numero}   {punto.movimiento.capitalize()} · {punto.velocidad} %"))
+            item = QtWidgets.QListWidgetItem(f"{numero}   {punto.movimiento.capitalize()} · {punto.velocidad} %")
+            if numero in imposibles:  # EN ROJO, COMO LOS ERRORES DEL REGISTRO, Y CON SU MOTIVO DEBAJO
+                motivo = imposibles[numero]
+                item.setText(f"{item.text()}   ⚠\n{motivo[:1].upper()}{motivo[1:]}")
+                item.setForeground(QtGui.QColor(tema.TOKENS["rojo"]))
+                item.setData(QtCore.Qt.UserRole, MARCA_IMPOSIBLE)
+                item.setToolTip(f"<qt>Punto {numero} ({punto.movimiento}): {html.escape(motivo)}</qt>")
+            lista.addItem(item)
         lista.setCurrentRow(-1 if elegir is None else elegir)
         lista.blockSignals(False)
         self.nota_sin_puntos.setVisible(not puntos)
@@ -800,6 +827,24 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.NOTA_PUNTOS.setText(self.NOTA_PUNTOS.fontMetrics().elidedText(nota, QtCore.Qt.ElideMiddle, ancho))
         self.NOTA_PUNTOS.setToolTip(nota)
         self._punto_elegido_cambio()
+
+    def _imposibles(self, programa):
+        """{número de punto: por qué no se puede llegar a él}, para marcarlo en la lista.
+
+        Lo decide plan_puntos, lo mismo que decide si el programa arranca: aquí no se calcula nada más. Se
+        revisa desde el primer punto y no desde donde está el robot ahora: la marca es del programa (el tramo
+        hasta el primer punto se revisa al reproducir, al dar un paso y en la vista previa).
+        """
+        if not programa.puntos or self.robot.cinematica_inversa is None:
+            return {}
+        _, problemas = plan_puntos(self.robot, programa.puntos[0].servos, programa, self.postura)
+        return {numero: texto.removeprefix(f"Punto {numero} ({programa.puntos[numero - 1].movimiento}): ")
+                for numero, texto in problemas}
+
+    def _revisar_puntos(self):
+        """Cambió el modo de postura: un punto que se podía alcanzar puede ya no poderse, y al revés."""
+        if self.editando:
+            self._pintar_puntos(self.fila_elegida())
 
     def _punto_elegido_cambio(self):
         """La fila «del punto elegido» muestra su tipo y su velocidad, o se apaga si no hay ninguno elegido."""

@@ -70,6 +70,12 @@ def renglones(w):
     return [w.LISTA_PUNTOS.item(i).text() for i in range(w.LISTA_PUNTOS.count())]
 
 
+def imposibles(w):
+    """Los números de los puntos que la lista marca como imposibles."""
+    lista = w.LISTA_PUNTOS
+    return [i + 1 for i in range(lista.count()) if lista.item(i).data(QtCore.Qt.UserRole) == "imposible"]
+
+
 def servos_en_disco(w, archivo):
     return [p.servos for p in en_disco(w, archivo).puntos]
 
@@ -354,3 +360,86 @@ def test_b3_6_todo_cambio_se_guarda_solo_y_sigue_ahi_al_reabrir_la_app(ventana, 
     otra.BTN_EDITAR_PUNTOS.click()
     assert renglones(otra) == esperado
     assert [p.servos for p in otra.editado.puntos] == cerca(poses["arriba"], poses["ida"], poses["corte"])
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.7: EL PUNTO IMPOSIBLE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_7_un_punto_imposible_sale_en_rojo_con_su_motivo_escrito_debajo(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["a"]), Punto(poses["b"], "lineal", 40), Punto(poses["home"]))
+    assert imposibles(w) == [2]
+    malo, bueno = w.LISTA_PUNTOS.item(1), w.LISTA_PUNTOS.item(0)
+    assert malo.text() == "2   Lineal · 40 %   ⚠\nEl camino pasa por (-87, 0, 630), una zona que el robot no alcanza"
+    assert malo.foreground().color().name() == tema.TOKENS["rojo"] != bueno.foreground().color().name()
+    assert "Punto 2 (lineal): el camino pasa por (-87, 0, 630)" in malo.toolTip() and bueno.toolTip() == ""
+    assert bueno.text() == "1   Articular · 100 %"
+    # ES LO MISMO QUE DICE «REPRODUCIR» CUANDO SE NIEGA A ARRANCAR: LO DECIDE UN SOLO LUGAR
+    w.BTN_REPRODUCIR.click()
+    assert eventos(w, "aviso")[-1].mensaje == ("No arranca: Punto 2 (lineal): el camino pasa por (-87, 0, 630), "
+                                                "una zona que el robot no alcanza")
+
+
+def test_b3_7_el_punto_imposible_sigue_en_rojo_cuando_esta_elegido(ventana, poses):
+    """La hoja del tema pone en negro todo renglón elegido: el rojo se perdía justo al elegir el punto para arreglarlo."""
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["a"]), Punto(poses["b"], "lineal", 40), Punto(poses["home"], "lineal", 40))
+    assert imposibles(w) == [2]
+    w.resize(1280, 720)
+    w.show()                                                      # OFFSCREEN: NO SE ABRE NADA A LA VISTA
+
+    def tinta_roja(numero):
+        QtWidgets.QApplication.processEvents()
+        lista = w.LISTA_PUNTOS
+        imagen = lista.viewport().grab(lista.visualItemRect(lista.item(numero - 1))).toImage()
+        colores = (imagen.pixelColor(x, y) for x in range(imagen.width()) for y in range(imagen.height()))
+        return sum(1 for c in colores if c.red() - max(c.green(), c.blue()) > 80)
+
+    sin_elegir = tinta_roja(2)
+    assert sin_elegir > 100 and tinta_roja(3) == 0                # EL 3 SÍ SE PUEDE: NI UN PIXEL ROJO
+    elegir(w, 2)
+    assert tinta_roja(2) == pytest.approx(sin_elegir, rel=0.2)    # LAS MISMAS LETRAS ROJAS, SOBRE EL FONDO DE «ELEGIDO»
+    elegir(w, 3)
+    assert tinta_roja(3) == 0                                     # Y UN RENGLÓN NORMAL ELEGIDO SIGUE COMO SIEMPRE
+
+
+def test_b3_7_se_revisa_otra_vez_tras_cada_cambio(ventana, poses):
+    w = ventana
+    abrir(w, "p.yaml", Punto(poses["a"]), Punto(poses["b"], "lineal", 40), Punto(poses["home"]))
+    tipo = w.SELECTOR_TIPO_PUNTO
+    assert imposibles(w) == [2]
+    elegir(w, 2)
+    tipo.setCurrentIndex(tipo.findData("articular"))              # CAMBIAR EL TIPO: EN ARTICULAR NO HAY RECTA QUE RECORRER
+    assert imposibles(w) == []
+    tipo.setCurrentIndex(tipo.findData("lineal"))
+    assert imposibles(w) == [2]
+    w.BTN_SUBIR_PUNTO.click()                                     # MOVER: B(lineal), A, home — EL PRIMERO NO TIENE ANTERIOR
+    assert imposibles(w) == []
+    w.BTN_BAJAR_PUNTO.click()
+    assert imposibles(w) == [2]
+    elegir(w, 1)
+    w.BTN_PUNTO_NUEVO.click()                                     # AGREGAR: A, home, B(lineal), home — DESDE HOME SÍ SE LLEGA
+    assert imposibles(w) == [] and len(renglones(w)) == 4
+    w.BTN_QUITAR_PUNTO.click()                                    # QUITAR EL QUE SE AGREGÓ: A, B(lineal), home
+    assert imposibles(w) == [2] and len(renglones(w)) == 3
+    contestar(w, True)
+    elegir(w, 1)
+    w.BTN_REENSENAR.click()                                       # RE-ENSEÑAR EL 1 CON HOME: home, B(lineal), home
+    assert imposibles(w) == []
+    llevar(w, poses["a"])
+    w.BTN_REENSENAR.click()                                       # Y OTRA VEZ CON A: VUELVE A SER IMPOSIBLE
+    assert imposibles(w) == [2]
+
+
+def test_b3_7_tambien_se_revisa_al_cambiar_el_modo_de_postura(ventana, robot):
+    # LA RECTA ENTRE ESTOS DOS PUNTOS CRUZA y = 0, DONDE EL ROBOT TIENE QUE CAMBIAR DE POSTURA (EL CASO DE test_trayectorias.py)
+    w = ventana
+    postura = w.SELECTOR_POSTURA
+    postura.setCurrentIndex(postura.findData("despacio"))
+    abrir(w, "p.yaml", Punto(angulos_servo(robot, (-1400, 150, 1300))), Punto(angulos_servo(robot, (-1400, -150, 1300)), "lineal", 100))
+    assert imposibles(w) == []
+    elegir(w, 2)
+    postura.setCurrentIndex(postura.findData("negar"))
+    assert imposibles(w) == [2] and w.fila_elegida() == 1         # SE REVISA SOLO, Y EL PUNTO SIGUE ELEGIDO
+    assert "cambiar de postura" in w.LISTA_PUNTOS.item(1).text() and "«negar»" in w.LISTA_PUNTOS.item(1).text()
+    postura.setCurrentIndex(postura.findData("despacio"))
+    assert imposibles(w) == []
