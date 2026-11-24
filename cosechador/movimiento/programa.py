@@ -9,6 +9,8 @@ Se guardan ángulos de SERVO, no XYZ: dos posturas distintas pueden dar la misma
 postura queda sin ambigüedad. Archivos YAML en programas/ (ver PROGRAMAS_POR_OMISION).
 """
 import os
+import re
+import unicodedata
 from dataclasses import dataclass, field
 
 import yaml
@@ -158,6 +160,20 @@ def cargar(ruta, robot):
         return programa_desde_dict(datos, robot)
     except ErrorPrograma as e:
         raise ErrorPrograma(f"{os.path.basename(ruta)}: {e}") from None
+
+
+def nombre_de_archivo(nombre):
+    """El archivo para el nombre que escribe la persona: «Mi grabación 2» → «mi-grabacion-2.yaml».
+
+    Solo letras sin acento, números y guiones: el archivo nunca sale de programas/ ni lleva caracteres que
+    algún sistema no acepte. El nombre tal cual se escribió va DENTRO del archivo (campo «nombre»).
+    """
+    base = re.sub(r"\.ya?ml\s*$", "", nombre.strip(), flags=re.IGNORECASE)
+    base = unicodedata.normalize("NFKD", base).encode("ascii", "ignore").decode("ascii")
+    base = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")[:60].strip("-")
+    if not base:
+        raise ErrorPrograma("El nombre necesita al menos una letra o un número.")
+    return base + ".yaml"
 
 
 def listar(carpeta=CARPETA_PROGRAMAS):
