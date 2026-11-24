@@ -26,6 +26,9 @@ VISTAS = {"iso": lambda p: p.view_isometric(), "arriba": lambda p: p.view_xy(),
           "frente": lambda p: p.view_xz(), "lado": lambda p: p.view_yz()}
 MAXIMO_RECORRIDO = 5000          # PUNTOS DE LA ESTELA (LOS MÁS VIEJOS SE DESCARTAN)
 DISTANCIA_MINIMA_ESTELA = 0.5    # mm: NO SE AGREGAN PUNTOS REPETIDOS
+# VOLUMEN DE TRABAJO: SUPERFICIE TRANSLÚCIDA (EL ROBOT Y LA TRAYECTORIA SE VEN A TRAVÉS) Y SU CONTORNO
+COLOR_VOLUMEN, COLOR_BORDE_VOLUMEN, OPACIDAD_VOLUMEN = "#1aa3a3", "#0b4f6c", 0.3
+GRADOS_POR_GAJO = 2              # LA SUPERFICIE DE GIRO SE ARMA CON GAJOS PLANOS DE ESTE ÁNGULO, COMO MUCHO
 
 
 def piezas_del_robot(robot):
@@ -83,6 +86,24 @@ def cargar_pieza(robot, indice, pieza):
     return pieza_provisional(robot, indice), "provisional"
 
 
+def superficie_de_giro(lazos, giro):
+    """El contorno de un corte, girado sobre el eje Z de la base: (superficie, bordes).
+
+    lazos: contornos del corte (ver espacio_trabajo.contorno_del_corte), cada uno (n, 2) con (alcance, altura).
+    giro: (desde, hasta), en grados: hacia dónde mira la base en los dos extremos de su giro.
+    La superficie queda abierta en esos dos extremos; `bordes` es el contorno del corte en cada uno.
+    """
+    desde, hasta = giro
+    corte = None
+    for lazo in lazos:
+        linea = pv.lines_from_points(np.column_stack([lazo[:, 0], np.zeros(len(lazo)), lazo[:, 1]]), close=True)
+        corte = linea if corte is None else corte + linea
+    inicio = corte.rotate_z(desde)
+    gajos = max(int(np.ceil(abs(hasta - desde) / GRADOS_POR_GAJO)), 1)
+    superficie = inicio.extrude_rotate(resolution=gajos, angle=hasta - desde, capping=False)
+    return superficie, inicio + corte.rotate_z(hasta)
+
+
 class Escena:
     """El robot dibujado en un plotter de PyVista (o en el QtInteractor de la ventana)."""
 
@@ -91,7 +112,7 @@ class Escena:
         self.robot = robot
         self.actores = []
         self.origen_piezas = {}
-        self.actor_volumen = None
+        self.actores_volumen = []
 
         lado = 2 * robot.alcance
         piso = pv.Plane(i_size=lado, j_size=lado, i_resolution=20, j_resolution=20)
@@ -170,14 +191,24 @@ class Escena:
             actor.user_matrix = T
         self.plotter.render()
 
-    def mostrar_volumen(self, puntos):
-        """Dibuja la nube del volumen de trabajo (reemplaza la anterior en vez de apilarla)."""
-        if self.actor_volumen is not None:
-            self.plotter.remove_actor(self.actor_volumen)
-        self.actor_volumen = self.plotter.add_mesh(pv.PolyData(np.asarray(puntos)), color="cyan",
-                                                   point_size=2, render_points_as_spheres=True)
+    def _poner_volumen(self, *actores):
+        """El volumen de trabajo recién dibujado reemplaza al anterior (nube o superficie) en vez de apilarse."""
+        for actor in self.actores_volumen:
+            self.plotter.remove_actor(actor)
+        self.actores_volumen = list(actores)
         self.plotter.show_grid()
         self.plotter.render()
+
+    def mostrar_volumen(self, puntos):
+        """Dibuja el volumen de trabajo como nube de puntos: para el robot cuyo corte no se puede girar."""
+        self._poner_volumen(self.plotter.add_mesh(pv.PolyData(np.asarray(puntos)), color="cyan",
+                                                  point_size=2, render_points_as_spheres=True))
+
+    def mostrar_superficie(self, lazos, giro):
+        """Dibuja el volumen de trabajo como superficie translúcida, con su contorno (ver superficie_de_giro)."""
+        superficie, bordes = superficie_de_giro(lazos, giro)
+        self._poner_volumen(self.plotter.add_mesh(superficie, color=COLOR_VOLUMEN, opacity=OPACIDAD_VOLUMEN),
+                            self.plotter.add_mesh(bordes, color=COLOR_BORDE_VOLUMEN, line_width=2))
 
     def encuadrar(self, zoom=1.8):
         """Encuadra la escena sin cambiar el ángulo; el zoom acerca al robot porque el encuadre incluye todo el piso."""

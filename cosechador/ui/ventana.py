@@ -24,7 +24,7 @@ from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_
                                                 plan_puntos, posicion, tramo_articular, tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
-from cosechador.robot.espacio_trabajo import barrer
+from cosechador.robot.espacio_trabajo import barrer, contorno_del_corte, giro_de_la_base
 from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
 from cosechador.vision.camara import pedunculo_en_base
@@ -292,7 +292,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.PROCESO.setRange(0, total)
             self.PROCESO.setValue(hechos)
             QtWidgets.QApplication.processEvents()
-        self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
+        lazos = contorno_del_corte(self.robot, progreso=avance)
+        if lazos is None:  # EL CORTE DE ESTE ROBOT NO SE PUEDE GIRAR (O NO ENCIERRA ÁREA): LA NUBE DE PUNTOS
+            self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
+        else:
+            self.escena.mostrar_superficie(lazos, giro_de_la_base(self.robot))
         self.escena.encuadrar(zoom=1.0)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VELOCIDAD Y POSTURA (FUERA DE LAS PESTAÑAS) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
