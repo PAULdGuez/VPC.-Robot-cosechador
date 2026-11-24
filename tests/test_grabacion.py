@@ -88,13 +88,19 @@ def test_b2_6_la_grabacion_se_reproduce_igual_desde_el_archivo(robot, home_s, tm
     g = Grabadora(reloj=reloj)
     g.empezar(home_s)
     poses = [home_s, (120.0, 60.0, 70.0), (60.0, 30.0, 100.0), (95.5, 47.25, 52.125)]
+    enviadas = []
     for a, b in zip(poses, poses[1:]):
-        grabar_pasos(g, reloj, tramo_articular(robot, a, b))
+        pasos = tramo_articular(robot, a, b)
+        enviadas += [p.servos for p in pasos]
+        grabar_pasos(g, reloj, pasos)
         reloj.t += 0.7
-    original = programa_de_grabacion(g.terminar(), "archivo", robot)
-    prog.guardar(original, tmp_path / "archivo.yaml")
+    prog.guardar(programa_de_grabacion(g.terminar(), "archivo", robot), tmp_path / "archivo.yaml")
     leida = prog.cargar(tmp_path / "archivo.yaml", robot)
     plan, _ = plan_grabacion(robot, (10.0, 100.0, 20.0), leida)
     recorridas = servos_del_plan(plan)
-    for m in original.muestras:
-        assert min(salto(m.servos, r) for r in recorridas) <= 0.5
+    # CADA POSE QUE SE LE MANDÓ AL ROBOT AL GRABAR APARECE, EN ORDEN, AL REPRODUCIR DESDE EL ARCHIVO (±0.5°)
+    i = 0
+    for pose in enviadas:
+        while i < len(recorridas) and salto(recorridas[i], pose) > 0.5:
+            i += 1
+        assert i < len(recorridas), f"no pasó por {pose}"
