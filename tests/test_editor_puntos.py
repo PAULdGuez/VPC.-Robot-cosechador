@@ -13,13 +13,26 @@ import pytest
 import yaml
 
 from cosechador.movimiento import programa as prog
-from cosechador.movimiento.trayectorias import servos_del_plan, tramo_articular
+from cosechador.movimiento.trayectorias import posicion, servos_del_plan, tramo_a_punto, tramo_articular
 from cosechador.robot.cinematica_inversa import angulos_servo
+
+
+# LA RECTA DE A A B CRUZA EL EJE DE LA BASE: NO SE PUEDE RECORRER (EL MISMO CASO DE test_trayectorias.py)
+A, B = (-1656, 0, 630), (1656, 0, 630)
+# DE IDA A VUELTA LA RECTA SÍ SE PUEDE, Y EN ARTICULAR LA PUNTA SE ALEJA MUCHO DE ELLA: SIRVE PARA DISTINGUIR EL TIPO
+IDA, VUELTA = (800, 300, 900), (-800, 300, 900)
 
 
 @pytest.fixture(scope="module")
 def home_s(robot):
     return angulos_servo(robot, robot.home)
+
+
+def lejos_de_la_recta(robot, servos, desde, hasta):
+    """Cuántos mm se aleja la punta, en cada pose, de la recta desde → hasta."""
+    a, b = np.asarray(desde, float), np.asarray(hasta, float)
+    u = (b - a) / np.linalg.norm(b - a)
+    return [float(np.linalg.norm((p - a) - np.dot(p - a, u) * u)) for p in (posicion(robot, s) for s in servos)]
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.6: EL ARCHIVO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -40,3 +53,23 @@ def test_b3_6_una_postura_con_numeros_de_numpy_se_guarda_como_numeros_normales(r
         assert all(type(s) is float for s in guardados[-1]["servos"])
         leido = prog.cargar(ruta, robot)
         assert (leido.puntos or leido.muestras)[-1].servos == pytest.approx(servos, abs=1e-6)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.8: CÓMO SE LLEGA A UN PUNTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def test_b3_8_a_un_punto_se_llega_con_su_tipo_y_su_velocidad(robot):
+    """La trampa de UR: «ir al punto» iba siempre en articular, aunque el punto fuera lineal."""
+    inicio, destino, ms = angulos_servo(robot, IDA), angulos_servo(robot, VUELTA), robot.movimiento.ms_por_paso
+    recta, motivo = tramo_a_punto(robot, inicio, prog.Punto(destino, "lineal", 50))
+    assert motivo is None
+    assert max(lejos_de_la_recta(robot, servos_del_plan(recta), IDA, VUELTA)) < 0.5
+    assert posicion(robot, servos_del_plan(recta)[-1]) == pytest.approx(VUELTA, abs=0.5)
+    assert {p.ms for p in recta} == {ms * 2}                             # AL 50 %, CADA PASO DURA EL DOBLE
+
+    giro, motivo = tramo_a_punto(robot, inicio, prog.Punto(destino, "articular", 20))
+    assert motivo is None and servos_del_plan(giro)[-1] == pytest.approx(destino)
+    assert max(lejos_de_la_recta(robot, servos_del_plan(giro), IDA, VUELTA)) > 50   # LA PUNTA NO VA EN RECTA
+    assert {p.ms for p in giro} == {ms * 5}                              # AL 20 %, CINCO VECES MÁS
+
+    nada, motivo = tramo_a_punto(robot, angulos_servo(robot, A), prog.Punto(angulos_servo(robot, B), "lineal", 100))
+    assert nada is None and motivo.startswith("el camino pasa por") and "no alcanza" in motivo

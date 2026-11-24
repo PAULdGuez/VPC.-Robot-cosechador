@@ -183,6 +183,21 @@ def _ms_a_velocidad(robot, velocidad):
     return robot.movimiento.ms_por_paso * 100 / velocidad
 
 
+def tramo_a_punto(robot, servos, punto, postura=None):
+    """Cómo se llega a UN punto de un programa desde `servos`: con SU tipo (articular o lineal) y SU velocidad.
+
+    Devuelve (pasos, None), o (None, motivo) si el punto es lineal y la recta no se puede recorrer. Lo usan
+    plan_puntos (el programa completo) y el paso a paso del editor: un solo lugar decide cómo se llega.
+    """
+    ms = _ms_a_velocidad(robot, punto.velocidad)
+    if punto.movimiento == "articular":
+        return tramo_articular(robot, servos, punto.servos, ms), None
+    tramo, motivo = tramo_continuo(robot, servos, posicion(robot, punto.servos), postura)
+    if tramo is None:
+        return None, motivo if motivo.startswith("Para") else f"el camino {motivo}"
+    return [Paso(servos=p.servos, aviso=p.aviso, ms=ms) for p in tramo], None
+
+
 def plan_puntos(robot, servos, programa, postura=None):
     """Plan para recorrer un programa por puntos. Devuelve (plan, problemas).
 
@@ -190,22 +205,17 @@ def plan_puntos(robot, servos, programa, postura=None):
     """
     plan, problemas, actual = [], [], tuple(servos)
     for i, punto in enumerate(programa.puntos, start=1):
-        ms = _ms_a_velocidad(robot, punto.velocidad)
-        if punto.movimiento == "articular":
-            plan.append(Paso(aviso=f"Punto {i}/{len(programa.puntos)} (articular, {punto.velocidad} %)"))
-            plan.extend(tramo_articular(robot, actual, punto.servos, ms))
-            actual = punto.servos
-            continue
-        destino = posicion(robot, punto.servos)
-        tramo, motivo = tramo_continuo(robot, actual, destino, postura)
+        tramo, motivo = tramo_a_punto(robot, actual, punto, postura)
         if tramo is None:
-            texto = motivo if motivo.startswith("Para") else f"el camino {motivo}"
-            problemas.append((i, f"Punto {i} (lineal): {texto}"))
+            problemas.append((i, f"Punto {i} ({punto.movimiento}): {motivo}"))
             actual = punto.servos  # SE SIGUE REVISANDO DESDE DONDE DEBIÓ QUEDAR, PARA LISTAR TODOS LOS PROBLEMAS
             continue
-        plan.append(Paso(aviso=f"Punto {i}/{len(programa.puntos)} (lineal, {punto.velocidad} %)"))
-        plan.extend(Paso(servos=p.servos, aviso=p.aviso, ms=ms) for p in tramo)
-        actual = servos_del_plan(tramo)[-1] if servos_del_plan(tramo) else actual
+        plan.append(Paso(aviso=f"Punto {i}/{len(programa.puntos)} ({punto.movimiento}, {punto.velocidad} %)"))
+        plan.extend(tramo)
+        if punto.movimiento == "articular":  # EN ARTICULAR SE LLEGA EXACTO A LOS SERVOS GUARDADOS
+            actual = punto.servos
+        elif servos_del_plan(tramo):         # EN LINEAL, A LOS QUE DIO LA CINEMÁTICA INVERSA PARA ESA XYZ
+            actual = servos_del_plan(tramo)[-1]
     if problemas:
         return None, problemas
     return plan + [Paso(aviso=f"Programa «{programa.nombre}» terminado.", nivel="ok")], []
