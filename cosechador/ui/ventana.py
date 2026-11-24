@@ -23,38 +23,16 @@ from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
 from cosechador.robot.espacio_trabajo import barrer
+from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
 from cosechador.vision.camara import pedunculo_en_base
 from cosechador.vision.deteccion import detectar_aguacates
 
 RUTA_UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "COSECHADOR_AGUACATE.ui")
-FLECHA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "iconos", "flecha-abajo.svg")
 
 ICONO_NIVEL = {"info": "●", "ok": "✔", "aviso": "⚠", "error": "✖"}
 COLOR_NIVEL = {"info": "#2c6fbb", "ok": "#1e8e3e", "aviso": "#b7791f", "error": "#c0392b"}
-# EN macOS LA BARRA DE DESPLAZAMIENTO NATIVA NO RECIBE EL ESTILO DE SU LISTA (QUEDA DE 16 px Y CON UNA LÍNEA
-# NEGRA QUE TAPA TEXTO): SE LE PONE DIRECTO A LA BARRA.
-ESTILO_BARRA = """
-QScrollBar:vertical { width: 8px; background: transparent; margin: 2px 1px; border: none; }
-QScrollBar::handle:vertical { background: #c4c4c4; border: none; border-radius: 3px; min-height: 24px; }
-QScrollBar::handle:vertical:hover { background: #9aa5b1; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; border: none; background: none; }
-QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
-"""
 FILTROS_REGISTRO = (("Todos", reg.NIVELES), ("Avisos y errores", ("aviso", "error")), ("Solo errores", ("error",)))
-
-# MISMO LENGUAJE VISUAL QUE LOS BOTONES: BORDE NEGRO, ESQUINAS REDONDAS, FLECHA PROPIA
-ESTILO_SELECTOR = """
-QComboBox {{ background: white; border: 2px solid black; border-radius: 8px; padding: 2px 30px 2px 10px;
-             font-size: 13px; color: #1f2d3a; min-height: 20px; }}
-QComboBox:hover {{ background: #f3f6f9; }}
-QComboBox:disabled {{ color: #999; border-color: #bbb; }}
-QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: center right; width: 26px;
-                        border-left: 1px solid #ccc; }}
-QComboBox::down-arrow {{ image: url("{flecha}"); width: 12px; height: 8px; }}
-QComboBox QAbstractItemView {{ background: white; border: 2px solid black; selection-background-color: #2c3e50;
-                               selection-color: white; outline: 0; padding: 4px; }}
-"""
 
 AMARILLO, ROJO = (0, 255, 255), (0, 0, 255)
 
@@ -87,17 +65,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def __init__(self, robot, enlace=None, fuente_camara=None, ajustes=None, carpeta_programas=None, registro=None):
         super().__init__()
         uic.loadUi(RUTA_UI, self)
+        tema.aplicar(self)  # COLORES, TAMAÑOS Y ESPACIOS: TODO EN cosechador/ui/tema.py
         self.robot = robot
         self.registro = registro if registro is not None else reg.Registro()
         self._origen_plan = "Movimiento"
         self._configurar_registro()
-        # EN macOS EL ESTILO NATIVO CALCULA LOS BOTONES MÁS CHICOS DE LO QUE SE DIBUJAN: CON BORDE PROPIO SE
-        # ENCIMABAN 2 px AUNQUE EL LAYOUT PIDIERA 10 px DE SEPARACIÓN. QUE EL LAYOUT USE EL TAMAÑO REAL:
-        for boton in self.findChildren(QtWidgets.QPushButton):
-            boton.setAttribute(QtCore.Qt.WA_LayoutUsesWidgetRect)
-        # EL ESTILO VA EN CADA SELECTOR: EN Qt EL ESTILO PROPIO DE UN CONTROL GANA AL DE LA VENTANA
-        for selector in self.findChildren(QtWidgets.QComboBox):
-            selector.setStyleSheet(ESTILO_SELECTOR.format(flecha=FLECHA.replace(os.sep, "/")))
         # AJUSTES DE LA PERSONA (P. EJ. EL ÚLTIMO PROGRAMA ELEGIDO): QSettings ES LO NATIVO DE Qt
         self.ajustes = ajustes if ajustes is not None else QtCore.QSettings("robot-cosechador", "cosechador")
         self.carpeta_programas = carpeta_programas or programas.CARPETA_PROGRAMAS
@@ -112,6 +84,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.enlace = enlace or abrir_enlace(rangos=[(j.servo.minimo, j.servo.maximo) for j in robot.articulaciones])
         for respuesta in self.enlace.dispositivo.leer_respuestas():
             self.avisar(respuesta, "info", "ESP32")
+        # LA BARRA DE ARRIBA DICE QUÉ ROBOT ESTÁ CARGADO Y A QUÉ PLACA SE LE MANDAN LOS ÁNGULOS
+        self.ESTADO_ROBOT.setText(robot.nombre)
+        color = "#f1c40f" if "virtual" in self.enlace.nombre.lower() else "#2ecc71"
+        self.ESTADO_CONEXION.setText(f"<span style='color:{color}'>●</span> {html.escape(self.enlace.nombre)}")
 
         # ESTADO
         self.servos = None
@@ -129,6 +105,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._configurar_vision()
         self.CHK_TRAYECTORIA.toggled.connect(self.escena.mostrar_trayectoria)
         self.BTN_LIMPIAR_TRAYECTORIA.clicked.connect(lambda: self.escena.limpiar_trayectoria(self.posicion))
+        for boton, nombre in ((self.BTN_VISTA_ISO, "iso"), (self.BTN_VISTA_ARRIBA, "arriba"),
+                              (self.BTN_VISTA_FRENTE, "frente"), (self.BTN_VISTA_LADO, "lado")):
+            boton.clicked.connect(lambda _=False, n=nombre: self.escena.vista(n))
+        self.BTN_ENCUADRAR.clicked.connect(lambda: self.escena.encuadrar())
         self.CALCULAR.clicked.connect(self.ir_y_volver)
         self.COSECHAR.clicked.connect(self.cosechar)
         self.VER_VOLUMEN.clicked.connect(self.ver_volumen)
@@ -147,6 +127,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
         self.avisar(f"{robot.nombre} · conectado a: {self.enlace.nombre}", "ok", "ESP32",
                     robot=robot.nombre, placa=self.enlace.nombre, registro=self.registro.archivo)
+        # QUE NINGÚN CAMPO ARRANQUE "ACTIVO": EL FOCO INICIAL VA AL FONDO (Y UN CLIC EN EL FONDO SUELTA EL CAMPO)
+        self.centralwidget.setFocusPolicy(QtCore.Qt.ClickFocus)
+        self.centralwidget.setFocus()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% ESTADO DEL BRAZO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     @property
@@ -310,7 +293,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.sliders_servo, self.valores_servo = todos[:n], todas[:n]
         for slider in todos[n:]:
             slider.setEnabled(False)
-        for slider, etiqueta, j in zip(self.sliders_servo, (self.label_12, self.label_7, self.label_9), self.robot.articulaciones):
+        for slider, etiqueta, j in zip(self.sliders_servo, (self.ETIQUETA_SERVO_1, self.ETIQUETA_SERVO_2, self.ETIQUETA_SERVO_3), self.robot.articulaciones):
             slider.setRange(int(j.servo.minimo), int(j.servo.maximo))
             etiqueta.setToolTip(j.nombre)
             slider.valueChanged.connect(self._slider_servo_movido)
@@ -383,8 +366,6 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.LISTA_REGISTRO.setResizeMode(QtWidgets.QListView.Adjust)
         self.DETALLE_REGISTRO.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.DETALLE_REGISTRO.setLineWrapMode(QtWidgets.QTextEdit.WidgetWidth)
-        for area in (self.LISTA_REGISTRO, self.DETALLE_REGISTRO):
-            area.verticalScrollBar().setStyleSheet(ESTILO_BARRA)
         self.DETALLE_REGISTRO.setViewportMargins(0, 0, 10, 0)  # QUE EL TEXTO NO QUEDE BAJO LA BARRA
         self.DETALLE_REGISTRO.setPlaceholderText("Elige un evento para ver sus datos.")
         self._nuevos_sin_ver = 0
@@ -490,16 +471,18 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         nombre = self.SELECTOR_PROGRAMA.currentData()
         self.BTN_REPRODUCIR.setEnabled(nombre is not None)
         if nombre is None:
-            self.INFO_PROGRAMA.setText(f"No hay programas en {self.carpeta_programas}.")
+            self.INFO_PROGRAMA.setText("No hay programas guardados")
+            self.INFO_PROGRAMA.setToolTip(self.carpeta_programas)
             return
         self.ajustes.setValue("programa/ultimo", nombre)
         try:
             p = programas.cargar(os.path.join(self.carpeta_programas, nombre), self.robot)
         except programas.ErrorPrograma as e:
-            self.INFO_PROGRAMA.setText(f"⚠ {e}")
+            self.INFO_PROGRAMA.setText("⚠ No se puede leer (ver registro)")
+            self.avisar(str(e), "error", "Programa", archivo=nombre)
             return
         if p.tipo == "puntos":
-            self.INFO_PROGRAMA.setText(f"Programa por puntos · {len(p.puntos)} puntos")
+            self.INFO_PROGRAMA.setText(f"Por puntos · {len(p.puntos)} puntos")
         else:
             self.INFO_PROGRAMA.setText(f"Grabación · {len(p.muestras)} muestras · {p.duracion:.1f} s")
 
@@ -541,14 +524,14 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):
         verde = self.robot.vision.verde.minimo
-        self.SLIDER_color_1.setRange(0, 255)
-        self.SLIDER_color_2.setRange(0, 255)
-        self.SLIDER_color_1.setValue(int(verde[0]))
-        self.SLIDER_color_2.setValue(int(verde[1]))
-        self.LABEL1.setText(str(self.SLIDER_color_1.value()))
-        self.LABEL2.setText(str(self.SLIDER_color_2.value()))
-        self.SLIDER_color_1.valueChanged.connect(lambda v: self.LABEL1.setText(str(v)))
-        self.SLIDER_color_2.valueChanged.connect(lambda v: self.LABEL2.setText(str(v)))
+        self.SLIDER_TONO.setRange(0, 255)
+        self.SLIDER_SATURACION.setRange(0, 255)
+        self.SLIDER_TONO.setValue(int(verde[0]))
+        self.SLIDER_SATURACION.setValue(int(verde[1]))
+        self.VS_TONO.setText(str(self.SLIDER_TONO.value()))
+        self.VS_SATURACION.setText(str(self.SLIDER_SATURACION.value()))
+        self.SLIDER_TONO.valueChanged.connect(lambda v: self.VS_TONO.setText(str(v)))
+        self.SLIDER_SATURACION.valueChanged.connect(lambda v: self.VS_SATURACION.setText(str(v)))
         self.GUARDAR.clicked.connect(self.guardar_detecciones)
         self.CARGA.clicked.connect(self.cargar_imagen)
         self.BTN_CONTRAER_VISION.clicked.connect(lambda: self.contraer_vision(True))
@@ -592,9 +575,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.procesar_imagen(frame)
 
     def procesar_imagen(self, frame):
-        h_min, s_min = self.SLIDER_color_1.value(), self.SLIDER_color_2.value()
-        self.LABEL1.setText(str(h_min))
-        self.LABEL2.setText(str(s_min))
+        h_min, s_min = self.SLIDER_TONO.value(), self.SLIDER_SATURACION.value()
+        self.VS_TONO.setText(str(h_min))
+        self.VS_SATURACION.setText(str(s_min))
         resultado, detecciones, _, _ = detectar_aguacates(frame, self.robot.vision, h_min, s_min)
 
         # SI LA CÁMARA VA EN EL EFECTOR, SU POSE ES LA DEL BRAZO EN ESTE MOMENTO
