@@ -7,7 +7,13 @@ from .cinematica import cinematica_directa, servo_a_dh
 
 
 def rangos_servo(robot, paso):
-    return [np.arange(j.servo.minimo, j.servo.maximo + 1e-9, paso) for j in robot.articulaciones]
+    """Los ángulos de cada servo que se barren: de su mínimo a su máximo, cada `paso` grados como mucho.
+
+    Los dos límites entran siempre: si el rango no es múltiplo del paso, el paso se acorta lo necesario.
+    """
+    return [np.linspace(j.servo.minimo, j.servo.maximo,
+                        int(np.ceil((j.servo.maximo - j.servo.minimo) / paso - 1e-9)) + 1)
+            for j in robot.articulaciones]
 
 
 def total_puntos(robot, paso=5):
@@ -15,7 +21,7 @@ def total_puntos(robot, paso=5):
 
 
 def barrer(robot, paso=5, progreso=None):
-    """Barre todas las combinaciones de servos (cada `paso` grados).
+    """Barre todas las combinaciones de servos (cada `paso` grados como mucho; ver rangos_servo).
 
     progreso(hechos, total) se llama de vez en cuando, para una barra de progreso.
     """

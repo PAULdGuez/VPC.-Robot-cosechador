@@ -13,7 +13,7 @@ from cosechador.robot.cinematica import (TOLERANCIA_SERVO, cinematica_directa, d
 from cosechador.robot.cinematica_inversa import (FueraDeAlcance, SinSolver, alcanzable, angulos_servo,
                                                  soluciones)
 from cosechador.robot.config import ROBOT_POR_OMISION
-from cosechador.robot.espacio_trabajo import barrer, total_puntos
+from cosechador.robot.espacio_trabajo import barrer, rangos_servo, total_puntos
 
 
 @pytest.fixture
@@ -79,6 +79,18 @@ def test_volumen_respeta_rango_de_servos(robot):
     puntos = barrer(robot, paso=10, progreso=lambda h, t: avances.append((h, t)))
     assert avances[-1] == (len(puntos), len(puntos)) == (total_puntos(robot, 10),) * 2
     assert all(alcanzable(robot, p) for p in puntos)
+
+
+def test_el_barrido_llega_a_los_dos_limites_de_cada_servo(datos_yaml):
+    # UN RANGO QUE NO ES MÚLTIPLO DEL PASO (HOMBRO DE 20° A 175°, CADA 10°): EL BARRIDO SE QUEDABA EN 170° Y
+    # EL VOLUMEN DIBUJADO NO LLEGABA A DONDE SÍ LLEGA EL ROBOT
+    datos_yaml["articulaciones"][1]["servo"]["max"] = 175
+    recortado = robot_desde_dict(datos_yaml)
+    hombro = rangos_servo(recortado, 10)[1]
+    assert (hombro[0], hombro[-1]) == (20, 175)
+    assert np.diff(hombro).max() <= 10
+    en_el_limite = cinematica_directa(recortado, servo_a_dh(recortado, (0, 175, 180)))
+    assert np.linalg.norm(barrer(recortado, paso=10) - en_el_limite, axis=1).min() == pytest.approx(0, abs=1e-6)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CRITERIOS DEL REFACTOR A + B %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
