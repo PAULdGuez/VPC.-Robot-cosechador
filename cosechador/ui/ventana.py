@@ -60,6 +60,22 @@ PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 
 
+class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
+    """El alto de cada renglón se calcula SIEMPRE con el ancho real de la lista.
+
+    QListView lo calculaba con un ancho viejo (antes de acomodar la ventana, o antes de que apareciera la
+    barra de desplazamiento): unos mensajes salían cortados con «…» y otros dejaban una línea en blanco.
+    """
+
+    def sizeHint(self, opcion, indice):
+        rect = QtCore.QRect(opcion.rect)
+        # MENOS EL MARGEN INTERNO DEL RENGLÓN (4 + 4 px EN tema.py) Y 2 px DE HOLGURA: Qt MIDE EL ALTO SIN
+        # DESCONTARLO, PERO AL DIBUJAR SÍ LO DESCUENTA, Y EL MENSAJE QUE "CABÍA" SALÍA CORTADO CON «…»
+        rect.setWidth(self.parent().viewport().width() - 10)
+        opcion.rect = rect
+        return super().sizeHint(opcion, indice)
+
+
 class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def __init__(self, robot, enlace=None, fuente_camara=None, ajustes=None, carpeta_programas=None, registro=None):
@@ -363,6 +379,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_EXPORTAR_REGISTRO.clicked.connect(self.exportar_registro)
         self.LISTA_REGISTRO.setWordWrap(True)  # LOS MENSAJES LARGOS PASAN AL SIGUIENTE RENGLÓN
         self.LISTA_REGISTRO.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        # BARRA VERTICAL SIEMPRE PRESENTE: ASÍ EL ANCHO PARA EL TEXTO NO CAMBIA CUANDO LA LISTA SE LLENA
+        self.LISTA_REGISTRO.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.LISTA_REGISTRO.setItemDelegate(_RenglonDelRegistro(self.LISTA_REGISTRO))
         self.LISTA_REGISTRO.setResizeMode(QtWidgets.QListView.Adjust)
         self.DETALLE_REGISTRO.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.DETALLE_REGISTRO.setLineWrapMode(QtWidgets.QTextEdit.WidgetWidth)
@@ -601,6 +620,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.ORIGINAL.setPixmap(cv_a_pixmap(frame))
         self.RESULTADOS.setPixmap(cv_a_pixmap(resultado))
         self.L_CONTADOR.setText(str(len(detecciones)))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.LISTA_REGISTRO.scheduleDelayedItemsLayout()  # LOS RENGLONES SE VUELVEN A MEDIR CON EL ANCHO NUEVO
 
     def closeEvent(self, event):
         self.temporizador_video.stop()
