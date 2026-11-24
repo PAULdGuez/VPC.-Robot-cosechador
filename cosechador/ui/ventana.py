@@ -61,6 +61,8 @@ POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al
 PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
+# PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
+TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:", "Grabación")}
 
 
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
@@ -600,33 +602,46 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if muestras is None:
             self.avisar("No se guardó: no hubo movimiento mientras se grababa.", "aviso", "Grabación")
             return
-        sugerido = f"grabacion-{dt.datetime.now():%Y-%m-%d-%H%M}"
+        guardado = self._guardar_con_nombre(f"grabacion-{dt.datetime.now():%Y-%m-%d-%H%M}", "grabacion",
+                                            lambda nombre: programa_de_grabacion(muestras, nombre, self.robot))
+        if guardado is None:
+            self.avisar("Grabación descartada (no se le dio nombre).", "aviso", "Grabación", muestras=len(muestras))
+            return
+        archivo, p = guardado
+        self.ajustes.setValue("programa/ultimo", archivo)
+        self.recargar_programas()  # APARECE EN EL SELECTOR Y QUEDA ELEGIDA
+        self.avisar(f"Grabación guardada: {archivo} ({len(muestras)} muestras, {p.duracion:.1f} s)", "ok", "Grabación",
+                    ruta=os.path.join(self.carpeta_programas, archivo), muestras=len(muestras), duracion_s=p.duracion)
+
+    def _guardar_con_nombre(self, sugerido, tipo, hacer_programa):
+        """Pide el nombre y guarda el programa que devuelve hacer_programa(nombre).
+
+        Las reglas del nombre son UNAS para todo programa: si no sirve se vuelve a pedir, y si ya existe un
+        archivo con ese nombre se pregunta antes de reemplazarlo. Devuelve (archivo, programa), o None si la
+        persona cancela.
+        """
+        origen = TEXTOS_GUARDAR[tipo][2]
         while True:
-            nombre = self._pedir_nombre(sugerido)
+            nombre = self._pedir_nombre(sugerido, tipo)
             if nombre is None:
-                self.avisar("Grabación descartada (no se le dio nombre).", "aviso", "Grabación", muestras=len(muestras))
-                return
+                return None
             try:
                 archivo = programas.nombre_de_archivo(nombre)
             except programas.ErrorPrograma as e:
-                self.avisar(str(e), "aviso", "Grabación", escrito=nombre)
+                self.avisar(str(e), "aviso", origen, escrito=nombre)
                 continue
             ruta = os.path.join(self.carpeta_programas, archivo)
-            if os.path.exists(ruta) and not self._confirmar_sobrescribir(archivo):
+            if os.path.exists(ruta) and not self._confirmar_sobrescribir(archivo, tipo):
                 sugerido = nombre
                 continue
-            p = programa_de_grabacion(muestras, nombre.strip(), self.robot)
+            p = hacer_programa(nombre.strip())
             try:
                 os.makedirs(self.carpeta_programas, exist_ok=True)
                 programas.guardar(p, ruta)
             except OSError as e:
-                self.avisar(f"No se pudo guardar {archivo}: {e}", "error", "Grabación", ruta=ruta)
+                self.avisar(f"No se pudo guardar {archivo}: {e}", "error", origen, ruta=ruta)
                 continue
-            break
-        self.ajustes.setValue("programa/ultimo", archivo)
-        self.recargar_programas()  # APARECE EN EL SELECTOR Y QUEDA ELEGIDA
-        self.avisar(f"Grabación guardada: {archivo} ({len(muestras)} muestras, {p.duracion:.1f} s)", "ok", "Grabación",
-                    ruta=ruta, muestras=len(muestras), duracion_s=p.duracion)
+            return archivo, p
 
     def _boton_grabar(self, grabando):
         """Aspecto de «grabando» (rol de tema.py): el botón en rojo y el aviso que se ve desde las tres pestañas."""
@@ -636,16 +651,19 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_GRABAR.style().unpolish(self.BTN_GRABAR)  # Qt SOLO RELEE LA HOJA AL CAMBIAR UNA PROPIEDAD SI SE LE PIDE
         self.BTN_GRABAR.style().polish(self.BTN_GRABAR)
 
-    def _pedir_nombre(self, sugerido):
+    def _pedir_nombre(self, sugerido, tipo="grabacion"):
         """El nombre que escribe la persona, o None si cancela."""
-        texto, ok = QtWidgets.QInputDialog.getText(self, "Guardar grabación", "Nombre de la grabación:",
-                                                   QtWidgets.QLineEdit.Normal, sugerido)
+        titulo, etiqueta, _ = TEXTOS_GUARDAR[tipo]
+        texto, ok = QtWidgets.QInputDialog.getText(self, titulo, etiqueta, QtWidgets.QLineEdit.Normal, sugerido)
         return texto if ok else None
 
-    def _confirmar_sobrescribir(self, archivo):
+    def _confirmar_sobrescribir(self, archivo, tipo="grabacion"):
+        return self._confirmar(TEXTOS_GUARDAR[tipo][0], f"Ya existe «{archivo}». ¿Reemplazarlo?")
+
+    def _confirmar(self, titulo, pregunta):
+        """Sí o no, con «No» por omisión: para lo que reemplaza algo sin vuelta atrás."""
         respuesta = QtWidgets.QMessageBox.question(
-            self, "Guardar grabación", f"Ya existe «{archivo}». ¿Reemplazarlo?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+            self, titulo, pregunta, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
         return respuesta == QtWidgets.QMessageBox.Yes
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

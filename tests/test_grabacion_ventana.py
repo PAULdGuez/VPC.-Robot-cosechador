@@ -43,8 +43,8 @@ def ventana(robot, tmp_path):
     w.enlace.enviar = lambda *servos: (w.enviados.append((w.reloj.t, tuple(servos))), enviar(*servos))[1]
     # LOS DIÁLOGOS SE CONTESTAN DESDE LA PRUEBA
     w.nombres, w.preguntas = [], []
-    w._pedir_nombre = lambda sugerido: w.nombres.pop(0) if w.nombres else None
-    w._confirmar_sobrescribir = lambda archivo: (w.preguntas.append(archivo), w.respuesta_sobrescribir)[1]
+    w._pedir_nombre = lambda sugerido, tipo="grabacion": w.nombres.pop(0) if w.nombres else None
+    w._confirmar_sobrescribir = lambda archivo, tipo="grabacion": (w.preguntas.append(archivo), w.respuesta_sobrescribir)[1]
     w.respuesta_sobrescribir = False
     yield w
     w.close()
