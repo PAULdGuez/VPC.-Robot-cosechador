@@ -3,6 +3,7 @@
 Aquí no se calcula nada: los movimientos los planea cosechador.movimiento y esta ventana solo
 ejecuta el plan paso a paso con un temporizador (sin bucles que bloqueen la interfaz).
 """
+import datetime as dt
 import math
 import os
 from collections import deque
@@ -18,6 +19,7 @@ from pyvistaqt import QtInteractor
 from cosechador import registro as reg
 from cosechador.hardware.enlace import abrir_enlace
 from cosechador.movimiento import programa as programas
+from cosechador.movimiento.grabadora import Grabadora, programa_de_grabacion
 from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_grabacion, plan_ir_y_volver,
                                                 plan_puntos, posicion, tramo_articular, tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
@@ -58,6 +60,7 @@ def abrir_camara(fuente):
 POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al cambiar de postura: negarse"))
 PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
+TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
 
 
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
@@ -111,6 +114,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.guardar_en_siguiente_frame = False
         self.imagen_fija = None
         self.cola = deque()
+        self.grabadora = Grabadora()  # ANTES DEL PRIMER poner_servos: AHÍ SE ENGANCHA LA GRABACIÓN
         self.temporizador_movimiento = QtCore.QTimer(self)
         self.temporizador_movimiento.setTimerType(QtCore.Qt.PreciseTimer)  # LAS GRABACIONES RESPETAN SUS TIEMPOS
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
@@ -162,13 +166,18 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         print(f"{evento.hora:%H:%M:%S} {nivel.upper():5} {origen}: {texto}")
         self.statusBar().showMessage(f"{ICONO_NIVEL[nivel]} {texto}")
 
-    def poner_servos(self, servos):
-        """Dibuja el robot con esos ángulos de servo y se los manda a la placa."""
+    def poner_servos(self, servos, duracion_s=None):
+        """Dibuja el robot con esos ángulos de servo y se los manda a la placa.
+
+        duracion_s: lo que dura este paso (para la grabación); None = un paso a velocidad 100 %.
+        """
         self.servos = tuple(servos)
         self.escena.dibujar(servo_a_dh(self.robot, self.servos))
         self.escena.agregar_al_recorrido(self.posicion)
         self.poner_etiquetas()
         comando, respuestas = self.enlace.enviar(*self.servos)
+        # SE GRABA AQUÍ, JUSTO DESPUÉS DE MANDARLA: LO GRABADO ES LO QUE RECIBIÓ LA PLACA, NO LO QUE DICEN LOS SLIDERS
+        self.grabadora.anotar(self.servos, duracion_s if duracion_s is not None else self.robot.movimiento.ms_por_paso / 1000)
         for respuesta in respuestas:
             self.avisar(respuesta, "aviso", "ESP32", comando=comando, placa=self.enlace.nombre)
 
@@ -212,13 +221,14 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.BTN_DETENER.setEnabled(False)
             return
         paso = self.cola.popleft()
-        if paso.servos is not None:
-            self.poner_servos(paso.servos)
-        if paso.aviso is not None:
-            self.avisar(paso.aviso, paso.nivel, self._origen_plan)
         # EL SIGUIENTE PASO LLEGA CUANDO TERMINA ESTE: SU DURACIÓN, ESCALADA POR LA VELOCIDAD GENERAL
         ms = paso.ms if paso.ms is not None else (self.robot.movimiento.ms_por_paso if paso.servos is not None else 0)
-        self.temporizador_movimiento.setInterval(max(1, int(round(ms * 100 / self.velocidad))))
+        intervalo = max(1, int(round(ms * 100 / self.velocidad)))
+        if paso.servos is not None:
+            self.poner_servos(paso.servos, intervalo / 1000)
+        if paso.aviso is not None:
+            self.avisar(paso.aviso, paso.nivel, self._origen_plan)
+        self.temporizador_movimiento.setInterval(intervalo)
 
     def detener(self):
         """■ Detener: el robot se queda donde iba y no se manda nada más a la placa."""
@@ -235,10 +245,21 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _ocupado(self, si):
         """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
         for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA,
-                        *self.sliders_servo, *self.sliders_xyz):
+                        self.BTN_GRABAR, *self.sliders_servo, *self.sliders_xyz):
             control.setEnabled(not si)
+        if self.grabadora.grabando:  # MIENTRAS SE GRABA, SOLO SE MUEVE CON LOS SLIDERS
+            for control in (self.CALCULAR, self.COSECHAR, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA):
+                control.setEnabled(False)
+
+    def _grabando_avisa(self):
+        """True (y avisa) si hay una grabación en curso: entonces no se reproduce, calcula ni cosecha."""
+        if self.grabadora.grabando:
+            self.avisar("Mientras se graba, el robot solo se mueve con los sliders.", "aviso", "Grabación")
+        return self.grabadora.grabando
 
     def _puede_planear(self):
+        if self._grabando_avisa():
+            return False
         if self.robot.cinematica_inversa is None:
             self.avisar(f"'{self.robot.nombre}' no tiene solver de cinemática inversa: solo se mueve con los sliders.",
                         "aviso", "Movimiento")
@@ -471,6 +492,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _configurar_programas(self):
         self.BTN_REPRODUCIR.clicked.connect(self.reproducir)
         self.BTN_DETENER.clicked.connect(self.detener)
+        self.BTN_GRABAR.clicked.connect(self.alternar_grabacion)
+        # EL BOTÓN MIDE LO DE SU TEXTO MÁS LARGO: AL CAMBIAR DE TEXTO, NADA DE LA FILA SE RECORRE
+        anchos = []
+        for texto in (TEXTO_DETENER_GRABACION, TEXTO_GRABAR):
+            self.BTN_GRABAR.setText(texto)
+            anchos.append(self.BTN_GRABAR.sizeHint().width())
+        self.BTN_GRABAR.setMinimumWidth(max(anchos))
         self.SELECTOR_PROGRAMA.currentIndexChanged.connect(self._programa_elegido)
         self.recargar_programas()
 
@@ -519,7 +547,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def reproducir(self):
         """▶ Reproducir: el plan se calcula COMPLETO antes de mover; si no puede terminar, no arranca."""
-        if self.en_movimiento:
+        if self.en_movimiento or self._grabando_avisa():
             return
         p = self.programa_elegido()
         if p is None:
@@ -539,6 +567,77 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.avisar(f"Reproduciendo «{p.nombre}» (~{segundos:.1f} s)", "info", "Programa",
                     programa=p.nombre, tipo=p.tipo, duracion_s=segundos, velocidad=self.velocidad, postura=self.postura)
         self.ejecutar(plan, origen="Programa")
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% GRABACIÓN (PESTAÑA PROGRAMA) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # LA LÓGICA VIVE EN cosechador/movimiento/grabadora.py; AQUÍ SOLO SE CONECTA CON LOS BOTONES Y LOS DIÁLOGOS.
+    def alternar_grabacion(self):
+        """⏺ Grabar / ⏹ Detener grabación."""
+        if self.grabadora.grabando:
+            self.terminar_grabacion()
+        elif self.BTN_GRABAR.isEnabled():  # APAGADO MIENTRAS SE REPRODUCE, CALCULA O COSECHA
+            self.empezar_grabacion()
+
+    def empezar_grabacion(self):
+        self.grabadora.empezar(self.servos)
+        self._boton_grabar(grabando=True)
+        self._ocupado(False)
+        self.INFO_PROGRAMA.setText("⏺ Grabando…")
+        self.avisar("Grabando: lo que se mueva con los sliders queda guardado.", "info", "Grabación", servos=self.servos)
+
+    def terminar_grabacion(self):
+        muestras = self.grabadora.terminar()
+        self._boton_grabar(grabando=False)
+        self._ocupado(False)
+        self._programa_elegido()
+        if muestras is None:
+            self.avisar("No se guardó: no hubo movimiento mientras se grababa.", "aviso", "Grabación")
+            return
+        sugerido = f"grabacion-{dt.datetime.now():%Y-%m-%d-%H%M}"
+        while True:
+            nombre = self._pedir_nombre(sugerido)
+            if nombre is None:
+                self.avisar("Grabación descartada (no se le dio nombre).", "aviso", "Grabación", muestras=len(muestras))
+                return
+            try:
+                archivo = programas.nombre_de_archivo(nombre)
+            except programas.ErrorPrograma as e:
+                self.avisar(str(e), "aviso", "Grabación", escrito=nombre)
+                continue
+            ruta = os.path.join(self.carpeta_programas, archivo)
+            if os.path.exists(ruta) and not self._confirmar_sobrescribir(archivo):
+                sugerido = nombre
+                continue
+            p = programa_de_grabacion(muestras, nombre.strip(), self.robot)
+            try:
+                os.makedirs(self.carpeta_programas, exist_ok=True)
+                programas.guardar(p, ruta)
+            except OSError as e:
+                self.avisar(f"No se pudo guardar {archivo}: {e}", "error", "Grabación", ruta=ruta)
+                continue
+            break
+        self.ajustes.setValue("programa/ultimo", archivo)
+        self.recargar_programas()  # APARECE EN EL SELECTOR Y QUEDA ELEGIDA
+        self.avisar(f"Grabación guardada: {archivo} ({len(muestras)} muestras, {p.duracion:.1f} s)", "ok", "Grabación",
+                    ruta=ruta, muestras=len(muestras), duracion_s=p.duracion)
+
+    def _boton_grabar(self, grabando):
+        """Texto y aspecto del botón (rol «grabando» de tema.py: rojo mientras graba)."""
+        self.BTN_GRABAR.setText(TEXTO_DETENER_GRABACION if grabando else TEXTO_GRABAR)
+        self.BTN_GRABAR.setProperty("rol", "grabando" if grabando else "")
+        self.BTN_GRABAR.style().unpolish(self.BTN_GRABAR)  # Qt SOLO RELEE LA HOJA AL CAMBIAR UNA PROPIEDAD SI SE LE PIDE
+        self.BTN_GRABAR.style().polish(self.BTN_GRABAR)
+
+    def _pedir_nombre(self, sugerido):
+        """El nombre que escribe la persona, o None si cancela."""
+        texto, ok = QtWidgets.QInputDialog.getText(self, "Guardar grabación", "Nombre de la grabación:",
+                                                   QtWidgets.QLineEdit.Normal, sugerido)
+        return texto if ok else None
+
+    def _confirmar_sobrescribir(self, archivo):
+        respuesta = QtWidgets.QMessageBox.question(
+            self, "Guardar grabación", f"Ya existe «{archivo}». ¿Reemplazarlo?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+        return respuesta == QtWidgets.QMessageBox.Yes
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VISIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_vision(self):

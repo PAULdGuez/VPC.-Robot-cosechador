@@ -86,6 +86,7 @@ QPushButton[rol="primario"]:hover { background: $primario_claro; border-color: $
 QPushButton[rol="suave"] { background: $primario; color: white; border: none; border-radius: $radio_chico;
                            font-size: $letra_chica; font-weight: bold; padding: 0px 4px; min-height: 24px; }
 QPushButton[rol="suave"]:hover { background: $primario_claro; }
+QPushButton[rol="grabando"], QPushButton[rol="grabando"]:hover { background: $rojo; color: white; border-color: $rojo; }
 QPushButton:disabled, QPushButton[rol="accion"]:disabled, QPushButton[rol="confirmar"]:disabled,
 QPushButton[rol="primario"]:disabled { background: #f2f2f2; color: $tinta_apagada; border-color: $apagado; }
 

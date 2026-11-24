@@ -1252,6 +1252,16 @@ N</string>
                                   </property>
                                 </widget>
                               </item>
+                              <item>
+                                <widget class="QPushButton" name="BTN_GRABAR">
+                                  <property name="text">
+                                    <string>⏺ Grabar</string>
+                                  </property>
+                                  <property name="toolTip">
+                                    <string>Graba lo que se mueva con los sliders; al detener, pide un nombre</string>
+                                  </property>
+                                </widget>
+                              </item>
                             </layout>
                           </item>
                           <item>
