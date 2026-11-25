@@ -25,9 +25,10 @@ def datos_yaml():
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CINEMATICA (COMPORTAMIENTO DE SIEMPRE) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 def test_home_es_alcanzable_y_coincide_con_los_sliders(robot):
-    # HOME ESTA SOBRE EL EJE DE LA BASE: LA BASE VA AL CENTRO DE SU RANGO (90°). A HOME LLEGA LA PUNTA DE LA
-    # HERRAMIENTA (120 mm): BRAZO Y ANTEBRAZO YA NO QUEDAN COMO LOS SLIDERS ORIGINALES (45, 45), QUE ERA (90, 46, 46)
-    assert tuple(round(s) for s in angulos_servo(robot, robot.home)) == (90, 36, 45)
+    # HOME ES UNA POSTURA: EL EXTREMO DEL ANTEBRAZO ESTA SOBRE EL EJE DE LA BASE (LA BASE VA AL CENTRO DE SU RANGO, 90°),
+    # CON BRAZO Y ANTEBRAZO COMO LOS SLIDERS ORIGINALES (45, 45) QUE ERAN (90, 46, 46), TENGA O NO HERRAMIENTA
+    assert tuple(round(s) for s in robot.postura_home) == (90, 46, 46)
+    assert alcanzable(robot, robot.home) and cinematica_directa(robot, servo_a_dh(robot, robot.postura_home)) == pytest.approx(robot.home, abs=1e-6)
 
 
 @pytest.mark.parametrize("servos", [(0, 20, 0), (90, 45, 45), (180, 180, 180), (30, 100, 120), (150, 60, 10)])
@@ -61,7 +62,7 @@ def test_un_empate_de_acomodos_no_lo_decide_el_ruido(robot):
     # A UN LADO DE HOME, LA BASE A 0° Y A 180° QUEDAN IGUAL DE LEJOS (90°): GANA LA QUE MIRA AL PUNTO, AUNQUE EL
     # RUIDO NUMÉRICO PONGA EL PUNTO UN PELO DEL OTRO LADO DE y = 0. (SI NO, EL BRAZO SALE DE HOME DE ESPALDAS AL
     # PUNTO Y A LOS POCOS CENTÍMETROS TIENE QUE CAMBIAR DE POSTURA.)
-    home = angulos_servo(robot, robot.home)
+    home = angulos_servo(robot, robot.punto_de_giro)  # EL PUNTO SOBRE EL EJE, DONDE LA BASE A 0° Y A 180° EMPATAN
     for ruido in (-1e-13, 0.0, 1e-13):
         assert angulos_servo_cercanos(robot, (0.4, ruido, 1065), home)[0] == pytest.approx(0, abs=1e-6)
         assert angulos_servo_cercanos(robot, (-0.4, ruido, 1065), home)[0] == pytest.approx(180, abs=1e-6)
@@ -109,6 +110,7 @@ def test_el_barrido_llega_a_los_dos_limites_de_cada_servo(datos_yaml):
 def test_c2_medida_del_yaml_llega_a_todo(datos_yaml):
     # SE ALARGA EL ANTEBRAZO EN EL YAML: CINEMATICA DIRECTA, INVERSA Y VOLUMEN LO USAN SIN TOCAR CODIGO
     datos_yaml["articulaciones"][2]["dh"]["a"] = 900
+    datos_yaml["home_mm"] = [0, 0, 1200]  # CON EL ANTEBRAZO MÁS LARGO, LA PUNTA YA NO ALCANZA EL PUNTO DE GIRO A 1065 (P12)
     largo = robot_desde_dict(datos_yaml)
     estirado = cinematica_directa(largo, (0, 0, 0))
     assert estirado == pytest.approx((2020, 0, 350))  # 1000 + 900 + LOS 120 mm DE LA HERRAMIENTA
@@ -185,9 +187,9 @@ def test_movimiento_por_omision_si_el_yaml_no_lo_trae(robot_4gdl):
 def test_home_redondeado_de_un_archivo_sigue_sobre_el_eje(robot):
     # 18-NOV: EL HOME DE UN PROGRAMA GUARDADO (SERVOS CON 4 DECIMALES) QUEDA A 0.0005 mm DEL EJE; CON
     # TOLERANCIAS DE 1e-6 EL JOG HACIA +X FALLABA A LOS 350 mm EN LUGAR DE A LOS 1545 mm
-    # (24-NOV: CON LA HERRAMIENTA DE 120 mm HOME ES (90, 35.9155, 44.9249) Y LA PUNTA LLEGA HASTA LOS 1675 mm)
+    # (24-NOV: CON LA HERRAMIENTA DE 120 mm, EL PUNTO SOBRE EL EJE ES (90, 35.9155, 44.9249) Y LA PUNTA LLEGA HASTA LOS 1675 mm)
     from cosechador.movimiento.trayectorias import tramo_continuo
-    redondeado = tuple(round(s, 4) for s in angulos_servo(robot, robot.home))
+    redondeado = tuple(round(s, 4) for s in angulos_servo(robot, robot.punto_de_giro))
     assert redondeado == (90.0, 35.9155, 44.9249)
     plan, motivo = tramo_continuo(robot, redondeado, (2050, 0, 1065), "despacio", pasos=411)
     assert "(1675, 0, 1065)" in motivo or "(1674, 0, 1065)" in motivo

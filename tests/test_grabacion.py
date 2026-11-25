@@ -22,7 +22,7 @@ class RelojFalso:
 
 @pytest.fixture(scope="module")
 def home_s(robot):
-    return angulos_servo(robot, robot.home)
+    return robot.postura_home
 
 
 def grabar_pasos(grabadora, reloj, pasos):

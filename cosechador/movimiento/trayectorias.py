@@ -114,13 +114,13 @@ def tramo_recto(robot, origen, destino, pasos=PASOS_POR_TRAMO):
 
 
 def _ir(robot, servos, destino, postura, via_home):
-    """Pasos para llegar a destino desde `servos`. Si la recta no sirve y via_home, prueba pasar por
-    HOME. Devuelve (pasos, servos_finales, motivo)."""
+    """Pasos para llegar a destino desde `servos`. Si la recta no sirve y via_home, prueba pasar por el punto de
+    giro de la base (donde girarla no mueve la punta), no por la punta de HOME. Devuelve (pasos, servos_finales, motivo)."""
     plan, motivo = tramo_continuo(robot, servos, destino, postura)
     if plan is not None:
         return plan, servos_del_plan(plan)[-1] if servos_del_plan(plan) else servos, None
     if via_home:
-        a_home, _ = tramo_continuo(robot, servos, robot.home, postura)
+        a_home, _ = tramo_continuo(robot, servos, robot.punto_de_giro, postura)
         if a_home is not None:
             en_home = servos_del_plan(a_home)[-1] if servos_del_plan(a_home) else servos
             desde_home, _ = tramo_continuo(robot, en_home, destino, postura)
@@ -130,7 +130,7 @@ def _ir(robot, servos, destino, postura, via_home):
 
 
 def plan_ir_y_volver(robot, servos, destino, postura=None):
-    """Ir al destino en línea recta y regresar a HOME (botón CALCULAR)."""
+    """Ir al destino en línea recta y regresar a HOME, a la postura de descanso (botón CALCULAR)."""
     if not alcanzable(robot, destino):
         return [Paso(aviso=f"Punto fuera del volumen de trabajo: {_texto(destino)}", nivel="aviso")]
     ida, llegada, motivo = _ir(robot, servos, destino, postura, via_home=False)

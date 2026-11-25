@@ -9,6 +9,10 @@ nombre: Cosechador de aguacates (3 GDL)
 # hay solver (el robot se carga, se dibuja y se mueve con los sliders, pero no calcula trayectorias).
 cinematica_inversa: antropomorfico_3r
 
+# HOME es una POSTURA: la que lleva el brazo SIN herramienta a este punto (sobre el eje de la base). Con herramienta,
+# el brazo y la cámara quedan en HOME donde estaban; solo cambia dónde queda la punta. Este punto es también donde la
+# base gira en el lugar (la punta no se mueve) al cruzar de un lado al otro. La punta con herramienta tiene que poder
+# llegar a él: si no, la app no abre el archivo y dice por qué.
 home_mm: [0, 0, 1065]
 
 base:
@@ -39,7 +43,7 @@ efector:
   pieza: efector.stl
   color: "#c9d1d9"
   # Herramienta: cuánto sobresale del extremo del antebrazo, alineada con él. Lo que se pide por coordenadas
-  # (X, Y, Z, un fruto, HOME) lo alcanza su PUNTA. Sin este campo, 0: no hay herramienta.
+  # (X, Y, Z, un fruto) lo alcanza su PUNTA. Sin este campo, 0: no hay herramienta.
   # 120 es provisional (falta medir la herramienta real). Se cambia aquí: la interfaz solo lo enseña.
   largo: 120
 

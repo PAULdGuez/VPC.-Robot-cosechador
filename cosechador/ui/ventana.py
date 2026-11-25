@@ -25,7 +25,7 @@ from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_
                                                 plan_puntos, posicion, tramo_a_punto, tramo_articular,
                                                 tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
-from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
+from cosechador.robot.cinematica_inversa import alcanzable
 from cosechador.robot.espacio_trabajo import barrer, contorno_del_corte, giro_de_la_base
 from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
@@ -228,10 +228,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.escena.agregar_al_recorrido(tuple(posicion(self.robot, servos)))
 
     def _ir_a_home(self):
-        try:
-            servos = angulos_servo(self.robot, self.robot.home)
-        except SinSolver:
-            servos = None
+        servos = self.robot.postura_home
         if servos is None:  # SIN SOLVER (O HOME INALCANZABLE): CADA SERVO AL CENTRO DE SU RANGO
             servos = tuple(j.servo.centro for j in self.robot.articulaciones)
         self.poner_servos(servos)

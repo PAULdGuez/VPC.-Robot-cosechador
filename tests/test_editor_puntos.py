@@ -33,7 +33,7 @@ IDA, VUELTA = (800, 300, 900), (-800, 300, 900)
 
 @pytest.fixture(scope="module")
 def home_s(robot):
-    return angulos_servo(robot, robot.home)
+    return robot.postura_home
 
 
 @pytest.fixture(scope="module")

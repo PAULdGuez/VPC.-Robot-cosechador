@@ -9,6 +9,9 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import yaml
 
+from .cinematica import cinematica_directa, servo_a_dh
+from .cinematica_inversa import angulos_servo, motivo_de_no_alcanzar
+
 CARPETA_ROBOTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "robots")
 ROBOT_POR_OMISION = os.path.join(CARPETA_ROBOTS, "cosechador_3gdl.yaml")
 
@@ -89,7 +92,8 @@ class Movimiento:
 class Robot:
     nombre: str
     articulaciones: tuple
-    home: tuple
+    home: tuple                    # DÓNDE QUEDA LA PUNTA EN LA POSTURA DE HOME (con_herramienta lo calcula)
+    punto_de_giro: tuple           # EL home_mm DEL ARCHIVO: SOBRE EL EJE DE LA BASE, DONDE GIRARLA NO MUEVE LA PUNTA
     base: Pieza
     efector: Efector
     camara: Camara
@@ -98,6 +102,7 @@ class Robot:
     puntos_demo: tuple = ()
     carpeta_modelos: str = ""
     movimiento: Movimiento = Movimiento()
+    postura_home: tuple | None = None  # SERVOS DE HOME: LOS QUE LLEVAN EL BRAZO SIN HERRAMIENTA AL PUNTO DE GIRO
 
     @property
     def gdl(self):
@@ -157,13 +162,28 @@ def _pieza(datos, donde, clase=Pieza):
 def con_herramienta(robot, largo):
     """El mismo robot con otra herramienta: su punta queda `largo` mm más allá del extremo del último eslabón.
 
-    Es el único lugar que decide qué largo vale, venga del archivo del robot o de la interfaz: un número de
-    milímetros entre 0 y el alcance del brazo (una herramienta más larga que el brazo entero es un error de dedo).
+    Es el único lugar que decide qué largo vale y qué es HOME con él. El largo: un número de milímetros entre 0 y el
+    alcance del brazo (una herramienta más larga que el brazo entero es un error de dedo). HOME es una POSTURA: la que
+    lleva al brazo SIN herramienta al punto de giro (`home_mm` del archivo), de modo que el brazo y la cámara quedan en
+    HOME donde estaban antes de tener herramienta; `home` es dónde queda la punta en esa postura. Si con la herramienta
+    la punta ya no alcanza el punto de giro (dónde se cruza de un lado al otro), el archivo no es válido.
     """
     if isinstance(largo, bool) or not isinstance(largo, (int, float)) or not 0 <= largo <= robot.alcance:
         raise ErrorConfiguracion(f"'efector.largo' debe ser un número de milímetros entre 0 y {robot.alcance:g}, "
                                  f"el alcance del brazo (llegó {largo!r}).")
-    return replace(robot, efector=replace(robot.efector, largo=float(largo)))
+    sin = replace(robot, efector=replace(robot.efector, largo=0.0))
+    con = replace(robot, efector=replace(robot.efector, largo=float(largo)))
+    postura = angulos_servo(sin, robot.punto_de_giro) if robot.cinematica_inversa is not None else None
+    if postura is None:  # SIN SOLVER, O NI SIN HERRAMIENTA SE ALCANZA EL PUNTO (YA ERA ASÍ): NO HAY POSTURA DE HOME
+        return replace(con, home=robot.punto_de_giro, postura_home=None)
+    motivo = motivo_de_no_alcanzar(con, robot.punto_de_giro)
+    if motivo is not None:
+        punto = ", ".join(f"{c:g}" for c in robot.punto_de_giro)
+        raise ErrorConfiguracion(f"Con una herramienta de {con.efector.largo:g} mm la punta no puede llegar al punto de giro "
+                                 f"({punto}) que el archivo pone sobre el eje de la base: {motivo}. "
+                                 "Acorta 'efector.largo' o cambia 'home_mm'.")
+    home = tuple(float(c) for c in cinematica_directa(con, servo_a_dh(con, postura)))
+    return replace(con, home=home, postura_home=tuple(postura))
 
 
 def _servo(datos, donde):
@@ -252,7 +272,8 @@ def robot_desde_dict(datos, carpeta_modelos=""):
     robot = Robot(
         nombre=str(_campo(datos, "nombre", "el robot")),
         articulaciones=tuple(_articulacion(j, i) for i, j in enumerate(articulaciones)),
-        home=_vector(datos, "home_mm", "el robot", 3),
+        home=_vector(datos, "home_mm", "el robot", 3),  # PROVISIONAL: con_herramienta CALCULA EL DEFINITIVO
+        punto_de_giro=_vector(datos, "home_mm", "el robot", 3),
         base=_pieza(datos.get("base", {}), "base"),
         efector=_pieza(efector, "efector", Efector),
         camara=_camara(_campo(datos, "camara", "el robot", dict)),

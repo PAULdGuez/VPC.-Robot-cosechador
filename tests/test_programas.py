@@ -11,7 +11,7 @@ from cosechador.robot.cinematica_inversa import angulos_servo, salto
 
 @pytest.fixture(scope="module")
 def home_s(robot):
-    return angulos_servo(robot, robot.home)
+    return robot.postura_home
 
 
 def programa_puntos(robot, *puntos):
@@ -97,7 +97,7 @@ def test_b1_4_reproducir_puntos(robot, home_s):
     plan, problemas = plan_puntos(robot, home_s, p)
     assert problemas == []
     visitadas = [posicion(robot, s) for s in servos_del_plan(plan)]
-    for objetivo in (arriba, corte, robot.home):
+    for objetivo in (arriba, corte, robot.home):  # (home: DONDE QUEDA LA PUNTA EN LA POSTURA DE HOME)
         assert min(np.linalg.norm(v - objetivo) for v in visitadas) < 0.5
     assert max(saltos(home_s, plan)) <= robot.movimiento.salto_max_por_paso + 1e-9
     # EL TRAMO LINEAL VA EN RECTA (X, Y FIJAS) Y A 20 %: CADA PASO DURA 5 VECES MÁS

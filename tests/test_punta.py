@@ -1,8 +1,9 @@
-"""Punta de herramienta (criterios P1 a P8) y los remates del volumen de trabajo (V7 y V8).
+"""Punta de herramienta (criterios P1 a P12) y los remates del volumen de trabajo (V7 y V8).
 
 La herramienta es una extensión fija al final del antebrazo, alineada con él; su largo vive en los datos del
-robot (`efector.largo`). Lo que se pide por coordenadas lo alcanza la PUNTA; la cámara sigue atornillada al
-extremo del antebrazo.
+robot (`efector.largo`) y la app solo lo enseña. Lo que se pide por coordenadas lo alcanza la PUNTA; la cámara
+sigue atornillada al extremo del antebrazo. HOME es una POSTURA (P9 a P11): el punto que dice el archivo del robot
+(`home_mm`) es el punto de giro de la base y la postura de descanso es la que lleva a ese punto al brazo sin herramienta.
 
 Dónde queda la punta se mide aquí por otro camino que el del producto: trigonometría a mano (`punta_a_mano`),
 sin las matrices de cosechador/robot/cinematica.py. Los números de «hoy» (P5 y P7) se congelaron el 24-nov-2026
@@ -26,7 +27,7 @@ from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
 from cosechador.movimiento.trayectorias import (plan_cosecha, plan_ir_y_volver, posicion, servos_del_plan,
                                                 tramo_continuo)
-from cosechador.robot import ErrorConfiguracion, config, robot_desde_dict
+from cosechador.robot import ErrorConfiguracion, cargar_robot, config, robot_desde_dict
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import angulos_servo
 from cosechador.robot.config import ROBOT_POR_OMISION
@@ -371,12 +372,13 @@ def test_p2_la_pestana_punta_xyz_mueve_la_punta_y_la_muestra(robot, abrir):
     assert [(s.minimum(), s.maximum()) for s in w.sliders_xyz] == [(-2170, 2170), (-2170, 2170), (0, 2170)]
     salida = punta_a_mano(robot, w.servos)
     w.PESTANAS_MOVIMIENTO.setCurrentIndex(1)
-    w.SLIDER_X.setValue(300)  # DE HOME (0, 0, 1065) A (300, 0, 1065)
+    w.SLIDER_X.setValue(300)  # DE LA PUNTA EN HOME (0, 120, 1065: LA HERRAMIENTA APUNTA A +Y) A (300, 120, 1065)
     correr(w)
+    destino = (300, *(round(c) for c in robot.home[1:]))  # LOS SLIDERS PIDEN MILÍMETROS ENTEROS
     puntas = np.array([punta_a_mano(robot, s) for s in w.enviados])
-    assert puntas[-1] == pytest.approx((300, 0, 1065), abs=1e-3)
-    assert lejos_de_la_recta(puntas, salida, (300, 0, 1065)) < RECTA_MM
-    assert [valor.text() for valor in w.valores_xyz] == ["300", "0", "1065"]  # LAS COORDENADAS QUE SE VEN SON LAS DE LA PUNTA
+    assert puntas[-1] == pytest.approx(destino, abs=1e-3)
+    assert lejos_de_la_recta(puntas, salida, destino) < RECTA_MM
+    assert [valor.text() for valor in w.valores_xyz] == [f"{round(c)}" for c in destino]  # LAS COORDENADAS QUE SE VEN SON LAS DE LA PUNTA
     assert w.posicion == pytest.approx(puntas[-1], abs=1e-6)
 
 
@@ -386,7 +388,7 @@ def test_p2_al_salir_de_home_la_base_voltea_hacia_el_punto(robot, largo):
     # ESPALDA (Y EL BRAZO DOBLARSE HACIA ATRÁS): LOS DOS GIROS MIDEN 90°. QUE NO LO DECIDA EL RUIDO NUMÉRICO: CON
     # HERRAMIENTAS DE 60, 120 Y 200 mm LE DABA LA ESPALDA Y A LOS 121-278 mm TENÍA QUE CAMBIAR DE POSTURA.
     con = config.con_herramienta(robot, largo)
-    home = angulos_servo(con, con.home)
+    home = angulos_servo(con, con.punto_de_giro)  # SE SALE DEL PUNTO SOBRE EL EJE DE LA BASE
     for destino, base in (((300, 0, 1065), 0), ((-300, 0, 1065), 180)):
         plan, motivo = tramo_continuo(con, home, destino, "negar")
         assert motivo is None, (largo, destino, motivo)
@@ -436,7 +438,7 @@ def test_p4_cosechar_lleva_la_punta_a_cada_fruto(robot, abrir):
 
 
 def test_p4_los_frutos_de_demostracion_siguen_al_alcance_de_la_punta(robot):
-    plan, cosechados = plan_cosecha(robot, angulos_servo(robot, robot.home), robot.puntos_demo)
+    plan, cosechados = plan_cosecha(robot, robot.postura_home, robot.puntos_demo)
     assert cosechados == len(robot.puntos_demo) == HOY_COSECHA["cosechados"]
     puntas = np.array([punta_a_mano(robot, s) for s in servos_del_plan(plan)])
     for fruto in robot.puntos_demo:
@@ -525,7 +527,7 @@ def test_p7_la_camara_mide_lo_de_hoy(como_hoy):
 
 
 def test_p7_cosechar_calcular_y_la_recta_planean_lo_de_hoy(como_hoy):
-    home = angulos_servo(como_hoy, como_hoy.home)
+    home = como_hoy.postura_home
     plan, cosechados = plan_cosecha(como_hoy, home, como_hoy.puntos_demo)
     servos = np.array(servos_del_plan(plan))
     assert (len(servos), cosechados) == (HOY_COSECHA["pasos"], HOY_COSECHA["cosechados"])
@@ -635,6 +637,147 @@ def test_p8_el_texto_no_ensancha_la_ventana_y_el_auditor_no_halla_nada(robot, ab
     assert au.auditar(w) == []
     w.VER_VOLUMEN.click()  # CON EL OTRO RÓTULO DEL BOTÓN TAMPOCO SE CORTA NI SE ENCIMA NADA
     assert au.auditar(w) == []
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P9: HOME ES UNA POSTURA, NO UN PUNTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+@pytest.mark.parametrize("largo", [0, 120, 300])
+def test_p9_con_cualquier_herramienta_el_brazo_y_la_camara_en_home_quedan_donde_estaban(robot, con_largo, abrir, largo):
+    r = con_largo(largo)
+    w = abrir(r)
+    assert w.servos == pytest.approx(HOY_HOME_SERVOS, abs=1e-5)                 # LOS SERVOS DE SIEMPRE, CON CUALQUIER LARGO
+    camara = pose_camara(r, servo_a_dh(r, w.servos))
+    sin = config.con_herramienta(robot, 0)  # SIN HERRAMIENTA, LLEVAR EL BRAZO AL PUNTO DE HOME ES LLEVAR AHÍ SU EXTREMO
+    sin_herramienta = pose_camara(sin, servo_a_dh(sin, angulos_servo(sin, (0, 0, 1065))))
+    assert camara[:3, 3] == pytest.approx((0, 0, 1065), abs=1e-4)               # LA CÁMARA, EN EL PUNTO DE SIEMPRE...
+    assert camara == pytest.approx(sin_herramienta, abs=1e-6)                   # ...Y MIRANDO COMO SIEMPRE
+    # LO ÚNICO QUE CAMBIA ES DÓNDE QUEDA LA PUNTA: `largo` mm MÁS ALLÁ DEL EXTREMO DEL ANTEBRAZO
+    assert w.posicion == pytest.approx(punta_a_mano(r, HOY_HOME_SERVOS), abs=1e-4)
+    assert np.linalg.norm(w.posicion - camara[:3, 3]) == pytest.approx(largo, abs=1e-4)
+    assert r.home == pytest.approx(w.posicion, abs=1e-4)                        # Y ESE ES EL HOME DEL ROBOT
+    assert r.postura_home == pytest.approx(HOY_HOME_SERVOS, abs=1e-5)
+
+
+def test_p9_el_punto_del_archivo_no_cambia_y_es_donde_gira_la_base_sin_mover_la_punta(robot):
+    assert robot.punto_de_giro == (0, 0, 1065)                                   # LO QUE DICE home_mm EN EL ARCHIVO
+    # CON LA BASE EN OTRO ÁNGULO, LA PUNTA SIGUE EN ESE PUNTO: GIRA EN EL LUGAR
+    servos = angulos_servo(robot, robot.punto_de_giro)
+    assert punta_a_mano(robot, servos) == pytest.approx(robot.punto_de_giro, abs=1e-6)
+    assert punta_a_mano(robot, (30, *servos[1:])) == pytest.approx(robot.punto_de_giro, abs=1e-6)
+
+
+def test_p9_sin_postura_de_descanso_la_app_abre_con_cada_servo_al_centro(robot, datos_yaml, abrir):
+    # LÍMITES RECORTADOS (LOS DE test_volumen::test_v4): NI SIN HERRAMIENTA LA PUNTA ALCANZA EL PUNTO DEL ARCHIVO
+    base, hombro, codo = (a["servo"] for a in datos_yaml["articulaciones"])
+    base["max"], hombro["max"], codo["min"] = 95, 133, 47
+    recortado = robot_desde_dict(datos_yaml, carpeta_modelos=robot.carpeta_modelos)
+    assert recortado.postura_home is None and recortado.home == recortado.punto_de_giro
+    w = abrir(recortado)
+    assert w.servos == pytest.approx([j.servo.centro for j in recortado.articulaciones])
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P10: CALCULAR Y COSECHAR REGRESAN A HOME %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+@pytest.mark.parametrize("postura", [None, "despacio", "negar"])
+def test_p10_la_cosecha_de_demostracion_completa_sus_9_puntos_y_termina_en_home(robot, postura):
+    plan, cosechados = plan_cosecha(robot, robot.postura_home, robot.puntos_demo, postura)
+    assert cosechados == len(robot.puntos_demo) == 9
+    assert plan[-1].aviso == "Cosecha terminada: 9 de 9 puntos alcanzados."
+    assert servos_del_plan(plan)[-1] == pytest.approx(robot.postura_home, abs=1e-6)  # TERMINA EN LA POSTURA DE HOME
+    puntas = np.array([punta_a_mano(robot, s) for s in servos_del_plan(plan)])
+    for fruto in robot.puntos_demo:                                                  # Y LA PUNTA PASÓ POR CADA PUNTO
+        assert np.linalg.norm(puntas - fruto, axis=1).min() < 1e-3, fruto
+
+
+def test_p10_calcular_y_cosechar_en_la_app_regresan_a_la_postura_de_home(robot, abrir):
+    w = abrir(robot)
+    ir_a(w, (356, 711, 1014))
+    assert ultimo_aviso(w).mensaje == "Punto (356, 711, 1014) alcanzado; de regreso en HOME."
+    assert w.servos == pytest.approx(HOY_HOME_SERVOS, abs=1e-4)
+    w.puntos_cosecha = list(robot.puntos_demo)
+    w.COSECHAR.click()
+    correr(w)
+    assert ultimo_aviso(w).mensaje == "Cosecha terminada: 9 de 9 puntos alcanzados."
+    assert w.servos == pytest.approx(HOY_HOME_SERVOS, abs=1e-4)
+    assert w.posicion == pytest.approx(robot.home, abs=1e-3)
+
+
+def test_p10_cruzar_por_el_punto_de_giro_no_mueve_la_punta_aunque_haya_herramienta(robot):
+    # AL IR DE UN LADO AL OTRO POR EL EJE DE LA BASE, EL BRAZO PASA POR EL PUNTO DE GIRO (NO POR HOME): AHÍ LA BASE
+    # GIRA EN EL LUGAR. SI PASARA POR LA PUNTA DE HOME, QUE ESTÁ FUERA DEL EJE, EL GIRO BARRERÍA EL ESPACIO.
+    plan, cosechados = plan_cosecha(robot, robot.postura_home, [(-1656, 0, 500), (1656, 0, 500)], "negar")
+    assert cosechados == 2  # LA RECTA DE UNO A OTRO PASA DEMASIADO CERCA DEL EJE: SE VA POR EL PUNTO DE GIRO
+    avisos = [p.aviso for p in plan if p.aviso]
+    assert any("Giro en el lugar" in a and "(0, 0, 1065)" in a for a in avisos)
+    assert not any("Cambio de postura" in a for a in avisos)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P11: UN PROGRAMA QUE TERMINA EN HOME SIGUE TERMINANDO EN HOME %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_p11_demo_cosecha_termina_en_home(robot, abrir):
+    w = abrir(robot, programas=prog.CARPETA_PROGRAMAS)
+    reproducir(w, "demo-cosecha.yaml", desde=w.servos)
+    assert w.enviados[-1] == pytest.approx(HOY_HOME_SERVOS, abs=1e-4)
+    assert w.servos == pytest.approx(robot.postura_home, abs=1e-4)               # LA POSTURA DE HOME DEL ROBOT
+    assert w.posicion == pytest.approx(robot.home, abs=1e-3)                     # Y SU PUNTA, EN EL HOME DEL ROBOT
+    assert w.enlace.dispositivo.historial[-1] == HOY_DEMO_PLACA[-1]
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P12: UN LARGO QUE NO ALCANZA EL PUNTO DE GIRO SE DICE AL ABRIR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def guardar_robot(datos, carpeta):
+    ruta = carpeta / "robots" / "largo.yaml"
+    ruta.parent.mkdir()
+    ruta.write_text(yaml.safe_dump(datos, allow_unicode=True), encoding="utf-8")
+    return str(ruta)
+
+
+def carga(datos, robot):
+    try:
+        robot_desde_dict(datos, carpeta_modelos=robot.carpeta_modelos)
+    except ErrorConfiguracion:
+        return False
+    return True
+
+
+@pytest.mark.parametrize("largo", [312, 400])
+def test_p12_un_largo_con_el_que_la_punta_no_alcanza_el_punto_de_giro_se_dice_con_el_motivo(datos_yaml, tmp_path, largo):
+    datos_yaml["efector"]["largo"] = largo
+    with pytest.raises(ErrorConfiguracion) as error:
+        cargar_robot(guardar_robot(datos_yaml, tmp_path))
+    mensaje = str(error.value)
+    assert mensaje.startswith("largo.yaml: ")                                    # COMO CUALQUIER ARCHIVO INVÁLIDO
+    assert f"herramienta de {largo} mm" in mensaje and "(0, 0, 1065)" in mensaje
+    assert "Hombro" in mensaje and "20" in mensaje                               # EL MOTIVO: EL SERVO QUE LLEGA A SU LÍMITE
+    assert "efector.largo" in mensaje                                            # Y DÓNDE SE ARREGLA
+
+
+def test_p12_hasta_311_mm_se_abre(datos_yaml, robot):
+    datos_yaml["efector"]["largo"] = 311
+    assert carga(datos_yaml, robot)
+
+
+def test_p12_el_tope_no_es_un_numero_sale_de_si_la_punta_alcanza_el_punto(datos_yaml, robot):
+    # SI EL HOMBRO NO PUEDE BAJAR TANTO (MÍNIMO DE 30°), EL TOPE CAMBIA SOLO: LA MISMA HERRAMIENTA YA NO SE ABRE...
+    datos_yaml["articulaciones"][1]["servo"]["min"] = 30
+    datos_yaml["efector"]["largo"] = 250
+    assert not carga(datos_yaml, robot)
+    # ...Y UNA MÁS CORTA SÍ, AUNQUE PARA EL ARCHIVO DE HOY (MÍNIMO DE 20°) SOBRARA MUCHO MARGEN
+    datos_yaml["efector"]["largo"] = 120
+    assert carga(datos_yaml, robot)
+    # CON EL PUNTO DE GIRO MÁS ABAJO TAMBIÉN CAMBIA: LOS 311 mm DE ANTES YA NO SE ABREN, UNA MÁS CORTA SÍ
+    datos_yaml["articulaciones"][1]["servo"]["min"] = 20
+    datos_yaml["home_mm"] = [0, 0, 900]
+    datos_yaml["efector"]["largo"] = 311
+    assert not carga(datos_yaml, robot)
+    datos_yaml["efector"]["largo"] = 250
+    assert carga(datos_yaml, robot)
+
+
+def test_p12_si_ni_sin_herramienta_alcanza_el_punto_no_se_culpa_a_la_herramienta(datos_yaml, robot):
+    # YA ERA ASÍ ANTES: UN ARCHIVO CUYO HOME NO SE ALCANZA SE ABRE (LA APP ARRANCA CON LOS SERVOS AL CENTRO)
+    datos_yaml["home_mm"] = [0, 0, 5000]
+    assert carga(datos_yaml, robot)
+
+
+def test_p12_un_robot_sin_solver_no_pregunta_por_el_punto_de_giro(robot_4gdl, datos_yaml):
+    assert config.con_herramienta(robot_4gdl, 500).efector.largo == 500
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% V7: BAJO EL NIVEL DE LA BASE SE DIBUJA TODO, EN GRIS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
