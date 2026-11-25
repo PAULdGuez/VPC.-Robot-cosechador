@@ -83,7 +83,7 @@
               <item>
                 <widget class="QLabel" name="ESTADO_ROBOT">
                   <property name="text">
-                    <string />
+                    <string></string>
                   </property>
                   <property name="toolTip">
                     <string>Robot cargado (archivo YAML)</string>
@@ -96,7 +96,7 @@
               <item>
                 <widget class="QLabel" name="ESTADO_CONEXION">
                   <property name="text">
-                    <string />
+                    <string></string>
                   </property>
                   <property name="toolTip">
                     <string>Placa a la que se envían los ángulos</string>
@@ -110,7 +110,7 @@
           </widget>
         </item>
         <item>
-          <layout class="QHBoxLayout" name="lay_columnas" stretch="0,0,0,1,0">
+          <layout class="QHBoxLayout" name="lay_columnas" stretch="0,0,0,1">
             <property name="leftMargin">
               <number>0</number>
             </property>
@@ -505,7 +505,7 @@ N</string>
                             </size>
                           </property>
                           <property name="text">
-                            <string />
+                            <string></string>
                           </property>
                           <property name="alignment">
                             <set>Qt::AlignCenter</set>
@@ -562,7 +562,7 @@ N</string>
                             </size>
                           </property>
                           <property name="text">
-                            <string />
+                            <string></string>
                           </property>
                           <property name="alignment">
                             <set>Qt::AlignCenter</set>
@@ -1066,7 +1066,7 @@ del punto</string>
                 <property name="rol" stdset="0">
                   <string>panel</string>
                 </property>
-                <layout class="QVBoxLayout" name="lay_simulacion" stretch="0,1,0,0">
+                <layout class="QVBoxLayout" name="lay_simulacion" stretch="0,1,0">
                   <property name="leftMargin">
                     <number>8</number>
                   </property>
@@ -1201,6 +1201,19 @@ del punto</string>
                         </widget>
                       </item>
                       <item>
+                        <widget class="QCheckBox" name="CHK_NUMEROS_REJILLA">
+                          <property name="text">
+                            <string>Números</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Los números y los nombres de los ejes de la rejilla de la vista 3D (el volumen ya trae sus medidas en la vista lateral y la superior).</string>
+                          </property>
+                          <property name="checked">
+                            <bool>true</bool>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
                         <widget class="QPushButton" name="BTN_LIMPIAR_TRAYECTORIA">
                           <property name="text">
                             <string>Limpiar</string>
@@ -1216,597 +1229,7 @@ del punto</string>
                     </layout>
                   </item>
                   <item>
-                    <widget class="QWidget" name="PANTALLA">
-                      <property name="sizePolicy">
-                        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                        </sizepolicy>
-                      </property>
-                      <property name="minimumSize">
-                        <size>
-                          <width>360</width>
-                          <height>240</height>
-                        </size>
-                      </property>
-                    </widget>
-                  </item>
-                  <item>
-                    <widget class="QTabWidget" name="PESTANAS_MOVIMIENTO">
-                      <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                        </sizepolicy>
-                      </property>
-                      <property name="currentIndex">
-                        <number>0</number>
-                      </property>
-                      <widget class="QWidget" name="PESTANA_SERVOS">
-                        <property name="rol" stdset="0">
-                          <string>pagina</string>
-                        </property>
-                        <layout class="QGridLayout" name="lay_servos">
-                          <property name="leftMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="topMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="rightMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="bottomMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="horizontalSpacing">
-                            <number>8</number>
-                          </property>
-                          <property name="verticalSpacing">
-                            <number>4</number>
-                          </property>
-                          <item row="0" column="0">
-                            <widget class="QLabel" name="ETIQUETA_SERVO_1">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>64</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string>Servo 1</string>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>etiqueta</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="0" column="1">
-                            <widget class="QSlider" name="SLIDER_1">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>120</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="orientation">
-                                <enum>Qt::Horizontal</enum>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="0" column="2">
-                            <widget class="QLabel" name="VS_1">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="maximumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string />
-                              </property>
-                              <property name="alignment">
-                                <set>Qt::AlignCenter</set>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>chip</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="1" column="0">
-                            <widget class="QLabel" name="ETIQUETA_SERVO_2">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>64</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string>Servo 2</string>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>etiqueta</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="1" column="1">
-                            <widget class="QSlider" name="SLIDER_2">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>120</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="orientation">
-                                <enum>Qt::Horizontal</enum>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="1" column="2">
-                            <widget class="QLabel" name="VS_2">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="maximumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string />
-                              </property>
-                              <property name="alignment">
-                                <set>Qt::AlignCenter</set>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>chip</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="2" column="0">
-                            <widget class="QLabel" name="ETIQUETA_SERVO_3">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>64</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string>Servo 3</string>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>etiqueta</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="2" column="1">
-                            <widget class="QSlider" name="SLIDER_3">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>120</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="orientation">
-                                <enum>Qt::Horizontal</enum>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="2" column="2">
-                            <widget class="QLabel" name="VS_3">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="maximumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string />
-                              </property>
-                              <property name="alignment">
-                                <set>Qt::AlignCenter</set>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>chip</string>
-                              </property>
-                            </widget>
-                          </item>
-                        </layout>
-                        <attribute name="title">
-                          <string>Servos</string>
-                        </attribute>
-                      </widget>
-                      <widget class="QWidget" name="PESTANA_XYZ">
-                        <property name="rol" stdset="0">
-                          <string>pagina</string>
-                        </property>
-                        <layout class="QGridLayout" name="lay_xyz">
-                          <property name="leftMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="topMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="rightMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="bottomMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="horizontalSpacing">
-                            <number>8</number>
-                          </property>
-                          <property name="verticalSpacing">
-                            <number>4</number>
-                          </property>
-                          <item row="0" column="0">
-                            <widget class="QLabel" name="ETIQUETA_X">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>64</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string>X (mm)</string>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>etiqueta</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="0" column="1">
-                            <widget class="SliderConAlcance" name="SLIDER_X">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>120</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="orientation">
-                                <enum>Qt::Horizontal</enum>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="0" column="2">
-                            <widget class="QLabel" name="VS_X">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="maximumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string />
-                              </property>
-                              <property name="alignment">
-                                <set>Qt::AlignCenter</set>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>chip</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="1" column="0">
-                            <widget class="QLabel" name="ETIQUETA_Y">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>64</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string>Y (mm)</string>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>etiqueta</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="1" column="1">
-                            <widget class="SliderConAlcance" name="SLIDER_Y">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>120</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="orientation">
-                                <enum>Qt::Horizontal</enum>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="1" column="2">
-                            <widget class="QLabel" name="VS_Y">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="maximumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string />
-                              </property>
-                              <property name="alignment">
-                                <set>Qt::AlignCenter</set>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>chip</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="2" column="0">
-                            <widget class="QLabel" name="ETIQUETA_Z">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>64</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string>Z (mm)</string>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>etiqueta</string>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="2" column="1">
-                            <widget class="SliderConAlcance" name="SLIDER_Z">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>120</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="orientation">
-                                <enum>Qt::Horizontal</enum>
-                              </property>
-                            </widget>
-                          </item>
-                          <item row="2" column="2">
-                            <widget class="QLabel" name="VS_Z">
-                              <property name="minimumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="maximumSize">
-                                <size>
-                                  <width>56</width>
-                                  <height>24</height>
-                                </size>
-                              </property>
-                              <property name="text">
-                                <string />
-                              </property>
-                              <property name="alignment">
-                                <set>Qt::AlignCenter</set>
-                              </property>
-                              <property name="rol" stdset="0">
-                                <string>chip</string>
-                              </property>
-                            </widget>
-                          </item>
-                        </layout>
-                        <attribute name="title">
-                          <string>Punta X Y Z</string>
-                        </attribute>
-                      </widget>
-                      <widget class="QWidget" name="PESTANA_PROGRAMA">
-                        <property name="rol" stdset="0">
-                          <string>pagina</string>
-                        </property>
-                        <layout class="QVBoxLayout" name="lay_programa">
-                          <property name="leftMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="topMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="rightMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="bottomMargin">
-                            <number>8</number>
-                          </property>
-                          <property name="spacing">
-                            <number>8</number>
-                          </property>
-                          <item>
-                            <layout class="QHBoxLayout" name="lay_programa_selector">
-                              <property name="leftMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="topMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="rightMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="bottomMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="spacing">
-                                <number>8</number>
-                              </property>
-                              <item>
-                                <widget class="QLabel" name="ETIQUETA_PROGRAMA">
-                                  <property name="minimumSize">
-                                    <size>
-                                      <width>64</width>
-                                      <height>24</height>
-                                    </size>
-                                  </property>
-                                  <property name="text">
-                                    <string>Programa</string>
-                                  </property>
-                                  <property name="rol" stdset="0">
-                                    <string>etiqueta</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <widget class="QComboBox" name="SELECTOR_PROGRAMA">
-                                  <property name="sizePolicy">
-                                    <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                                      <horstretch>0</horstretch>
-                                      <verstretch>0</verstretch>
-                                    </sizepolicy>
-                                  </property>
-                                  <property name="minimumSize">
-                                    <size>
-                                      <width>200</width>
-                                      <height>26</height>
-                                    </size>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <widget class="QPushButton" name="BTN_EDITAR_PUNTOS">
-                                  <property name="text">
-                                    <string>✎ Editar</string>
-                                  </property>
-                                  <property name="toolTip">
-                                    <string>Abre el editor de puntos del programa elegido</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <widget class="QPushButton" name="BTN_GRABAR">
-                                  <property name="text">
-                                    <string>⏺ Grabar</string>
-                                  </property>
-                                  <property name="toolTip">
-                                    <string>Graba lo que se mueva con los sliders; al detener, pide un nombre</string>
-                                  </property>
-                                </widget>
-                              </item>
-                            </layout>
-                          </item>
-                          <item>
-                            <layout class="QHBoxLayout" name="lay_programa_botones">
-                              <property name="leftMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="topMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="rightMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="bottomMargin">
-                                <number>0</number>
-                              </property>
-                              <property name="spacing">
-                                <number>8</number>
-                              </property>
-                              <item>
-                                <widget class="QPushButton" name="BTN_REPRODUCIR">
-                                  <property name="text">
-                                    <string>▶ Reproducir</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <widget class="QPushButton" name="BTN_DETENER">
-                                  <property name="text">
-                                    <string>■ Detener</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <widget class="QCheckBox" name="CHK_QUITAR_PAUSAS">
-                                  <property name="text">
-                                    <string>Quitar pausas</string>
-                                  </property>
-                                  <property name="toolTip">
-                                    <string>Solo en grabaciones: no esperar donde el robot se quedó quieto</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <widget class="QLabel" name="INFO_PROGRAMA">
-                                  <property name="minimumSize">
-                                    <size>
-                                      <width>0</width>
-                                      <height>24</height>
-                                    </size>
-                                  </property>
-                                  <property name="text">
-                                    <string />
-                                  </property>
-                                  <property name="rol" stdset="0">
-                                    <string>nota</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item>
-                                <spacer name="resorte_programa">
-                                  <property name="orientation">
-                                    <enum>Qt::Horizontal</enum>
-                                  </property>
-                                  <property name="sizeHint">
-                                    <size>
-                                      <width>8</width>
-                                      <height>8</height>
-                                    </size>
-                                  </property>
-                                </spacer>
-                              </item>
-                            </layout>
-                          </item>
-                          <item>
-                            <spacer name="resorte_programa_abajo">
-                              <property name="orientation">
-                                <enum>Qt::Vertical</enum>
-                              </property>
-                              <property name="sizeHint">
-                                <size>
-                                  <width>8</width>
-                                  <height>8</height>
-                                </size>
-                              </property>
-                            </spacer>
-                          </item>
-                        </layout>
-                        <attribute name="title">
-                          <string>Programa</string>
-                        </attribute>
-                      </widget>
-                    </widget>
-                  </item>
-                  <item>
-                    <layout class="QHBoxLayout" name="lay_globales" stretch="0,2,0,3">
+                    <layout class="QHBoxLayout" name="lay_visor_acciones" stretch="1,0,0">
                       <property name="leftMargin">
                         <number>0</number>
                       </property>
@@ -1823,261 +1246,36 @@ del punto</string>
                         <number>8</number>
                       </property>
                       <item>
-                        <widget class="QLabel" name="ETIQUETA_VELOCIDAD">
+                        <widget class="QWidget" name="PANTALLA">
+                          <property name="sizePolicy">
+                            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                            </sizepolicy>
+                          </property>
                           <property name="minimumSize">
                             <size>
-                              <width>64</width>
-                              <height>24</height>
+                              <width>360</width>
+                              <height>240</height>
                             </size>
-                          </property>
-                          <property name="text">
-                            <string>Velocidad</string>
-                          </property>
-                          <property name="rol" stdset="0">
-                            <string>etiqueta</string>
                           </property>
                         </widget>
                       </item>
                       <item>
-                        <widget class="QSlider" name="SLIDER_VELOCIDAD">
+                        <widget class="QFrame" name="FONDO_ACCIONES">
                           <property name="minimumSize">
                             <size>
-                              <width>120</width>
-                              <height>24</height>
-                            </size>
-                          </property>
-                          <property name="toolTip">
-                            <string>Porcentaje de la velocidad máxima segura de los servos</string>
-                          </property>
-                          <property name="orientation">
-                            <enum>Qt::Horizontal</enum>
-                          </property>
-                          <property name="minimum">
-                            <number>10</number>
-                          </property>
-                          <property name="maximum">
-                            <number>100</number>
-                          </property>
-                          <property name="value">
-                            <number>100</number>
-                          </property>
-                        </widget>
-                      </item>
-                      <item>
-                        <widget class="QLabel" name="VS_VELOCIDAD">
-                          <property name="minimumSize">
-                            <size>
-                              <width>56</width>
-                              <height>24</height>
+                              <width>300</width>
+                              <height>0</height>
                             </size>
                           </property>
                           <property name="maximumSize">
                             <size>
-                              <width>56</width>
-                              <height>24</height>
-                            </size>
-                          </property>
-                          <property name="text">
-                            <string>100 %</string>
-                          </property>
-                          <property name="alignment">
-                            <set>Qt::AlignCenter</set>
-                          </property>
-                          <property name="rol" stdset="0">
-                            <string>chip</string>
-                          </property>
-                        </widget>
-                      </item>
-                      <item>
-                        <widget class="QComboBox" name="SELECTOR_POSTURA">
-                          <property name="minimumSize">
-                            <size>
                               <width>300</width>
-                              <height>26</height>
+                              <height>16777215</height>
                             </size>
                           </property>
-                        </widget>
-                      </item>
-                    </layout>
-                  </item>
-                </layout>
-              </widget>
-            </item>
-            <item>
-              <widget class="QFrame" name="FONDO_HERRAMIENTAS">
-                <property name="minimumSize">
-                  <size>
-                    <width>320</width>
-                    <height>0</height>
-                  </size>
-                </property>
-                <property name="maximumSize">
-                  <size>
-                    <width>320</width>
-                    <height>16777215</height>
-                  </size>
-                </property>
-                <layout class="QVBoxLayout" name="lay_herramientas" stretch="0,0,0,1">
-                  <property name="leftMargin">
-                    <number>8</number>
-                  </property>
-                  <property name="topMargin">
-                    <number>8</number>
-                  </property>
-                  <property name="rightMargin">
-                    <number>8</number>
-                  </property>
-                  <property name="bottomMargin">
-                    <number>8</number>
-                  </property>
-                  <property name="spacing">
-                    <number>8</number>
-                  </property>
-                  <item>
-                    <widget class="QFrame" name="TARJETA_VOLUMEN">
-                      <property name="rol" stdset="0">
-                        <string>tarjeta</string>
-                      </property>
-                      <layout class="QVBoxLayout" name="lay_tarjeta_volumen">
-                        <property name="leftMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="topMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="rightMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="bottomMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="spacing">
-                          <number>4</number>
-                        </property>
-                        <item>
-                          <widget class="QLabel" name="NOTA_VOLUMEN">
-                            <property name="text">
-                              <string>Grafica el área en la que el robot puede trabajar</string>
-                            </property>
-                            <property name="alignment">
-                              <set>Qt::AlignCenter</set>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>nota</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <layout class="QHBoxLayout" name="lay_herramienta">
-                            <property name="spacing">
-                              <number>8</number>
-                            </property>
-                            <item>
-                              <widget class="QLabel" name="ETIQUETA_HERRAMIENTA">
-                                <property name="minimumSize">
-                                  <size>
-                                    <width>0</width>
-                                    <height>24</height>
-                                  </size>
-                                </property>
-                                <property name="text">
-                                  <string>Herramienta (mm)</string>
-                                </property>
-                                <property name="toolTip">
-                                  <string>Largo de la herramienta: del extremo del antebrazo a su punta. Se cambia en el archivo del robot.</string>
-                                </property>
-                                <property name="rol" stdset="0">
-                                  <string>etiqueta</string>
-                                </property>
-                              </widget>
-                            </item>
-                            <item>
-                              <widget class="QLabel" name="LARGO_HERRAMIENTA">
-                                <property name="minimumSize">
-                                  <size>
-                                    <width>0</width>
-                                    <height>24</height>
-                                  </size>
-                                </property>
-                                <property name="toolTip">
-                                  <string>Largo de la herramienta: del extremo del antebrazo a su punta. Se cambia en el archivo del robot.</string>
-                                </property>
-                              </widget>
-                            </item>
-                          </layout>
-                        </item>
-                        <item>
-                          <widget class="QPushButton" name="VER_VOLUMEN">
-                            <property name="text">
-                              <string>VOLUMEN DE TRABAJO</string>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>accion</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <widget class="QProgressBar" name="PROCESO">
-                            <property name="value">
-                              <number>0</number>
-                            </property>
-                            <property name="textVisible">
-                              <bool>false</bool>
-                            </property>
-                          </widget>
-                        </item>
-                      </layout>
-                    </widget>
-                  </item>
-                  <item>
-                    <widget class="QFrame" name="TARJETA_CI">
-                      <property name="rol" stdset="0">
-                        <string>tarjeta</string>
-                      </property>
-                      <layout class="QVBoxLayout" name="lay_tarjeta_ci">
-                        <property name="leftMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="topMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="rightMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="bottomMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="spacing">
-                          <number>4</number>
-                        </property>
-                        <item>
-                          <widget class="QLabel" name="TITULO_CI">
-                            <property name="text">
-                              <string>CINEMÁTICA INVERSA</string>
-                            </property>
-                            <property name="alignment">
-                              <set>Qt::AlignCenter</set>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>titulo-tarjeta</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <widget class="QLabel" name="NOTA_CI">
-                            <property name="text">
-                              <string>Dado un punto en mm, calcula la CI y va</string>
-                            </property>
-                            <property name="alignment">
-                              <set>Qt::AlignCenter</set>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>nota</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <layout class="QHBoxLayout" name="lay_xyz_campos">
+                          <layout class="QVBoxLayout" name="lay_acciones" stretch="0,0,0,0,1">
                             <property name="leftMargin">
                               <number>0</number>
                             </property>
@@ -2094,146 +1292,307 @@ del punto</string>
                               <number>8</number>
                             </property>
                             <item>
-                              <widget class="QLineEdit" name="TE_X">
-                                <property name="placeholderText">
-                                  <string>X mm</string>
+                              <layout class="QHBoxLayout" name="lay_acciones_cabeza">
+                                <property name="leftMargin">
+                                  <number>0</number>
                                 </property>
-                              </widget>
+                                <property name="topMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="rightMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="bottomMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="spacing">
+                                  <number>8</number>
+                                </property>
+                                <item>
+                                  <widget class="QLabel" name="ETIQUETA_ACCIONES">
+                                    <property name="text">
+                                      <string>ACCIONES</string>
+                                    </property>
+                                    <property name="rol" stdset="0">
+                                      <string>seccion</string>
+                                    </property>
+                                  </widget>
+                                </item>
+                                <item>
+                                  <spacer name="resorte_acciones">
+                                    <property name="orientation">
+                                      <enum>Qt::Horizontal</enum>
+                                    </property>
+                                    <property name="sizeHint">
+                                      <size>
+                                        <width>8</width>
+                                        <height>8</height>
+                                      </size>
+                                    </property>
+                                  </spacer>
+                                </item>
+                                <item>
+                                  <widget class="QPushButton" name="BTN_CONTRAER_ACCIONES">
+                                    <property name="text">
+                                      <string>Ocultar ▸</string>
+                                    </property>
+                                    <property name="toolTip">
+                                      <string>Ocultar las acciones (se abren desde la franja de la derecha)</string>
+                                    </property>
+                                    <property name="rol" stdset="0">
+                                      <string>mini</string>
+                                    </property>
+                                  </widget>
+                                </item>
+                              </layout>
                             </item>
                             <item>
-                              <widget class="QLineEdit" name="TE_Y">
-                                <property name="placeholderText">
-                                  <string>Y mm</string>
-                                </property>
-                              </widget>
-                            </item>
-                            <item>
-                              <widget class="QLineEdit" name="TE_Z">
-                                <property name="placeholderText">
-                                  <string>Z mm</string>
-                                </property>
-                              </widget>
-                            </item>
-                          </layout>
-                        </item>
-                        <item>
-                          <widget class="QPushButton" name="CALCULAR">
-                            <property name="text">
-                              <string>CALCULAR</string>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>confirmar</string>
-                            </property>
-                          </widget>
-                        </item>
-                      </layout>
-                    </widget>
-                  </item>
-                  <item>
-                    <widget class="QFrame" name="TARJETA_COSECHA">
-                      <property name="rol" stdset="0">
-                        <string>tarjeta</string>
-                      </property>
-                      <layout class="QVBoxLayout" name="lay_tarjeta_cosecha">
-                        <property name="leftMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="topMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="rightMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="bottomMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="spacing">
-                          <number>4</number>
-                        </property>
-                        <item>
-                          <widget class="QLabel" name="NOTA_COSECHA">
-                            <property name="text">
-                              <string>Realiza la cosecha de los puntos guardados</string>
-                            </property>
-                            <property name="alignment">
-                              <set>Qt::AlignCenter</set>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>nota</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <widget class="QPushButton" name="COSECHAR">
-                            <property name="text">
-                              <string>COSECHAR</string>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>accion</string>
-                            </property>
-                          </widget>
-                        </item>
-                      </layout>
-                    </widget>
-                  </item>
-                  <item>
-                    <widget class="QFrame" name="FONDO_REGISTRO">
-                      <property name="sizePolicy">
-                        <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-                          <horstretch>0</horstretch>
-                          <verstretch>0</verstretch>
-                        </sizepolicy>
-                      </property>
-                      <property name="rol" stdset="0">
-                        <string>tarjeta</string>
-                      </property>
-                      <layout class="QVBoxLayout" name="lay_registro" stretch="0,1,0,0,0">
-                        <property name="leftMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="topMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="rightMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="bottomMargin">
-                          <number>8</number>
-                        </property>
-                        <property name="spacing">
-                          <number>4</number>
-                        </property>
-                        <item>
-                          <layout class="QHBoxLayout" name="lay_registro_cabeza">
-                            <property name="leftMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="topMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="rightMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="bottomMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="spacing">
-                              <number>8</number>
-                            </property>
-                            <item>
-                              <widget class="QLabel" name="ETIQUETA_REGISTRO">
-                                <property name="text">
-                                  <string>REGISTRO</string>
-                                </property>
+                              <widget class="QFrame" name="TARJETA_VOLUMEN">
                                 <property name="rol" stdset="0">
-                                  <string>seccion</string>
+                                  <string>tarjeta</string>
                                 </property>
+                                <layout class="QVBoxLayout" name="lay_tarjeta_volumen">
+                                  <property name="leftMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="topMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="rightMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="bottomMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="spacing">
+                                    <number>4</number>
+                                  </property>
+                                  <item>
+                                    <widget class="QLabel" name="NOTA_VOLUMEN">
+                                      <property name="text">
+                                        <string>Grafica el área en la que el robot puede trabajar</string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>nota</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <layout class="QHBoxLayout" name="lay_herramienta">
+                                      <property name="spacing">
+                                        <number>8</number>
+                                      </property>
+                                      <item>
+                                        <widget class="QLabel" name="ETIQUETA_HERRAMIENTA">
+                                          <property name="minimumSize">
+                                            <size>
+                                              <width>0</width>
+                                              <height>24</height>
+                                            </size>
+                                          </property>
+                                          <property name="text">
+                                            <string>Herramienta (mm)</string>
+                                          </property>
+                                          <property name="toolTip">
+                                            <string>Largo de la herramienta: del extremo del antebrazo a su punta. Se cambia en el archivo del robot.</string>
+                                          </property>
+                                          <property name="rol" stdset="0">
+                                            <string>etiqueta</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QLabel" name="LARGO_HERRAMIENTA">
+                                          <property name="minimumSize">
+                                            <size>
+                                              <width>0</width>
+                                              <height>24</height>
+                                            </size>
+                                          </property>
+                                          <property name="toolTip">
+                                            <string>Largo de la herramienta: del extremo del antebrazo a su punta. Se cambia en el archivo del robot.</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                    </layout>
+                                  </item>
+                                  <item>
+                                    <widget class="QPushButton" name="VER_VOLUMEN">
+                                      <property name="text">
+                                        <string>VOLUMEN DE TRABAJO</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>accion</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <widget class="QProgressBar" name="PROCESO">
+                                      <property name="value">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="textVisible">
+                                        <bool>false</bool>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                </layout>
                               </widget>
                             </item>
                             <item>
-                              <spacer name="resorte_registro">
+                              <widget class="QFrame" name="TARJETA_CI">
+                                <property name="rol" stdset="0">
+                                  <string>tarjeta</string>
+                                </property>
+                                <layout class="QVBoxLayout" name="lay_tarjeta_ci">
+                                  <property name="leftMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="topMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="rightMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="bottomMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="spacing">
+                                    <number>4</number>
+                                  </property>
+                                  <item>
+                                    <widget class="QLabel" name="TITULO_CI">
+                                      <property name="text">
+                                        <string>CINEMÁTICA INVERSA</string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>titulo-tarjeta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <widget class="QLabel" name="NOTA_CI">
+                                      <property name="text">
+                                        <string>Dado un punto en mm, calcula la CI y va</string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>nota</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <layout class="QHBoxLayout" name="lay_xyz_campos">
+                                      <property name="leftMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="topMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="rightMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="bottomMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="spacing">
+                                        <number>8</number>
+                                      </property>
+                                      <item>
+                                        <widget class="QLineEdit" name="TE_X">
+                                          <property name="placeholderText">
+                                            <string>X mm</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QLineEdit" name="TE_Y">
+                                          <property name="placeholderText">
+                                            <string>Y mm</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QLineEdit" name="TE_Z">
+                                          <property name="placeholderText">
+                                            <string>Z mm</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                    </layout>
+                                  </item>
+                                  <item>
+                                    <widget class="QPushButton" name="CALCULAR">
+                                      <property name="text">
+                                        <string>CALCULAR</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>confirmar</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                              </widget>
+                            </item>
+                            <item>
+                              <widget class="QFrame" name="TARJETA_COSECHA">
+                                <property name="rol" stdset="0">
+                                  <string>tarjeta</string>
+                                </property>
+                                <layout class="QVBoxLayout" name="lay_tarjeta_cosecha">
+                                  <property name="leftMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="topMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="rightMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="bottomMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="spacing">
+                                    <number>4</number>
+                                  </property>
+                                  <item>
+                                    <widget class="QLabel" name="NOTA_COSECHA">
+                                      <property name="text">
+                                        <string>Realiza la cosecha de los puntos guardados</string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>nota</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item>
+                                    <widget class="QPushButton" name="COSECHAR">
+                                      <property name="text">
+                                        <string>COSECHAR</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>accion</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                              </widget>
+                            </item>
+                            <item>
+                              <spacer name="resorte_acciones_abajo">
                                 <property name="orientation">
-                                  <enum>Qt::Horizontal</enum>
+                                  <enum>Qt::Vertical</enum>
                                 </property>
                                 <property name="sizeHint">
                                   <size>
@@ -2243,95 +1602,955 @@ del punto</string>
                                 </property>
                               </spacer>
                             </item>
-                            <item>
-                              <widget class="QComboBox" name="FILTRO_REGISTRO">
-                                <property name="minimumSize">
-                                  <size>
-                                    <width>160</width>
-                                    <height>26</height>
-                                  </size>
-                                </property>
-                              </widget>
-                            </item>
                           </layout>
-                        </item>
-                        <item>
-                          <widget class="QListWidget" name="LISTA_REGISTRO">
-                            <property name="minimumSize">
-                              <size>
-                                <width>0</width>
-                                <height>88</height>
-                              </size>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <widget class="QPushButton" name="BTN_NUEVOS_REGISTRO">
-                            <property name="text">
-                              <string>↓ nuevos</string>
-                            </property>
-                            <property name="rol" stdset="0">
-                              <string>suave</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <widget class="QTextBrowser" name="DETALLE_REGISTRO">
-                            <property name="minimumSize">
-                              <size>
-                                <width>0</width>
-                                <height>64</height>
-                              </size>
-                            </property>
-                            <property name="maximumSize">
-                              <size>
-                                <width>16777215</width>
-                                <height>112</height>
-                              </size>
-                            </property>
-                          </widget>
-                        </item>
-                        <item>
-                          <layout class="QHBoxLayout" name="lay_registro_botones">
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="FRANJA_ACCIONES">
+                          <property name="sizePolicy">
+                            <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                            </sizepolicy>
+                          </property>
+                          <property name="minimumSize">
+                            <size>
+                              <width>28</width>
+                              <height>0</height>
+                            </size>
+                          </property>
+                          <property name="maximumSize">
+                            <size>
+                              <width>28</width>
+                              <height>16777215</height>
+                            </size>
+                          </property>
+                          <property name="text">
+                            <string>◂
+A
+C
+C
+I
+O
+N
+E
+S</string>
+                          </property>
+                          <property name="toolTip">
+                            <string>Mostrar las acciones</string>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>suave</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </item>
+                  <item>
+                    <layout class="QHBoxLayout" name="lay_banda" stretch="5,4">
+                      <property name="leftMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="topMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="rightMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="bottomMargin">
+                        <number>0</number>
+                      </property>
+                      <property name="spacing">
+                        <number>8</number>
+                      </property>
+                      <item>
+                        <layout class="QVBoxLayout" name="lay_sliders">
+                          <property name="leftMargin">
+                            <number>0</number>
+                          </property>
+                          <property name="topMargin">
+                            <number>0</number>
+                          </property>
+                          <property name="rightMargin">
+                            <number>0</number>
+                          </property>
+                          <property name="bottomMargin">
+                            <number>0</number>
+                          </property>
+                          <property name="spacing">
+                            <number>8</number>
+                          </property>
+                          <item>
+                            <widget class="QTabWidget" name="PESTANAS_MOVIMIENTO">
+                              <property name="sizePolicy">
+                                <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                                  <horstretch>0</horstretch>
+                                  <verstretch>0</verstretch>
+                                </sizepolicy>
+                              </property>
+                              <property name="currentIndex">
+                                <number>0</number>
+                              </property>
+                              <widget class="QWidget" name="PESTANA_SERVOS">
+                                <property name="rol" stdset="0">
+                                  <string>pagina</string>
+                                </property>
+                                <layout class="QGridLayout" name="lay_servos">
+                                  <property name="leftMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="topMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="rightMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="bottomMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="horizontalSpacing">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="verticalSpacing">
+                                    <number>4</number>
+                                  </property>
+                                  <item row="0" column="0">
+                                    <widget class="QLabel" name="ETIQUETA_SERVO_1">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>64</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string>Servo 1</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>etiqueta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="0" column="1">
+                                    <widget class="QSlider" name="SLIDER_1">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>120</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="orientation">
+                                        <enum>Qt::Horizontal</enum>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="0" column="2">
+                                    <widget class="QLabel" name="VS_1">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="maximumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string></string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>chip</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="1" column="0">
+                                    <widget class="QLabel" name="ETIQUETA_SERVO_2">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>64</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string>Servo 2</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>etiqueta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="1" column="1">
+                                    <widget class="QSlider" name="SLIDER_2">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>120</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="orientation">
+                                        <enum>Qt::Horizontal</enum>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="1" column="2">
+                                    <widget class="QLabel" name="VS_2">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="maximumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string></string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>chip</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="2" column="0">
+                                    <widget class="QLabel" name="ETIQUETA_SERVO_3">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>64</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string>Servo 3</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>etiqueta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="2" column="1">
+                                    <widget class="QSlider" name="SLIDER_3">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>120</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="orientation">
+                                        <enum>Qt::Horizontal</enum>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="2" column="2">
+                                    <widget class="QLabel" name="VS_3">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="maximumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string></string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>chip</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                                <attribute name="title">
+                                  <string>Servos</string>
+                                </attribute>
+                              </widget>
+                              <widget class="QWidget" name="PESTANA_XYZ">
+                                <property name="rol" stdset="0">
+                                  <string>pagina</string>
+                                </property>
+                                <layout class="QGridLayout" name="lay_xyz">
+                                  <property name="leftMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="topMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="rightMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="bottomMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="horizontalSpacing">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="verticalSpacing">
+                                    <number>4</number>
+                                  </property>
+                                  <item row="0" column="0">
+                                    <widget class="QLabel" name="ETIQUETA_X">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>64</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string>X (mm)</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>etiqueta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="0" column="1">
+                                    <widget class="SliderConAlcance" name="SLIDER_X">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>120</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="orientation">
+                                        <enum>Qt::Horizontal</enum>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="0" column="2">
+                                    <widget class="QLabel" name="VS_X">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="maximumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string></string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>chip</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="1" column="0">
+                                    <widget class="QLabel" name="ETIQUETA_Y">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>64</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string>Y (mm)</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>etiqueta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="1" column="1">
+                                    <widget class="SliderConAlcance" name="SLIDER_Y">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>120</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="orientation">
+                                        <enum>Qt::Horizontal</enum>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="1" column="2">
+                                    <widget class="QLabel" name="VS_Y">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="maximumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string></string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>chip</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="2" column="0">
+                                    <widget class="QLabel" name="ETIQUETA_Z">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>64</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string>Z (mm)</string>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>etiqueta</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="2" column="1">
+                                    <widget class="SliderConAlcance" name="SLIDER_Z">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>120</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="orientation">
+                                        <enum>Qt::Horizontal</enum>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                  <item row="2" column="2">
+                                    <widget class="QLabel" name="VS_Z">
+                                      <property name="minimumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="maximumSize">
+                                        <size>
+                                          <width>56</width>
+                                          <height>24</height>
+                                        </size>
+                                      </property>
+                                      <property name="text">
+                                        <string></string>
+                                      </property>
+                                      <property name="alignment">
+                                        <set>Qt::AlignCenter</set>
+                                      </property>
+                                      <property name="rol" stdset="0">
+                                        <string>chip</string>
+                                      </property>
+                                    </widget>
+                                  </item>
+                                </layout>
+                                <attribute name="title">
+                                  <string>Punta X Y Z</string>
+                                </attribute>
+                              </widget>
+                              <widget class="QWidget" name="PESTANA_PROGRAMA">
+                                <property name="rol" stdset="0">
+                                  <string>pagina</string>
+                                </property>
+                                <layout class="QVBoxLayout" name="lay_programa">
+                                  <property name="leftMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="topMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="rightMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="bottomMargin">
+                                    <number>8</number>
+                                  </property>
+                                  <property name="spacing">
+                                    <number>8</number>
+                                  </property>
+                                  <item>
+                                    <layout class="QHBoxLayout" name="lay_programa_selector">
+                                      <property name="leftMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="topMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="rightMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="bottomMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="spacing">
+                                        <number>8</number>
+                                      </property>
+                                      <item>
+                                        <widget class="QLabel" name="ETIQUETA_PROGRAMA">
+                                          <property name="minimumSize">
+                                            <size>
+                                              <width>64</width>
+                                              <height>24</height>
+                                            </size>
+                                          </property>
+                                          <property name="text">
+                                            <string>Programa</string>
+                                          </property>
+                                          <property name="rol" stdset="0">
+                                            <string>etiqueta</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QComboBox" name="SELECTOR_PROGRAMA">
+                                          <property name="sizePolicy">
+                                            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                                              <horstretch>0</horstretch>
+                                              <verstretch>0</verstretch>
+                                            </sizepolicy>
+                                          </property>
+                                          <property name="minimumSize">
+                                            <size>
+                                              <width>200</width>
+                                              <height>26</height>
+                                            </size>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QPushButton" name="BTN_EDITAR_PUNTOS">
+                                          <property name="text">
+                                            <string>✎ Editar</string>
+                                          </property>
+                                          <property name="toolTip">
+                                            <string>Abre el editor de puntos del programa elegido</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QPushButton" name="BTN_GRABAR">
+                                          <property name="text">
+                                            <string>⏺ Grabar</string>
+                                          </property>
+                                          <property name="toolTip">
+                                            <string>Graba lo que se mueva con los sliders; al detener, pide un nombre</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                    </layout>
+                                  </item>
+                                  <item>
+                                    <layout class="QHBoxLayout" name="lay_programa_botones">
+                                      <property name="leftMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="topMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="rightMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="bottomMargin">
+                                        <number>0</number>
+                                      </property>
+                                      <property name="spacing">
+                                        <number>8</number>
+                                      </property>
+                                      <item>
+                                        <widget class="QPushButton" name="BTN_REPRODUCIR">
+                                          <property name="text">
+                                            <string>▶ Reproducir</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QPushButton" name="BTN_DETENER">
+                                          <property name="text">
+                                            <string>■ Detener</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QCheckBox" name="CHK_QUITAR_PAUSAS">
+                                          <property name="text">
+                                            <string>Quitar pausas</string>
+                                          </property>
+                                          <property name="toolTip">
+                                            <string>Solo en grabaciones: no esperar donde el robot se quedó quieto</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <widget class="QLabel" name="INFO_PROGRAMA">
+                                          <property name="minimumSize">
+                                            <size>
+                                              <width>0</width>
+                                              <height>24</height>
+                                            </size>
+                                          </property>
+                                          <property name="text">
+                                            <string></string>
+                                          </property>
+                                          <property name="rol" stdset="0">
+                                            <string>nota</string>
+                                          </property>
+                                        </widget>
+                                      </item>
+                                      <item>
+                                        <spacer name="resorte_programa">
+                                          <property name="orientation">
+                                            <enum>Qt::Horizontal</enum>
+                                          </property>
+                                          <property name="sizeHint">
+                                            <size>
+                                              <width>8</width>
+                                              <height>8</height>
+                                            </size>
+                                          </property>
+                                        </spacer>
+                                      </item>
+                                    </layout>
+                                  </item>
+                                  <item>
+                                    <spacer name="resorte_programa_abajo">
+                                      <property name="orientation">
+                                        <enum>Qt::Vertical</enum>
+                                      </property>
+                                      <property name="sizeHint">
+                                        <size>
+                                          <width>8</width>
+                                          <height>8</height>
+                                        </size>
+                                      </property>
+                                    </spacer>
+                                  </item>
+                                </layout>
+                                <attribute name="title">
+                                  <string>Programa</string>
+                                </attribute>
+                              </widget>
+                            </widget>
+                          </item>
+                          <item>
+                            <layout class="QHBoxLayout" name="lay_globales" stretch="0,2,0,3">
+                              <property name="leftMargin">
+                                <number>0</number>
+                              </property>
+                              <property name="topMargin">
+                                <number>0</number>
+                              </property>
+                              <property name="rightMargin">
+                                <number>0</number>
+                              </property>
+                              <property name="bottomMargin">
+                                <number>0</number>
+                              </property>
+                              <property name="spacing">
+                                <number>8</number>
+                              </property>
+                              <item>
+                                <widget class="QLabel" name="ETIQUETA_VELOCIDAD">
+                                  <property name="minimumSize">
+                                    <size>
+                                      <width>64</width>
+                                      <height>24</height>
+                                    </size>
+                                  </property>
+                                  <property name="text">
+                                    <string>Velocidad</string>
+                                  </property>
+                                  <property name="rol" stdset="0">
+                                    <string>etiqueta</string>
+                                  </property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QSlider" name="SLIDER_VELOCIDAD">
+                                  <property name="minimumSize">
+                                    <size>
+                                      <width>120</width>
+                                      <height>24</height>
+                                    </size>
+                                  </property>
+                                  <property name="toolTip">
+                                    <string>Porcentaje de la velocidad máxima segura de los servos</string>
+                                  </property>
+                                  <property name="orientation">
+                                    <enum>Qt::Horizontal</enum>
+                                  </property>
+                                  <property name="minimum">
+                                    <number>10</number>
+                                  </property>
+                                  <property name="maximum">
+                                    <number>100</number>
+                                  </property>
+                                  <property name="value">
+                                    <number>100</number>
+                                  </property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QLabel" name="VS_VELOCIDAD">
+                                  <property name="minimumSize">
+                                    <size>
+                                      <width>56</width>
+                                      <height>24</height>
+                                    </size>
+                                  </property>
+                                  <property name="maximumSize">
+                                    <size>
+                                      <width>56</width>
+                                      <height>24</height>
+                                    </size>
+                                  </property>
+                                  <property name="text">
+                                    <string>100 %</string>
+                                  </property>
+                                  <property name="alignment">
+                                    <set>Qt::AlignCenter</set>
+                                  </property>
+                                  <property name="rol" stdset="0">
+                                    <string>chip</string>
+                                  </property>
+                                </widget>
+                              </item>
+                              <item>
+                                <widget class="QComboBox" name="SELECTOR_POSTURA">
+                                  <property name="minimumSize">
+                                    <size>
+                                      <width>0</width>
+                                      <height>26</height>
+                                    </size>
+                                  </property>
+                                  <property name="sizeAdjustPolicy">
+                                    <enum>QComboBox::AdjustToContents</enum>
+                                  </property>
+                                </widget>
+                              </item>
+                            </layout>
+                          </item>
+                        </layout>
+                      </item>
+                      <item>
+                        <widget class="QFrame" name="FONDO_REGISTRO">
+                          <property name="sizePolicy">
+                            <sizepolicy hsizetype="Preferred" vsizetype="Ignored">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                            </sizepolicy>
+                          </property>
+                          <property name="rol" stdset="0">
+                            <string>tarjeta</string>
+                          </property>
+                          <layout class="QVBoxLayout" name="lay_registro" stretch="0,1">
                             <property name="leftMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="topMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="rightMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="bottomMargin">
-                              <number>0</number>
-                            </property>
-                            <property name="spacing">
                               <number>8</number>
                             </property>
+                            <property name="topMargin">
+                              <number>8</number>
+                            </property>
+                            <property name="rightMargin">
+                              <number>8</number>
+                            </property>
+                            <property name="bottomMargin">
+                              <number>8</number>
+                            </property>
+                            <property name="spacing">
+                              <number>4</number>
+                            </property>
                             <item>
-                              <widget class="QPushButton" name="BTN_COPIAR_REGISTRO">
-                                <property name="text">
-                                  <string>Copiar</string>
+                              <layout class="QHBoxLayout" name="lay_registro_cabeza">
+                                <property name="leftMargin">
+                                  <number>0</number>
                                 </property>
-                                <property name="toolTip">
-                                  <string>Copiar el evento elegido (o todos) como JSON Lines</string>
+                                <property name="topMargin">
+                                  <number>0</number>
                                 </property>
-                              </widget>
+                                <property name="rightMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="bottomMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="spacing">
+                                  <number>8</number>
+                                </property>
+                                <item>
+                                  <widget class="QLabel" name="ETIQUETA_REGISTRO">
+                                    <property name="text">
+                                      <string>REGISTRO</string>
+                                    </property>
+                                    <property name="rol" stdset="0">
+                                      <string>seccion</string>
+                                    </property>
+                                  </widget>
+                                </item>
+                                <item>
+                                  <spacer name="resorte_registro">
+                                    <property name="orientation">
+                                      <enum>Qt::Horizontal</enum>
+                                    </property>
+                                    <property name="sizeHint">
+                                      <size>
+                                        <width>8</width>
+                                        <height>8</height>
+                                      </size>
+                                    </property>
+                                  </spacer>
+                                </item>
+                                <item>
+                                  <widget class="QComboBox" name="FILTRO_REGISTRO">
+                                    <property name="minimumSize">
+                                      <size>
+                                        <width>160</width>
+                                        <height>26</height>
+                                      </size>
+                                    </property>
+                                  </widget>
+                                </item>
+                              </layout>
                             </item>
                             <item>
-                              <widget class="QPushButton" name="BTN_EXPORTAR_REGISTRO">
-                                <property name="text">
-                                  <string>Exportar…</string>
+                              <layout class="QHBoxLayout" name="lay_registro_cuerpo" stretch="3,2">
+                                <property name="leftMargin">
+                                  <number>0</number>
                                 </property>
-                                <property name="toolTip">
-                                  <string>Guardar los eventos visibles en un archivo .jsonl</string>
+                                <property name="topMargin">
+                                  <number>0</number>
                                 </property>
-                              </widget>
+                                <property name="rightMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="bottomMargin">
+                                  <number>0</number>
+                                </property>
+                                <property name="spacing">
+                                  <number>8</number>
+                                </property>
+                                <item>
+                                  <layout class="QVBoxLayout" name="lay_registro_lista" stretch="1,0">
+                                    <property name="leftMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="topMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="rightMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="bottomMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="spacing">
+                                      <number>4</number>
+                                    </property>
+                                    <item>
+                                      <widget class="QListWidget" name="LISTA_REGISTRO">
+                            </widget>
+                                    </item>
+                                    <item>
+                                      <widget class="QPushButton" name="BTN_NUEVOS_REGISTRO">
+                                        <property name="text">
+                                          <string>↓ nuevos</string>
+                                        </property>
+                                        <property name="rol" stdset="0">
+                                          <string>suave</string>
+                                        </property>
+                                      </widget>
+                                    </item>
+                                  </layout>
+                                </item>
+                                <item>
+                                  <layout class="QVBoxLayout" name="lay_registro_detalle" stretch="1,0">
+                                    <property name="leftMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="topMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="rightMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="bottomMargin">
+                                      <number>0</number>
+                                    </property>
+                                    <property name="spacing">
+                                      <number>4</number>
+                                    </property>
+                                    <item>
+                                      <widget class="QTextBrowser" name="DETALLE_REGISTRO">
+                            </widget>
+                                    </item>
+                                    <item>
+                                      <layout class="QHBoxLayout" name="lay_registro_botones">
+                                        <property name="leftMargin">
+                                          <number>0</number>
+                                        </property>
+                                        <property name="topMargin">
+                                          <number>0</number>
+                                        </property>
+                                        <property name="rightMargin">
+                                          <number>0</number>
+                                        </property>
+                                        <property name="bottomMargin">
+                                          <number>0</number>
+                                        </property>
+                                        <property name="spacing">
+                                          <number>8</number>
+                                        </property>
+                                        <item>
+                                          <widget class="QPushButton" name="BTN_COPIAR_REGISTRO">
+                                            <property name="text">
+                                              <string>Copiar</string>
+                                            </property>
+                                            <property name="toolTip">
+                                              <string>Copiar el evento elegido (o todos) como JSON Lines</string>
+                                            </property>
+                                          </widget>
+                                        </item>
+                                        <item>
+                                          <widget class="QPushButton" name="BTN_EXPORTAR_REGISTRO">
+                                            <property name="text">
+                                              <string>Exportar…</string>
+                                            </property>
+                                            <property name="toolTip">
+                                              <string>Guardar los eventos visibles en un archivo .jsonl</string>
+                                            </property>
+                                          </widget>
+                                        </item>
+                                      </layout>
+                                    </item>
+                                  </layout>
+                                </item>
+                              </layout>
                             </item>
                           </layout>
-                        </item>
-                      </layout>
-                    </widget>
+                        </widget>
+                      </item>
+                    </layout>
                   </item>
                 </layout>
               </widget>

@@ -43,8 +43,9 @@ def ui():
     w.BTN_GRABAR.setProperty("rol", "grabando")
     w.BTN_GRABAR.style().unpolish(w.BTN_GRABAR)
     w.BTN_GRABAR.style().polish(w.BTN_GRABAR)
-    w.LISTA_REGISTRO.setWordWrap(True)
-    w.LISTA_REGISTRO.addItems(["17:21:03  ⚠ AVISO · Jog\nNo se mueve: el camino pasa por una zona que el robot no alcanza"] * 4)
+    w.LISTA_REGISTRO.setWordWrap(False)      # UN EVENTO, UN RENGLÓN (R2): EL TEXTO COMPLETO SE LEE EN EL DETALLE
+    w.LISTA_REGISTRO.setTextElideMode(QtCore.Qt.ElideRight)
+    w.LISTA_REGISTRO.addItems(["17:21:03  ⚠ No se mueve: el camino pasa por una zona que el robot no alcanza"] * 6)
     w.BTN_NUEVOS_REGISTRO.hide()
     w.FRANJA_VISION.hide()
     w.FONDO_PUNTOS.hide()        # EL EDITOR DE PUNTOS NACE CERRADO (SUS ESTADOS: test_editor_puntos.py)
@@ -99,9 +100,9 @@ def test_u4_contraer_la_vision_no_mueve_el_panel_derecho(ui, ancho):
     app = QtWidgets.QApplication.instance()
     ui.resize(ancho, 860)
     poner_vision(ui)(True); app.processEvents()
-    derecho_abierta, simulacion_abierta = _geometria(ui, "FONDO_HERRAMIENTAS"), _geometria(ui, "PANTALLA")
+    derecho_abierta, simulacion_abierta = _geometria(ui, "FONDO_ACCIONES"), _geometria(ui, "PANTALLA")
     poner_vision(ui)(False); app.processEvents()
-    derecho_cerrada, simulacion_cerrada = _geometria(ui, "FONDO_HERRAMIENTAS"), _geometria(ui, "PANTALLA")
+    derecho_cerrada, simulacion_cerrada = _geometria(ui, "FONDO_ACCIONES"), _geometria(ui, "PANTALLA")
     poner_vision(ui)(True); app.processEvents()
     assert derecho_cerrada == derecho_abierta                   # EL PANEL DERECHO NO CAMBIA NI UN PÍXEL
     assert simulacion_cerrada[2] > simulacion_abierta[2] + 200  # LA SIMULACIÓN GANA EL ESPACIO
@@ -185,4 +186,32 @@ def test_el_auditor_caza_defectos_sembrados(ui):
     ui.FONDO_REGISTRO.layout().invalidate()
     ui.FONDO_REGISTRO.layout().activate()
     app.processEvents()
+    assert au.auditar(ui) == []
+
+
+def test_el_auditor_mide_el_hueco_real_del_texto_de_un_selector(ui):
+    """Un selector al que le faltan 4 px para su texto más largo es un hallazgo; con el ancho justo, no. El hueco se le
+    pregunta al estilo: con una resta fija (ancho − 44) el auditor dio por bueno «…girar despacio» cortado en pantalla."""
+    app = QtWidgets.QApplication.instance()
+    combo = ui.SELECTOR_POSTURA
+    del_selector = lambda: [h for h in au.textos_cortados(ui) if "SELECTOR_POSTURA" in h]
+    assert del_selector() == []
+    minimo = combo.minimumWidth()
+    largo = max(combo.fontMetrics().horizontalAdvance(combo.itemText(i)) for i in range(combo.count()))
+    cromo = combo.width() - au.hueco_del_texto(combo)                # LO QUE SE COMEN LA FLECHA, LOS BORDES Y LA SANGRÍA
+    assert cromo > 44, f"el estilo se come {cromo} px; la resta fija de antes suponía 44"
+    try:
+        combo.setFixedWidth(largo + cromo - 4)
+        app.processEvents()
+        assert au.hueco_del_texto(combo) == largo - 4
+        assert del_selector(), "al selector le faltan 4 px para su texto y el auditor no lo dijo"
+        combo.setFixedWidth(largo + cromo)
+        app.processEvents()
+        assert del_selector() == []
+    finally:
+        combo.setMinimumWidth(minimo)
+        combo.setMaximumWidth(16777215)
+        combo.parentWidget().layout().invalidate()
+        combo.parentWidget().layout().activate()
+        app.processEvents()
     assert au.auditar(ui) == []

@@ -49,7 +49,7 @@ QLabel[rol="estado"] { color: white; font-size: $letra_chica; }
 
 /* %%%%% PANELES Y TARJETAS %%%%% */
 QFrame[rol="panel"] { background: $panel; border-radius: $radio_chico; }
-QFrame#FONDO_HERRAMIENTAS { background: $panel; border: 2px solid $borde; }
+QFrame#FONDO_ACCIONES { background: $panel; }
 QFrame[rol="tarjeta"] { border-radius: $radio_tarjeta; }
 QFrame#TARJETA_VOLUMEN { background: $lima; }
 QFrame#TARJETA_CI { background: $azul; }
@@ -61,6 +61,7 @@ QWidget[rol="pagina"] { background: $fondo; }
 QLabel[rol="seccion"] { font-size: $letra_titulo; font-weight: bold; color: $primario; }
 QLabel[rol="subtitulo"] { font-size: $letra_chica; font-weight: bold; color: $tinta_suave; }
 QLabel[rol="nota"] { font-size: $letra_chica; color: $tinta_suave; }
+QLabel[rol="dato"] { font-size: $letra_chica; font-weight: bold; color: $tinta; }
 QFrame#TARJETA_VOLUMEN QLabel[rol="nota"] { color: $tinta; }
 QFrame#TARJETA_CI QLabel[rol="nota"], QFrame#TARJETA_COSECHA QLabel[rol="nota"] { color: white; }
 QLabel[rol="titulo-tarjeta"] { color: white; font-weight: bold; }

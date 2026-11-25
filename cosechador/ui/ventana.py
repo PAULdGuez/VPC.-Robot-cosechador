@@ -29,6 +29,7 @@ from cosechador.robot.cinematica_inversa import TOLERANCIA_TRAMOS_MM, alcanzable
 from cosechador.robot.espacio_trabajo import barrer, contorno_del_corte, giro_de_la_base
 from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
+from cosechador.ui.visor import Visor
 from cosechador.vision.camara import pedunculo_en_base
 from cosechador.vision.deteccion import detectar_aguacates
 
@@ -39,6 +40,10 @@ COLOR_NIVEL = {"info": "#2c6fbb", "ok": "#1e8e3e", "aviso": "#b7791f", "error": 
 FILTROS_REGISTRO = (("Todos", reg.NIVELES), ("Avisos y errores", ("aviso", "error")), ("Solo errores", ("error",)))
 
 AMARILLO, ROJO = (0, 255, 255), (0, 0, 255)
+# LAS COLUMNAS QUE SE CONTRAEN A UNA FRANJA: (SU FONDO, SU FRANJA, EL AJUSTE DONDE SE RECUERDA CÓMO QUEDÓ)
+COLUMNAS = {"vision": ("FONDO_VISION", "FRANJA_VISION", "vision/contraida"),
+            "acciones": ("FONDO_ACCIONES", "FRANJA_ACCIONES", "acciones/contraida")}
+AJUSTE_NUMEROS = "rejilla/numeros"  # SI LOS NÚMEROS DE LA REJILLA 3D ESTÁN ENCENDIDOS
 
 
 def cv_a_pixmap(imagen_cv):
@@ -152,11 +157,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         # AJUSTES DE LA PERSONA (P. EJ. EL ÚLTIMO PROGRAMA ELEGIDO): QSettings ES LO NATIVO DE Qt
         self.ajustes = ajustes if ajustes is not None else QtCore.QSettings("robot-cosechador", "cosechador")
         self.carpeta_programas = carpeta_programas or programas.CARPETA_PROGRAMAS
-        # ESCENA 3D INCRUSTADA EN EL RECUADRO "PANTALLA" DEL .ui
+        # ESCENA 3D INCRUSTADA EN EL RECUADRO "PANTALLA" DEL .ui, DENTRO DEL VISOR CON PESTAÑAS (3D, LATERAL, SUPERIOR, FICHA)
         self.escena = Escena(QtInteractor(self), robot)
-        diseno = QtWidgets.QVBoxLayout(self.PANTALLA)
-        diseno.setContentsMargins(0, 0, 0, 0)
-        diseno.addWidget(self.escena.plotter.interactor)
+        self.visor = Visor(self.PANTALLA, self.escena, robot, self.ajustes)
 
         # ESP32 REAL SI HAY ROBOT_PUERTO; SI NO, LA VIRTUAL
         self.enlace = enlace or abrir_enlace(rangos=[(j.servo.minimo, j.servo.maximo) for j in robot.articulaciones])
@@ -194,6 +197,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._configurar_editor()
         self._configurar_programas()
         self._configurar_vision()
+        self._configurar_acciones()
+        self._configurar_visor()
         self.CHK_TRAYECTORIA.toggled.connect(self.escena.mostrar_trayectoria)
         self.BTN_LIMPIAR_TRAYECTORIA.clicked.connect(lambda: self.escena.limpiar_trayectoria(self.posicion))
         for boton, nombre in ((self.BTN_VISTA_ISO, "iso"), (self.BTN_VISTA_ARRIBA, "arriba"),
@@ -255,6 +260,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _dibujar(self, servos):
         """El robot de la simulación con esos ángulos de servo. Solo el dibujo: a la placa no le llega nada."""
         self.escena.dibujar(servo_a_dh(self.robot, servos))
+        self.visor.poner_servos(servos)  # LA LATERAL Y LA SUPERIOR SE MUEVEN CON LA 3D, POR CUALQUIER MEDIO QUE MUEVA EL ROBOT
         self.escena.agregar_al_recorrido(tuple(posicion(self.robot, servos)))
 
     def _ir_a_home(self):
@@ -394,6 +400,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """Botón del volumen de trabajo: lo dibuja; con el volumen a la vista, lo oculta."""
         if self.escena.actores_volumen:
             self.escena.ocultar_volumen()
+            self.visor.ocultar_volumen()
             self.PROCESO.setValue(0)
         else:
             self._dibujar_volumen()
@@ -405,6 +412,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.PROCESO.setValue(hechos)
             QtWidgets.QApplication.processEvents()
         lazos = contorno_del_corte(self.robot, progreso=avance)
+        self.visor.poner_volumen(lazos)  # (SIN CONTORNO, LA LATERAL Y LA SUPERIOR SE QUEDAN CON EL ROBOT)
         if lazos is None:  # EL CORTE DE ESTE ROBOT NO SE PUEDE GIRAR (O NO ENCIERRA ÁREA): LA NUBE DE PUNTOS
             self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
         else:
@@ -732,7 +740,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.LISTA_REGISTRO.currentItemChanged.connect(self._mostrar_detalle)
         self.BTN_COPIAR_REGISTRO.clicked.connect(self.copiar_registro)
         self.BTN_EXPORTAR_REGISTRO.clicked.connect(self.exportar_registro)
-        self.LISTA_REGISTRO.setWordWrap(True)  # LOS MENSAJES LARGOS PASAN AL SIGUIENTE RENGLÓN
+        self.LISTA_REGISTRO.setWordWrap(False)  # UN EVENTO, UN RENGLÓN: EL TEXTO COMPLETO SE LEE EN EL DETALLE
+        self.LISTA_REGISTRO.setTextElideMode(QtCore.Qt.ElideRight)
         self.LISTA_REGISTRO.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         # BARRA VERTICAL SIEMPRE PRESENTE: ASÍ EL ANCHO PARA EL TEXTO NO CAMBIA CUANDO LA LISTA SE LLENA
         self.LISTA_REGISTRO.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
@@ -750,11 +759,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_DETENER.setEnabled(False)  # SOLO SE ENCIENDE MIENTRAS ALGO SE MUEVE
 
     def _item_de(self, evento):
-        item = QtWidgets.QListWidgetItem(f"{evento.hora:%H:%M:%S}  {ICONO_NIVEL[evento.nivel]} {evento.nivel.upper()} · "
-                                         f"{evento.origen}\n{evento.mensaje}")
+        item = QtWidgets.QListWidgetItem(f"{evento.hora:%H:%M:%S}  {ICONO_NIVEL[evento.nivel]} "
+                                         f"{' '.join(evento.mensaje.split())}")  # UN RENGLÓN: EL ORIGEN Y LO DEMÁS, EN EL DETALLE
         item.setForeground(QtGui.QColor(COLOR_NIVEL[evento.nivel]) if evento.nivel != "info" else QtGui.QColor("#1f2d3a"))
         item.setData(QtCore.Qt.UserRole, evento)
-        item.setToolTip(evento.mensaje)
+        item.setToolTip(f"{evento.origen}: {evento.mensaje}")
         return item
 
     def _al_final(self):
@@ -1429,15 +1438,46 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.CARGA.clicked.connect(self.cargar_imagen)
         self.BTN_CONTRAER_VISION.clicked.connect(lambda: self.contraer_vision(True))
         self.FRANJA_VISION.clicked.connect(self._abrir_vision)
-        self.contraer_vision(str(self.ajustes.value("vision/contraida", "false")).lower() == "true", recordar=False)
+        self.contraer_vision(str(self.ajustes.value(COLUMNAS["vision"][2], "false")).lower() == "true", recordar=False)
+
+    def contraer_columna(self, nombre, contraida, recordar=True):
+        """Oculta una columna con franja (VISIÓN a la izquierda, ACCIONES a la derecha): queda la franja que la reabre y la
+        simulación toma el espacio. Se recuerda al reabrir. UN solo mecanismo para las dos columnas."""
+        fondo, franja, ajuste = COLUMNAS[nombre]
+        getattr(self, fondo).setVisible(not contraida)
+        getattr(self, franja).setVisible(contraida)
+        if recordar:
+            self.ajustes.setValue(ajuste, "true" if contraida else "false")
 
     def contraer_vision(self, contraida, recordar=True):
-        """Oculta la columna de visión a la izquierda (queda la franja «▸ VISIÓN»). La simulación toma
-        el espacio; el panel derecho tiene ancho fijo, así que no se mueve. Se recuerda al reabrir."""
-        self.FONDO_VISION.setVisible(not contraida)
-        self.FRANJA_VISION.setVisible(contraida)
-        if recordar:
-            self.ajustes.setValue("vision/contraida", "true" if contraida else "false")
+        """Oculta la columna de visión a la izquierda (queda la franja «▸ VISIÓN»). Se recuerda al reabrir."""
+        self.contraer_columna("vision", contraida, recordar)
+
+    def contraer_acciones(self, contraida, recordar=True):
+        """Oculta la columna ACCIONES a la derecha (queda la franja «◂ ACCIONES»): el visor crece a lo ancho."""
+        self.contraer_columna("acciones", contraida, recordar)
+
+    def _configurar_acciones(self):
+        self.BTN_CONTRAER_ACCIONES.clicked.connect(lambda: self.contraer_acciones(True))
+        self.FRANJA_ACCIONES.clicked.connect(lambda: self.contraer_acciones(False))
+        self.contraer_acciones(str(self.ajustes.value(COLUMNAS["acciones"][2], "false")).lower() == "true", recordar=False)
+
+    def _configurar_visor(self):
+        """Los botones de cámara solo mueven la vista 3D (se apagan si no está a la vista) y «Números» recuerda cómo quedó."""
+        self.visor.vista_3d_a_la_vista.connect(self._camara_habilitada)
+        self._camara_habilitada(self.visor.vista_3d_visible())
+        numeros = str(self.ajustes.value(AJUSTE_NUMEROS, "true")).lower() != "false"
+        self.CHK_NUMEROS_REJILLA.setChecked(numeros)
+        self.escena.mostrar_numeros(numeros)
+        self.CHK_NUMEROS_REJILLA.toggled.connect(self._numeros_cambiado)
+
+    def _numeros_cambiado(self, visible):
+        self.escena.mostrar_numeros(visible)
+        self.ajustes.setValue(AJUSTE_NUMEROS, "true" if visible else "false")
+
+    def _camara_habilitada(self, a_la_vista):
+        for boton in (self.BTN_VISTA_ISO, self.BTN_VISTA_ARRIBA, self.BTN_VISTA_FRENTE, self.BTN_VISTA_LADO, self.BTN_ENCUADRAR):
+            boton.setEnabled(a_la_vista)
 
     def guardar_detecciones(self):
         # EN EL SIGUIENTE FRAME, LOS PEDÚNCULOS DETECTADOS REEMPLAZAN LA LISTA DE COSECHA
