@@ -14,7 +14,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PyQt5 import QtWidgets
+from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtTest import QTest
 
 import auditoria_interfaz as au
 from cosechador.movimiento.programa import Punto
@@ -30,6 +31,8 @@ from test_punta import abrir, con_largo, datos_yaml  # noqa: F401 (SON FIXTURES)
 
 EJES = "XYZ"
 RANGO_DEL_EJE = ((-2170, 2170), (-2170, 2170), (0, 2170))  # LO QUE RECORRE CADA SLIDER CON LA HERRAMIENTA DE 120 mm
+ROJO = np.array(tuple(int(COLOR_NIVEL["error"][i:i + 2], 16) for i in (1, 3, 5)))    # EL ROJO DE LOS ERRORES DEL REGISTRO
+MANIJA = np.array(tuple(int(tema.TOKENS["manija"][i:i + 2], 16) for i in (1, 3, 5)))
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% INSTRUMENTO: LO PINTADO CONTRA LA BARRIDA DE 1 mm %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -99,6 +102,31 @@ def tramos_de(w):
     return [None if s.tramos is None else [tuple(t) for t in s.tramos] for s in w.sliders_xyz]
 
 
+def a_la_vista(w):
+    """La pestaña de la punta, pintada de verdad (sin pantalla: nada queda a la vista de nadie)."""
+    w.resize(1366, 768)
+    w.show()
+    w.PESTANAS_MOVIMIENTO.setCurrentIndex(PESTANA_XYZ)
+    QtWidgets.QApplication.processEvents()
+
+
+def junto_a_la_perilla(w, slider, valor):
+    """Lo que se VE con la perilla en `valor` (sin mover el robot): (hay rojo a su izquierda, hay rojo a su derecha),
+    mirando 12 pixeles a cada lado de su centro. A la perilla la coloca Qt, no la cuenta del producto: es otra regla."""
+    slider.blockSignals(True)
+    slider.setValue(valor)
+    slider.blockSignals(False)
+    QtWidgets.QApplication.processEvents()
+    pixeles, _ = au._pixeles(w, slider)
+    fila = pixeles[pixeles.shape[0] // 2].astype(int)
+    es_manija = np.abs(fila - MANIJA).sum(axis=1) < 8   # LA MANIJA Y EL ROJO SE PARECEN (24 DE DIFERENCIA): UMBRAL ESTRICTO
+    assert es_manija.any()
+    centro = int(round(np.flatnonzero(es_manija).mean()))
+    lejos_del_rojo = [np.abs(fila[centro + lado * 12] - ROJO).sum() for lado in (-1, +1)]
+    assert all(d < 8 or d > 150 for d in lejos_del_rojo), "ni rojo ni pista: no se sabe qué se está mirando"
+    return tuple(bool(d < 8) for d in lejos_del_rojo)
+
+
 def pose_con_dos_tramos(robot, eje=0):
     """Un punto alcanzable cuyo eje tiene DOS tramos (el hueco junto a la base). Se busca con `alcanzable`, 2 mm por paso,
     en una rejilla fija: siempre devuelve el mismo punto."""
@@ -156,32 +184,20 @@ def test_s1_con_dos_tramos_en_un_eje_se_pintan_los_dos(robot, ventana, pose):
     assert dos == [pytest.approx(t, abs=1 + TOLERANCIA_TRAMOS_MM) for t in a_mano]  # a_mano VA DE 1 mm EN 1 mm
     hueco = (dos[0][1] + dos[1][0]) / 2
     assert not alcanzable(robot, con_el_eje(w.posicion, 0, hueco))  # EL HUECO ES ROJO: AHÍ NO SE LLEGA
+    a_la_vista(w)  # Y LO QUE SE VE: EL HUECO SALE EN ROJO POR SUS DOS ORILLAS, Y LOS TRAMOS NO
+    assert junto_a_la_perilla(w, w.SLIDER_X, math.floor(dos[0][1])) == (False, True)
+    assert junto_a_la_perilla(w, w.SLIDER_X, math.ceil(dos[1][0])) == (True, False)
+    w.hide()
 
 
 def test_s1_el_rojo_arranca_donde_se_acaba_el_tramo_en_la_perilla(ventana, pose):
     """Lo que se VE: con la perilla en el límite de un tramo, el rojo empieza pegado a ella y lo alcanzable no se pinta."""
     w = ventana
-    w.resize(1366, 768)
-    w.show()
-    w.PESTANAS_MOVIMIENTO.setCurrentIndex(PESTANA_XYZ)
+    a_la_vista(w)
     colocar(w, pose["la_de_paul"])
-    QtWidgets.QApplication.processEvents()
-    rojo = np.array(tuple(int(COLOR_NIVEL["error"][i:i + 2], 16) for i in (1, 3, 5)))  # EL ROJO DE LOS ERRORES DEL REGISTRO
-    manija = np.array(tuple(int(tema.TOKENS["manija"][i:i + 2], 16) for i in (1, 3, 5)))
-    slider = w.SLIDER_X
-    for valor, lado in ((int(math.floor(slider.tramos[0][1])), +1), (int(math.ceil(slider.tramos[0][0])), -1)):
-        w.sliders_xyz[0].blockSignals(True)
-        slider.setValue(valor)
-        slider.blockSignals(False)
-        QtWidgets.QApplication.processEvents()
-        pixeles, _ = au._pixeles(w, slider)
-        fila = pixeles[pixeles.shape[0] // 2].astype(int)
-        es_manija = np.abs(fila - manija).sum(axis=1) < 8   # LA MANIJA Y EL ROJO SE PARECEN (24 DE DIFERENCIA): UMBRAL ESTRICTO
-        assert es_manija.any()
-        centro = int(round(np.flatnonzero(es_manija).mean()))
-        pegado_a_la_perilla, del_lado_del_tramo = centro + lado * 12, centro - lado * 12
-        assert np.abs(fila[pegado_a_la_perilla] - rojo).sum() < 8, "tras el límite debe estar el rojo"
-        assert np.abs(fila[del_lado_del_tramo] - rojo).sum() > 150, "en el tramo no debe haber rojo"
+    (a, b), = w.SLIDER_X.tramos
+    assert junto_a_la_perilla(w, w.SLIDER_X, math.floor(b)) == (False, True)  # AL FINAL DEL TRAMO: ROJO SOLO A LA DERECHA
+    assert junto_a_la_perilla(w, w.SLIDER_X, math.ceil(a)) == (True, False)   # AL INICIO: ROJO SOLO A LA IZQUIERDA
     w.hide()
 
 
@@ -197,10 +213,17 @@ def _por_slider_de_servos(w, poses):
     correr(w)
 
 
-def _por_calcular(w, poses):
-    for campo, valor in zip((w.TE_X, w.TE_Y, w.TE_Z), (356, 711, 1014)):
+DESTINO_DE_CALCULAR = (356, 711, 1014)
+
+
+def pedir_calcular(w):
+    for campo, valor in zip((w.TE_X, w.TE_Y, w.TE_Z), DESTINO_DE_CALCULAR):
         campo.setText(str(valor))
     w.CALCULAR.click()
+
+
+def _por_calcular(w, poses):
+    pedir_calcular(w)
     correr(w)
 
 
@@ -222,18 +245,18 @@ def _por_paso_a_paso(w, poses):
     correr(w)
 
 
-def _por_home(w, poses):
-    w._ir_a_home()
+def _por_el_arranque(w, poses):
+    w._ir_a_home()  # NO HAY BOTÓN DE HOME: ESTO ES LO QUE CORRE AL ABRIR LA APP
 
 
 MEDIOS_S2 = {"sliders de servos": _por_slider_de_servos, "CALCULAR": _por_calcular, "COSECHAR": _por_cosechar,
-             "reproducir": _por_reproducir, "paso a paso": _por_paso_a_paso, "HOME": _por_home}
+             "reproducir": _por_reproducir, "paso a paso": _por_paso_a_paso, "el arranque en HOME": _por_el_arranque}
 
 
 @pytest.mark.parametrize("medio", MEDIOS_S2)
 def test_s2_al_mover_el_robot_los_tramos_se_actualizan_solos(ventana, poses, medio):
     w = ventana
-    if medio in ("CALCULAR", "COSECHAR", "HOME"):  # ESTOS TERMINAN EN HOME: SE SALE DE OTRA POSE PARA QUE HAYA CAMBIO
+    if medio in ("CALCULAR", "COSECHAR", "el arranque en HOME"):  # ESTOS TERMINAN EN HOME: SE SALE DE OTRA POSE PARA QUE HAYA CAMBIO
         llevar(w, poses["ida"])
     antes = tramos_de(w)
     assert defectos_de_lo_pintado(w) == []
@@ -254,20 +277,53 @@ def test_s2_arrastrar_un_eje_cambia_los_tramos_de_los_otros_dos(ventana):
     assert despues[1] != antes[1] and defectos_de_lo_pintado(w) == []
 
 
+def correr_pasos(w, cuantos):
+    """Como `correr`, pero solo unos pasos: el movimiento queda a media marcha."""
+    w.temporizador_movimiento.stop()
+    for _ in range(cuantos):
+        w._siguiente_paso()
+        w.reloj.t += w.temporizador_movimiento.interval() / 1000
+
+
+def test_s2_al_detener_a_media_marcha_los_tramos_son_los_de_donde_quedo(ventana):
+    w = ventana
+    antes, salida = tramos_de(w), w.posicion
+    pedir_calcular(w)
+    correr_pasos(w, 8)
+    assert w.cola, "el movimiento ya había terminado: la prueba no detuvo nada"
+    w.BTN_DETENER.click()
+    assert not w.cola
+    assert math.dist(w.posicion, salida) > 50 and math.dist(w.posicion, DESTINO_DE_CALCULAR) > 50  # QUEDÓ A MEDIO CAMINO
+    assert tramos_de(w) != antes and defectos_de_lo_pintado(w) == []
+
+
+def test_s2_la_vista_previa_no_cambia_los_tramos_porque_el_robot_no_se_movio(ventana, poses):
+    w = ventana
+    abrir_editor(w, "previa.yaml", Punto(poses["arriba"]), Punto(poses["corte"], "lineal", 40))
+    antes = tramos_de(w)
+    w.BTN_VISTA_PREVIA.click()
+    correr_pasos(w, 5)
+    assert w.cola and w.en_vista_previa, "la vista previa no arrancó o ya había terminado: la prueba no mide nada"
+    assert tramos_de(w) == antes   # A MEDIA VISTA PREVIA
+    correr(w)
+    assert tramos_de(w) == antes and defectos_de_lo_pintado(w) == []
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% S3: EL SLIDER SE DETIENE EN LA FRONTERA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def arrastrar_hasta(w, slider, destino, paso=7, alcanza_cada=10):
     """Un arrastre: el valor del slider cambia de poco en poco y, cada `alcanza_cada` cambios, el robot alcanza lo que
-    le pidieron (en la app lo hace el temporizador entre un evento del ratón y otro). Devuelve lo que fue valiendo el slider."""
+    le pidieron (en la app lo hace el temporizador entre un evento del ratón y otro). Devuelve lo que fue valiendo el slider.
+    La perilla queda AGARRADA de verdad (isSliderDown): mientras dura, la app no le recoloca ese slider a la persona."""
     vistos = []
     valor = slider.value()
-    slider.sliderPressed.emit()  # LA PERSONA AGARRA LA PERILLA
+    slider.setSliderDown(True)   # LA PERSONA AGARRA LA PERILLA (EMITE sliderPressed)
     while valor != destino:
         valor += max(-paso, min(paso, destino - valor))
         slider.setValue(valor)
         vistos.append(slider.value())
         if len(vistos) % alcanza_cada == 0:
             correr(w)
-    slider.sliderReleased.emit()  # Y LA SUELTA
+    slider.setSliderDown(False)  # Y LA SUELTA (EMITE sliderReleased)
     correr(w)
     return vistos
 
@@ -304,13 +360,43 @@ def test_s3_con_dos_tramos_el_slider_no_salta_el_hueco(robot, ventana, pose):
     assert cubierto([propio], w.posicion[0] + 0.0) or w.posicion[0] == pytest.approx(w.SLIDER_X.value(), abs=1)
 
 
-def test_s3_un_clic_al_extremo_tambien_se_detiene_en_la_frontera(ventana, pose):
+def test_s3_un_salto_al_extremo_tambien_se_detiene_en_la_frontera(ventana, pose):
     w = ventana
     colocar(w, pose["la_de_paul"])
-    w.SLIDER_Y.setValue(w.SLIDER_Y.maximum())  # DE UN SOLO SALTO, COMO UN CLIC EN LA PISTA
+    w.SLIDER_Y.setValue(w.SLIDER_Y.maximum())  # DE UN SOLO SALTO, SIN PASAR POR LOS VALORES DE EN MEDIO
     correr(w)
     assert w.SLIDER_Y.value() == math.floor(w.SLIDER_Y.tramos[0][1])
     assert alcanzable(w.robot, w.posicion)
+
+
+TECLAS = {"Fin": QtCore.Qt.Key_End, "Inicio": QtCore.Qt.Key_Home, "RePág": QtCore.Qt.Key_PageUp,
+          "AvPág": QtCore.Qt.Key_PageDown, "derecha": QtCore.Qt.Key_Right, "izquierda": QtCore.Qt.Key_Left}
+
+
+def teclear(w, slider, tecla, veces=1):
+    """La persona mueve el slider con el teclado: sin agarrar la perilla (no hay «soltar»)."""
+    for _ in range(veces):
+        QTest.keyClick(slider, TECLAS[tecla])
+        correr(w)
+
+
+@pytest.mark.parametrize("eje", (0, 1, 2))
+def test_s3_con_el_teclado_el_slider_tampoco_entra_al_rojo(ventana, pose, eje):
+    w = ventana
+    colocar(w, pose["la_de_paul"])
+    slider = w.sliders_xyz[eje]
+    (a, b), = slider.tramos
+    # CADA TECLA DEJA EL SLIDER Y LA PUNTA EN LA FRONTERA. NO BASTA CON QUE EL SLIDER ACABE DENTRO DEL TRAMO: SIN FRENO, EL
+    # PLANEADOR SE NIEGA Y EL SLIDER REBOTA A DONDE ESTABA, QUE TAMBIÉN ES «DENTRO» (ASÍ ENGAÑÓ LA PRIMERA VERSIÓN DE ESTA PRUEBA)
+    for tecla, frontera in (("Fin", math.floor(b)), ("derecha", math.floor(b)), ("Inicio", math.ceil(a)), ("izquierda", math.ceil(a))):
+        teclear(w, slider, tecla)
+        assert slider.value() == frontera, f"con la tecla {tecla} el slider no quedó en la frontera"
+        assert w.posicion[eje] == pytest.approx(frontera, abs=1)
+    for tecla in ("RePág", "AvPág"):
+        teclear(w, slider, tecla)
+        assert cubierto([(a, b)], slider.value())
+    assert [e.mensaje for e in avisos_del_jog(w) if "No se mueve" in e.mensaje] == []  # FRENÓ EL SLIDER, NO EL PLANEADOR
+    assert defectos_de_lo_pintado(w) == []
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% S4: UN SOLO AVISO AL TOPAR, NO UNA LLUVIA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -349,17 +435,45 @@ def test_s4_el_aviso_del_planeador_tampoco_es_una_lluvia(ventana, robot):
     w.SELECTOR_POSTURA.setCurrentIndex(w.SELECTOR_POSTURA.findData("negar"))
     colocar(w, angulos_servo(robot, (-600, 0, 1100)))
     n0 = len(avisos_del_jog(w))
-    w.SLIDER_X.sliderPressed.emit()
+    w.SLIDER_X.setSliderDown(True)
     for x in range(-590, 601, 1):    # SIN CORRER EL MOVIMIENTO: LA PUNTA NO SE MUEVE Y CADA VALOR NUEVO ES UN PLAN NUEVO
         w.SLIDER_X.setValue(x)
-    w.SLIDER_X.sliderReleased.emit()
+    w.SLIDER_X.setSliderDown(False)
     nuevos = avisos_del_jog(w)[n0:]
     assert len(nuevos) == 1 and "postura" in nuevos[0].mensaje
-    w.SLIDER_X.sliderPressed.emit()      # OTRO ARRASTRE, OTRO AVISO
+    w.SLIDER_X.setSliderDown(True)       # OTRO ARRASTRE, OTRO AVISO
     w.SLIDER_X.setValue(550)
     w.SLIDER_X.setValue(551)
-    w.SLIDER_X.sliderReleased.emit()
+    w.SLIDER_X.setSliderDown(False)
     assert len(avisos_del_jog(w)) == n0 + 2
+
+
+def test_s4_con_el_teclado_topar_avisa_una_vez_y_vuelve_a_avisar_tras_moverse(ventana, pose):
+    """Sin agarrar la perilla no hay «soltar»: el aviso se calla al topar y solo un movimiento de verdad lo rearma."""
+    w = ventana
+    colocar(w, pose["la_de_paul"])
+    slider = w.SLIDER_X
+    teclear(w, slider, "Fin")
+    assert len(topes(w)) == 1
+    teclear(w, slider, "derecha", veces=5)     # CINCO PULSACIONES CONTRA LA FRONTERA
+    teclear(w, slider, "Fin")
+    assert len(topes(w)) == 1, "cada pulsación contra la frontera dejó otro aviso"
+    en_la_frontera = slider.value()
+    teclear(w, slider, "izquierda", veces=3)   # SE MUEVE DE VERDAD, HACIA DENTRO DEL TRAMO
+    assert slider.value() < en_la_frontera and w.posicion[0] == pytest.approx(slider.value(), abs=1)
+    teclear(w, slider, "Fin")
+    assert len(topes(w)) == 2, "tras moverse, volver a topar ya no avisó"
+
+
+def test_m04_con_un_movimiento_en_curso_los_sliders_quedan_apagados(ventana):
+    """Banco de ataque, «dos a la vez»: mientras COSECHAR mueve el robot, nadie le pide otro destino por los sliders."""
+    w = ventana
+    todos = (*w.sliders_xyz, *w.sliders_servo)
+    assert all(s.isEnabled() for s in todos)
+    w.COSECHAR.click()
+    assert w.cola and not any(s.isEnabled() for s in todos)
+    correr(w)
+    assert all(s.isEnabled() for s in todos)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% S5: NADA DEL ROBOT VA ESCRITO EN EL CÓDIGO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
