@@ -238,6 +238,25 @@ def test_f10_3_con_una_vista_sola_las_escondidas_salen_al_dia_al_volver_a_todas(
         assert np.allclose(d.l_brazo.get_xydata(), e[: len(d.l_brazo.get_xydata())], atol=1e-6)
 
 
+def test_f10_3_si_el_robot_se_movio_con_la_ventana_sin_mostrar_los_dibujos_salen_al_dia_al_mostrarla(ventana):
+    """Un dibujo que no está a la vista solo ANOTA la postura. Al mostrarse la ventana (sin cambiar de pestaña, que es lo
+    que repone la pose) tiene que salir con la postura del robot, no con la que tenía al crearse."""
+    w = ventana
+    w.hide()
+    pasar()
+    assert not w.visor.lateral.lienzo.isVisible() and not w.visor.superior.lienzo.isVisible()
+    assert w.visor.principal == TODAS
+    w.poner_servos((20, 100, 60))
+    w.show()                                                     # SIN estado(): NADA DE ver() NI DE poner_volumen()
+    w.resize(1280, 720)
+    pasar()
+    assert tuple(w.servos) == (20, 100, 60)
+    assert _poses_dibujadas(w) == [tuple(w.servos)] * 2
+    esperado = [w.visor.geo.lateral(w.servos)[:, :2], w.visor.geo.superior(w.servos)]
+    for d, e in zip((w.visor.lateral, w.visor.superior), esperado):
+        assert np.allclose(d.l_brazo.get_xydata(), e[: len(d.l_brazo.get_xydata())], atol=1e-6)
+
+
 @pytest.mark.parametrize("base", [0, 37, 90, 180, 270])
 def test_f10_3_la_lateral_sigue_al_brazo_y_siempre_lo_ve_de_perfil(robot, base):
     geo = planos.Geometria(robot)
@@ -655,6 +674,9 @@ def test_r2_cada_evento_ocupa_un_renglon_y_caben_cinco_a_la_vista(ventana, tam):
     lista = w.LISTA_REGISTRO
     alturas = {lista.sizeHintForRow(i) for i in range(lista.count())}
     assert len(alturas) == 1, alturas                                          # UN MENSAJE LARGO NO CRECE: TODOS MIDEN LO MISMO
+    # …Y EN PANTALLA, NO SOLO EN LA CUENTA: sizeHintForRow NO VE UN RENGLÓN ENVUELTO (MEDIDO: 22 px CONTRA 172 px REALES)
+    en_pantalla = {lista.visualItemRect(lista.item(i)).height() for i in range(lista.count())}
+    assert en_pantalla == alturas, (en_pantalla, alturas)
     assert all("\n" not in lista.item(i).text() for i in range(lista.count()))  # UN RENGLÓN DE TEXTO
     visibles = lista.viewport().height() // lista.sizeHintForRow(0)
     assert visibles >= 5, (visibles, lista.viewport().height(), lista.sizeHintForRow(0))
