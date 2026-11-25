@@ -649,6 +649,9 @@ def test_r2_cada_evento_ocupa_un_renglon_y_caben_cinco_a_la_vista(ventana, tam):
     w = ventana
     estado(w, tam)
     _llenar_registro(w, 12)
+    w.avisar("Corto", "info", "Cinemática inversa")                          # UN MENSAJE CORTO Y OTROS LARGOS: SI ALGUNO ENVUELVE, LAS ALTURAS DIFIEREN
+    w.avisar("Primera línea\nsegunda línea", "aviso", "Cinemática inversa")   # UN MENSAJE DE VARIAS LÍNEAS SIGUE SIENDO UN RENGLÓN
+    pasar()
     lista = w.LISTA_REGISTRO
     alturas = {lista.sizeHintForRow(i) for i in range(lista.count())}
     assert len(alturas) == 1, alturas                                          # UN MENSAJE LARGO NO CRECE: TODOS MIDEN LO MISMO
