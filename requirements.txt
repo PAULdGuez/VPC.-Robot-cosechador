@@ -7,3 +7,4 @@ pyvistaqt
 pyserial
 pyyaml
 pytest
+hypothesis

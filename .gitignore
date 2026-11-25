@@ -5,3 +5,4 @@ __pycache__/
 modelos/*-codigo.stl
 modelos/*-codigo.step
 logs/
+.hypothesis/
