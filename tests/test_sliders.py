@@ -24,6 +24,7 @@ from cosechador.robot import robot_desde_dict
 from cosechador.robot.cinematica_inversa import PASO_TRAMOS_MM, TOLERANCIA_TRAMOS_MM, alcanzable, angulos_servo
 from cosechador.ui import tema
 from cosechador.ui.ventana import COLOR_NIVEL, PESTANA_XYZ
+from helpers_ventana import como_recien_abierta, teletransportar
 from test_editor_puntos import abrir as abrir_editor  # noqa: F401 (NO ES UN FIXTURE: ABRE EL EDITOR CON UN PROGRAMA)
 from test_editor_puntos import guardar_programa, home_s, llevar, poses  # noqa: F401 (home_s Y poses SON FIXTURES)
 from test_grabacion_ventana import correr, eventos, ventana  # noqa: F401 (ventana ES EL FIXTURE)
@@ -94,8 +95,9 @@ def defectos_de_lo_pintado(w, desde=None):
 
 
 def colocar(w, servos):
-    """Deja el robot en esos servos como lo hace la app al arrancar en HOME: poner los servos y sincronizar."""
-    w.poner_servos(servos)
+    """Deja el robot en esos servos como lo hace la app al arrancar en HOME: poner los servos y sincronizar. (Sin pasos de
+    por medio: la guardia niega un brinco, así que se le borra la memoria, como si la app hubiera abierto ahí.)"""
+    teletransportar(w, servos)
     w._sincronizar_sliders()
 
 
@@ -258,6 +260,7 @@ def _por_paso_a_paso(w, poses):
 
 
 def _por_el_arranque(w, poses):
+    como_recien_abierta(w)  # AL ABRIR LA APP LA GUARDIA NO TIENE HISTORIA: EL HOME ES SU PRIMERA ORDEN
     w._ir_a_home()  # NO HAY BOTÓN DE HOME: ESTO ES LO QUE CORRE AL ABRIR LA APP
 
 

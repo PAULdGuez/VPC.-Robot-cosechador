@@ -7,7 +7,8 @@ Aquí vive UNA sola versión de lo que antes estaba escrito dos veces con compor
 - El temporizador del movimiento simulado con el reloj falso: `avanzar` y `correr` disparan los pasos en el instante en
   que el temporizador real los dispararía (cada paso, `timer.interval()` después del anterior; el primero, 1 ms después de
   que se encola el plan), así que lo que sale hacia la placa lleva la hora que tendría en la app.
-- El espía de todo lo que sale hacia la placa, con la guardia de salida de OBSERVADORA (no manda nada a ningún lado).
+- El espía de todo lo que sale hacia la placa. La guardia de salida es la DE VERDAD, la que lleva la ventana dentro (comparte el
+  reloj falso con ella): lo que la guardia niega no sale, y `x.negadas` anota cada primera negativa.
 """
 import os
 import sys
@@ -53,13 +54,13 @@ class Estado:
         self.reloj = Reloj(1000.0)
         self.vence = None                 # CUÁNDO DISPARARÍA EL TEMPORIZADOR REAL EL SIGUIENTE PASO (None: NO ESTÁ CORRIENDO)
         self.enviados = []                # [(hora, servos, origen del plan)] TODO LO QUE SALIÓ HACIA LA PLACA
-        self.negadas = []                 # [(hora, Violacion, servos)] LO QUE LA GUARDIA OBSERVADORA NO HABRÍA DEJADO SALIR
+        self.negadas = []                 # [(hora, Violacion, servos)] CADA VEZ QUE LA GUARDIA SE NEGÓ POR PRIMERA VEZ (LA QUE LA DETUVO)
         self.eventos = []                 # TODO LO QUE SE AVISÓ (sin el tope de 2000 del registro de la ventana)
         self.dialogos = []                # [(clase, texto, respuesta)] LO QUE SE PREGUNTÓ Y LO QUE SE CONTESTÓ
         self.nombres = collections.deque()      # RESPUESTAS A «¿CÓMO SE LLAMA?» (None = CANCELAR)
         self.confirmas = collections.deque()    # RESPUESTAS A LAS PREGUNTAS DE SÍ/NO
         self.excepciones = EXCEPCIONES    # (la lista de arriba)
-        self.guardia = None
+        self.guardia = None               # LA GUARDIA DE VERDAD DE LA VENTANA (w.enlace)
 
 
 def carpeta_desechable():
@@ -85,10 +86,11 @@ def ventana_aislada(robot, carpeta):
     programas = os.path.join(carpeta, "programas")
     os.makedirs(programas, exist_ok=True)
     ajustes = QtCore.QSettings(os.path.join(carpeta, "ajustes.ini"), QtCore.QSettings.IniFormat)
-    w = VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=programas, registro=reg.Registro(carpeta=None))
+    x = Estado(carpeta)
+    # EL RELOJ FALSO ENTRA DESDE EL PRINCIPIO: LA GUARDIA DE LA VENTANA LO USA PARA LA POSE CON LA QUE ARRANCA
+    w = VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=programas, registro=reg.Registro(carpeta=None), reloj=x.reloj)
     assert os.path.realpath(w.carpeta_programas) != os.path.realpath(prog.CARPETA_PROGRAMAS)
-    x = w.x = Estado(carpeta)
-    w.reloj = x.reloj
+    w.x = x
     w.grabadora = Grabadora(reloj=x.reloj)
     w.registro.suscribir(x.eventos.append)
     _espiar_la_placa(w)
@@ -98,23 +100,48 @@ def ventana_aislada(robot, carpeta):
 
 def _espiar_la_placa(w):
     x = w.x
-    x.guardia = GuardiaDeSalida(EnlaceFalso(x.reloj), w.robot, reloj=x.reloj)
-    x.guardia.enviar(*w.servos)       # LA POSE CON LA QUE ARRANCÓ LA VENTANA YA SALIÓ
-    # ...Y SALIÓ HACE RATO: NADIE TOCA UN CONTROL EN EL MISMO MILISEGUNDO EN QUE ABRE LA VENTANA. SIN ESTO EL RELOJ FALSO NO
-    # AVANZA Y EL PRIMER PASO DEL PRIMER GESTO «SALE» 1 ms DESPUÉS DE LA POSE INICIAL: LA GUARDIA LO NIEGA POR RITMO Y ES MENTIRA
+    x.guardia = w.enlace
+    # LA POSE CON LA QUE ARRANCÓ LA VENTANA YA SALIÓ... Y SALIÓ HACE RATO: NADIE TOCA UN CONTROL EN EL MISMO MILISEGUNDO EN QUE
+    # ABRE LA VENTANA. SIN ESTO EL RELOJ FALSO NO AVANZA Y EL PRIMER PASO DEL PRIMER GESTO «SALE» 1 ms DESPUÉS DE LA POSE
+    # INICIAL: LA GUARDIA LO NIEGA POR RITMO Y ES MENTIRA
     x.reloj.t += SEGUNDOS_TRAS_ABRIR
-    original = w.enlace.enviar
+    crudo = w.enlace._enlace
+    al_crudo = crudo.enviar
+
+    def a_la_placa(*servos):
+        x.enviados.append((x.reloj(), tuple(servos), w._origen_plan))   # LO QUE DE VERDAD LLEGÓ A LA PLACA
+        return al_crudo(*servos)
+
+    crudo.enviar = a_la_placa
+    por_la_guardia = w.enlace.enviar
 
     def enviar(*servos):
-        x.enviados.append((x.reloj(), tuple(servos), w._origen_plan))
-        if not x.guardia.detenida:    # SOLO LA PRIMERA NEGATIVA CUENTA: DESPUÉS LA GUARDIA REPITE LA MISMA
-            try:
-                x.guardia.enviar(*servos)
-            except OrdenNegada as e:
+        try:
+            return por_la_guardia(*servos)
+        except OrdenNegada as e:
+            if e.nueva:       # SOLO LA PRIMERA NEGATIVA CUENTA: DESPUÉS LA GUARDIA DETENIDA REPITE LA MISMA
                 x.negadas.append((x.reloj(), e.violacion, tuple(servos)))
-        return original(*servos)
+            raise
 
     w.enlace.enviar = enviar
+
+
+def teletransportar(w, servos):
+    """Deja al robot en `servos` de un golpe, sin pasos de por medio, como si la app hubiera arrancado ahí. NO es algo que la
+    app haga: es para las pruebas que necesitan una pose de salida cualquiera. La guardia (con razón) niega un brinco, así que
+    aquí se le borra la memoria de lo último que salió: la primera orden de una guardia sin historia solo se revisa de forma,
+    cantidad, números y rango. Es lo que le pasaría a la app al abrirse en esa pose. (La guardia NO tiene una forma pública de
+    olvidar: hacerla para las pruebas sería dejarla para cualquiera.)"""
+    como_recien_abierta(w)
+    return w.poner_servos(servos)
+
+
+def como_recien_abierta(w):
+    """Borra la memoria de la guardia: lo siguiente que salga es, para ella, lo primero de una app recién abierta. Para las
+    pruebas que llaman `_ir_a_home` a media sesión (la app solo lo hace al abrir)."""
+    g = w.enlace
+    g._ultima = g._hora_ultima = g._detenida = None
+    g._deuda_ms = 0.0
 
 
 def _contestar_los_dialogos(w):

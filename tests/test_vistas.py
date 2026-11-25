@@ -20,6 +20,7 @@ import vtk
 from PyQt5 import QtCore, QtGui, QtTest, QtWidgets
 
 import auditoria_interfaz as au
+from helpers_ventana import como_recien_abierta, teletransportar
 from cosechador import registro as reg
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.espacio_trabajo import contorno_del_corte, giro_de_la_base
@@ -204,8 +205,8 @@ def _poses_dibujadas(w):
 MEDIOS = {
     "slider de un servo": lambda w: (w.SLIDER_2.setValue(w.SLIDER_2.value() + 25), correr(w)),
     "slider de la punta XYZ": lambda w: (w.SLIDER_Z.setValue(w.SLIDER_Z.value() - 120), correr(w)),
-    "volver a casa": lambda w: (w._ir_a_home(), correr(w)),
-    "poner_servos directo": lambda w: w.poner_servos((60, 75, 115)),
+    "volver a casa": lambda w: (como_recien_abierta(w), w._ir_a_home(), correr(w)),
+    "poner_servos directo": lambda w: teletransportar(w, (60, 75, 115)),
 }
 
 
@@ -213,7 +214,7 @@ MEDIOS = {
 def test_f10_3_al_mover_el_robot_por_cualquier_medio_las_tres_vistas_se_mueven_a_la_vez(ventana, medio):
     w = ventana
     estado(w)
-    w.poner_servos((30, 30, 60))
+    teletransportar(w, (30, 30, 60))
     correr(w)
     antes_3d = [np.array(a.user_matrix) for a in w.escena.actores]
     antes = _brazos(w)
@@ -228,7 +229,7 @@ def test_f10_3_al_mover_el_robot_por_cualquier_medio_las_tres_vistas_se_mueven_a
 def test_f10_3_con_una_vista_sola_las_escondidas_salen_al_dia_al_volver_a_todas(ventana):
     w = ventana
     estado(w, pestana=V3D)
-    w.poner_servos((100, 50, 80))
+    teletransportar(w, (100, 50, 80))
     correr(w)
     w.visor.ver(TODAS)
     pasar()
@@ -246,7 +247,7 @@ def test_f10_3_si_el_robot_se_movio_con_la_ventana_sin_mostrar_los_dibujos_salen
     pasar()
     assert not w.visor.lateral.lienzo.isVisible() and not w.visor.superior.lienzo.isVisible()
     assert w.visor.principal == TODAS
-    w.poner_servos((20, 100, 60))
+    teletransportar(w, (20, 100, 60))
     w.show()                                                     # SIN estado(): NADA DE ver() NI DE poner_volumen()
     w.resize(1280, 720)
     pasar()

@@ -23,6 +23,8 @@ from PyQt5 import QtCore, QtWidgets
 from vtkmodules.vtkRenderingCore import vtkCoordinate
 
 import auditoria_interfaz as au
+from test_grabacion_ventana import RelojFalso
+from helpers_ventana import teletransportar
 from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
 from cosechador.movimiento.trayectorias import (plan_cosecha, plan_ir_y_volver, posicion, servos_del_plan,
@@ -227,8 +229,10 @@ def abrir(tmp_path):
         ajustes = QtCore.QSettings(str(tmp_path / "ajustes.ini"), QtCore.QSettings.IniFormat)
         if recordado is not None:  # LO QUE HABRÍA QUEDADO GUARDADO DE OTRA VEZ
             ajustes.setValue(f"herramienta/{robot.nombre}", recordado)
+        reloj = RelojFalso()   # LA GUARDIA DE LA VENTANA MIDE EL RITMO: `correr` ADELANTA ESTE RELOJ LO QUE DURA CADA PASO
         w = ventana.VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=programas or str(tmp_path / "programas"),
-                                     registro=reg.Registro(carpeta=None))
+                                     registro=reg.Registro(carpeta=None), reloj=reloj)
+        reloj.t += 1.0         # LA POSE DE ARRANQUE SALIÓ HACE RATO
         w.enviados = []  # LO QUE SALE HACIA LA PLACA, ANTES DE QUE ELLA LO REDONDEE A GRADOS ENTEROS
         enviar = w.enlace.enviar
         w.enlace.enviar = lambda *servos: (w.enviados.append(tuple(float(s) for s in servos)), enviar(*servos))[1]
@@ -252,6 +256,7 @@ def correr(w):
     w.temporizador_movimiento.stop()
     while w.cola:
         w._siguiente_paso()
+        w.reloj.t += w.temporizador_movimiento.interval() / 1000
     w._siguiente_paso()  # COLA VACÍA: EL MOVIMIENTO TERMINA (Y SE REACTIVAN LOS CONTROLES)
 
 
@@ -265,7 +270,7 @@ def ir_a(w, punto):
 
 def reproducir(w, archivo, desde):
     """Reproduce un programa del repo saliendo de esa pose: en w.enviados queda lo que salió hacia la placa."""
-    w.poner_servos(desde)
+    teletransportar(w, desde)
     w.enviados.clear()
     w.enlace.dispositivo.historial.clear()
     w.SELECTOR_PROGRAMA.setCurrentIndex(w.SELECTOR_PROGRAMA.findData(archivo))
@@ -588,7 +593,7 @@ def test_p8_el_largo_del_archivo_manda_en_el_texto_el_dibujo_las_coordenadas_y_e
     r = con_largo(largo)
     w = abrir(r)
     w.VER_VOLUMEN.click()
-    w.poner_servos((60, 110, 100))
+    teletransportar(w, (60, 110, 100))
     w._sincronizar_sliders()
     assert w.robot.efector.largo == largo and w.LARGO_HERRAMIENTA.text() == f"{largo}"
     punta = punta_a_mano(r, w.servos)

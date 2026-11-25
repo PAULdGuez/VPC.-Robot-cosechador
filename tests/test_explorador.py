@@ -36,6 +36,7 @@ from PyQt5 import QtCore
 import explorador as ex
 from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
+from cosechador.hardware.guardia import OrdenNegada
 from cosechador.movimiento.invariantes import avance_punta_mm
 from cosechador.movimiento.trayectorias import Paso
 from cosechador.robot import cargar_robot
@@ -208,8 +209,10 @@ def _efecto_rebote(s):
 
 def _efecto_brinco(s):
     a, b = _servos_lejanos(s.w.robot)
-    s.w.enlace.enviar(*a)
-    s.w.enlace.enviar(*b)
+    # AL ENLACE CRUDO, NO POR LA GUARDIA: ES EL DEFECTO «LA APP MANDÓ UN BRINCO A LA PLACA». POR LA GUARDIA YA NO SALDRÍA (ESO LO
+    # PRUEBA test_guardia_en_la_ventana) Y LA REVISIÓN `brinco` DEL EXPLORADOR SE QUEDARÍA SIN DEFECTO QUE CAZAR
+    s.w.enlace._enlace.enviar(*a)
+    s.w.enlace._enlace.enviar(*b)
 
 
 def _efecto_perdida_borra_un_programa(s):
@@ -233,7 +236,9 @@ def _efecto_excepcion_en_un_slot(s):
 
 
 def _efecto_orden_negada(s):
-    s.w.enlace.enviar(*(j.servo.maximo + 50 for j in s.w.robot.articulaciones))
+    # LA GUARDIA DE LA VENTANA SE NIEGA DE VERDAD Y LEVANTA OrdenNegada: LO QUE LA REVISIÓN LEE ES x.negadas, NO LA EXCEPCIÓN
+    with contextlib.suppress(OrdenNegada):
+        s.w.enlace.enviar(*(j.servo.maximo + 50 for j in s.w.robot.articulaciones))
 
 
 def _efecto_reposo_boton_detener_trabado(s):

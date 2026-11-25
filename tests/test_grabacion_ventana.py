@@ -35,8 +35,10 @@ def ventana(robot, tmp_path):
     carpeta = tmp_path / "programas"
     carpeta.mkdir()
     ajustes = QtCore.QSettings(str(tmp_path / "ajustes.ini"), QtCore.QSettings.IniFormat)
-    w = VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=str(carpeta), registro=reg.Registro(carpeta=None))
-    w.reloj = RelojFalso()
+    reloj = RelojFalso()
+    # EL RELOJ FALSO ENTRA AL ABRIR: LA GUARDIA DE LA VENTANA LO USA PARA LA POSE DE ARRANQUE, Y DESPUÉS PARA CADA PASO
+    w = VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=str(carpeta), registro=reg.Registro(carpeta=None), reloj=reloj)
+    reloj.t += 1.0   # LA POSE DE ARRANQUE SALIÓ HACE RATO: NADIE TOCA UN CONTROL EN EL MILISEGUNDO EN QUE ABRE LA VENTANA
     w.grabadora = Grabadora(reloj=w.reloj)
     # TODO LO QUE DE VERDAD SALE HACIA LA PLACA, CON SU HORA
     w.enviados = []
