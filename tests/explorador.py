@@ -275,7 +275,9 @@ class Sesion:
         sembrar_programas(self.w)
         self.w.x.autores = []                  # EL GESTO QUE ESCRIBIÓ CADA EVENTO DEL REGISTRO (PARALELO A x.eventos)
         self.w.x.gesto_actual = -1
-        self.w.registro.suscribir(lambda e: self.w.x.autores.append(self.w.x.gesto_actual))
+        self.w.x.salidas = []                  # CUÁNTAS ÓRDENES HABÍAN SALIDO A LA PLACA AL ESCRIBIRSE CADA EVENTO (PARALELO)
+        self.w.registro.suscribir(lambda e: (self.w.x.autores.append(self.w.x.gesto_actual),
+                                             self.w.x.salidas.append(len(self.w.x.enviados))))
         self.gestos = []
         self.cob.ventana_nueva(self.w)
 
@@ -472,7 +474,22 @@ class Sesion:
             autores = {self.gestos[a].tipo for a in x.autores[primero:ultimo + 1] if 0 <= a < len(self.gestos)}
             if autores == {"click"}:
                 continue                     # LA PERSONA VOLVIÓ A PULSAR EL MISMO BOTÓN: ES SU DECISIÓN, NO UN DEFECTO
+            if self._un_aviso_por_intento(primero, ultimo):
+                continue                     # LA PERSONA VOLVIÓ A INTENTARLO Y CADA INTENTO TUVO SU ÚNICA RESPUESTA
             return "racha_de_avisos", f"{r.longitud} avisos idénticos seguidos ({r.nivel}, {r.origen}): «{r.mensaje}»"
+
+    def _un_aviso_por_intento(self, primero, ultimo):
+        """True si cada aviso de la racha es la única respuesta a un intento distinto de la persona: lo escribió un gesto
+        DISTINTO, ese gesto es algo que la persona hace (no esperar) y entre un aviso y el siguiente el robot se movió o el aviso dice otra cosa (otro tope).
+        La app calla el mismo aviso «hasta que algo se mueva»: si algo se movió y la persona insiste, vuelve a avisar, y
+        eso es lo que debe hacer. Varios avisos del MISMO gesto, el mismo aviso letra por letra sin que nada se mueva, o avisos mientras la persona
+        solo espera, siguen siendo una racha."""
+        x = self.w.x
+        autores, salidas = x.autores[primero:ultimo + 1], x.salidas[primero:ultimo + 1]
+        textos = [e.mensaje for e in x.eventos[primero:ultimo + 1]]
+        return (all(0 <= a < len(self.gestos) and self.gestos[a].tipo not in ("esperar", "llegar") for a in autores)
+                and len(set(autores)) == len(autores)
+                and all(salidas[i + 1] > salidas[i] or textos[i + 1] != textos[i] for i in range(len(autores) - 1)))
 
     def _brinco(self, antes):
         w, x = self.w, self.w.x

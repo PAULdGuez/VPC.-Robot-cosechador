@@ -315,6 +315,72 @@ def test_ex02_los_clics_repetidos_de_la_persona_no_son_una_racha(con_efecto):
         assert ex.reproducir([clic, clic, clic]) is None
 
 
+def test_ex02_insistir_contra_el_rojo_moviendo_el_robot_entre_intentos_no_es_una_racha():
+    """Tres arrastres DISTINTOS contra el rojo, cada uno con su único aviso y con el robot moviéndose entre uno y otro, son tres
+    respuestas a tres intentos de la persona. Lo encontró la exploración larga del 25-nov-2026 y no era un defecto de la app."""
+    gestos = [Gesto("elegir", "PESTANAS_MOVIMIENTO", 0.5), Gesto("arrastrar", "SLIDER_X", 0.9926006880852335, 945821, 0.3),
+              Gesto("arrastrar", "SLIDER_Z", 0.009328207233619379, 261169, 0.3),
+              Gesto("arrastrar", "SLIDER_X", 0.43939451090100756, 162581, 0.3),
+              Gesto("arrastrar", "SLIDER_X", 0.7688710002305318, 351944, 0.3),
+              Gesto("arrastrar", "SLIDER_X", 0.34134116422095195, 22030, 0.3)]
+    assert ex.reproducir(gestos) is None
+
+
+def test_ex02_topar_arriba_y_luego_abajo_son_dos_avisos_distintos_no_una_racha():
+    """Topar con el rojo de arriba y enseguida con el de abajo da dos avisos con OTRO tope: dicen cosas distintas aunque el robot
+    no haya alcanzado a moverse entre uno y otro (aquí va al 46 % de velocidad). Tercera vuelta de la exploración larga."""
+    gestos = [Gesto("arrastrar", "SLIDER_VELOCIDAD", 0.3953828366880614, 501895, 0.0),
+              Gesto("arrastrar", "SLIDER_3", 0.8571246634377789, 423644, 1.5), Gesto("elegir", "PESTANAS_MOVIMIENTO", 0.5),
+              Gesto("arrastrar", "SLIDER_X", 0.9926006880852335, 945821, 0.008),
+              Gesto("arrastrar", "SLIDER_Z", 0.28345775271251406, 290231, 0.008),
+              Gesto("arrastrar", "SLIDER_X", 0.43939451090100756, 162581, 0.0),
+              Gesto("arrastrar", "SLIDER_X", 0.7688710002305318, 351944, 0.0),
+              Gesto("arrastrar", "SLIDER_X", 0.34134116422095195, 22030, 0.0)]
+    assert ex.reproducir(gestos) is None
+
+
+def _mover_un_grado(s):
+    servos = list(s.w.servos)
+    servos[0] += 1
+    s.w.poner_servos(servos)
+    s.w._sincronizar_sliders()          # COMO CUANDO ALGO TERMINA DE MOVERSE: LOS SLIDERS DICEN DÓNDE QUEDÓ
+
+
+def test_ex02_un_aviso_por_gesto_sin_que_nada_se_mueva_si_es_una_racha(con_efecto):
+    """Control: tres gestos distintos que escriben el mismo aviso SIN que el robot se mueva entre uno y otro siguen siendo
+    una racha (la app debió callarse hasta que algo se moviera)."""
+    con_efecto(lambda s: s.w.avisar("La punta no llega más allá de X = 219 mm", "aviso", "Jog", tope_mm=219))
+    hallazgo = ex.reproducir([PRUEBA, PRUEBA, PRUEBA])
+    assert hallazgo is not None and hallazgo.clase == "racha_de_avisos", str(hallazgo)
+
+
+def test_ex02_varios_avisos_de_un_mismo_gesto_si_son_una_racha_aunque_el_robot_se_mueva(con_efecto):
+    """Control: el defecto de origen (un solo arrastre que avisa una y otra vez mientras el robot se mueve) sigue siendo racha."""
+    def efecto(s):
+        for i in range(3):
+            _mover_un_grado(s)
+            s.w.avisar(f"La punta no llega más allá de X = {200 + i} mm", "aviso", "Jog", tope_mm=200 + i)
+    con_efecto(efecto)
+    hallazgo = ex.reproducir([PRUEBA])
+    assert hallazgo is not None and hallazgo.clase == "racha_de_avisos", str(hallazgo)
+
+
+def test_ex02_avisos_mientras_la_persona_solo_espera_si_son_una_racha():
+    """Control: avisos que salen mientras la persona no hace nada, aunque el robot se mueva entre uno y otro, nadie los pidió."""
+    original = ex.Sesion._ejecutar
+
+    def _ejecutar(self, g):
+        if g.tipo == "esperar":
+            _mover_un_grado(self)
+            self.w.avisar("Aviso que nadie pidió", "aviso", "Prueba")
+        else:
+            original(self, g)
+    espera = Gesto("esperar", "", 0.0, 0, 0.1)
+    with mock.patch.object(ex.Sesion, "_ejecutar", _ejecutar):
+        hallazgo = ex.reproducir([espera, espera, espera])
+    assert hallazgo is not None and hallazgo.clase == "racha_de_avisos", str(hallazgo)
+
+
 def test_ex02_el_tope_del_brinco_no_deja_fuera_un_paso_legal():
     """El umbral de «brinco» (BRINCO_ROJO_MM) tiene que estar POR ENCIMA de lo que un paso legal (15° por servo) puede mover
     la punta; si no, el explorador acusaría a pasos legales. Medido con poses al azar en todo el rango de cada servo."""
