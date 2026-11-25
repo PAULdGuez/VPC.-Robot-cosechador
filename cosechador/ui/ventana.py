@@ -439,6 +439,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                     "ok", "Herramienta", largo_mm=largo, antes_mm=actual)
         if self.escena.actores_volumen:  # EL VOLUMEN A LA VISTA ERA EL DE LA PUNTA DE ANTES
             self._dibujar_volumen()
+        self._revisar_puntos()  # LOS PUNTOS SE GUARDAN COMO ÁNGULOS: CON OTRA HERRAMIENTA LA PUNTA RECORRE OTRO CAMINO
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VELOCIDAD Y POSTURA (FUERA DE LAS PESTAÑAS) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_selectores(self):
@@ -993,7 +994,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                 for numero, texto in problemas}
 
     def _revisar_puntos(self):
-        """Cambió el modo de postura: un punto que se podía alcanzar puede ya no poderse, y al revés."""
+        """Cambió la postura o la herramienta: un punto que se podía alcanzar puede ya no poderse, y al revés."""
         if self.editando:
             self._pintar_puntos(self.fila_elegida())
 
