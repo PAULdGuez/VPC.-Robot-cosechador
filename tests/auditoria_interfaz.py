@@ -10,18 +10,24 @@ Revisa, en el estado en que esté la ventana, lo que un ojo se cansa de revisar:
   tamaño      un control es demasiado chico para atinarle (WCAG 2.2, criterio 2.5.8: 24 × 24 px)
   contraste   el texto no se distingue de su fondo (WCAG AA: 4.5:1; 3:1 en texto grande)
   fila        los elementos de una misma fila no están alineados
+  rótulo      dentro de un dibujo (lateral, superior): dos rótulos se enciman, uno se sale o corta, o su letra es menor a la mínima
 
 `auditar(ventana)` devuelve una lista de textos; vacía = sin defectos.
 """
 import numpy as np
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from PyQt5 import QtCore, QtGui, QtWidgets
+from pyvistaqt import QtInteractor
 
 W = QtWidgets
 CON_TEXTO = (W.QLabel, W.QPushButton, W.QCheckBox)
-INTERACTIVOS = (W.QPushButton, W.QComboBox, W.QLineEdit, W.QCheckBox, W.QSlider)
-HOJAS = CON_TEXTO + (W.QComboBox, W.QLineEdit, W.QSlider, W.QProgressBar, W.QListWidget, W.QTextBrowser)
+INTERACTIVOS = (W.QPushButton, W.QComboBox, W.QLineEdit, W.QCheckBox, W.QSlider, W.QToolButton, W.QTabBar)
+# TAMBIÉN SE REVISAN LAS PESTAÑAS, LOS BOTONES DE HERRAMIENTA Y LOS LIENZOS DE LAS VISTAS (matplotlib y la 3D de pyvista)
+HOJAS = CON_TEXTO + (W.QComboBox, W.QLineEdit, W.QSlider, W.QProgressBar, W.QListWidget, W.QTextBrowser,
+                     W.QTabBar, W.QToolButton, FigureCanvasQTAgg, QtInteractor)
 
 LADO_MINIMO = 24            # px: objetivo mínimo de un control
+LETRA_MINIMA = 12           # px: la letra más chica que se acepta en un rótulo dibujado (la «letra_chica» del tema); LA FIJA EL AUDITOR
 CONTRASTE_NORMAL = 4.5
 CONTRASTE_GRANDE = 3.0      # texto ≥ 24 px, o ≥ 19 px en negritas
 ROLES_CON_BORDE = ("chip",)  # QLabel con caja; los QPushButton siempre se revisan
@@ -282,9 +288,40 @@ def textos_pegados_al_borde(ventana):
     return hallazgos
 
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% RÓTULOS DENTRO DE LOS DIBUJOS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+def rotulos_de(dibujo, letra_minima=LETRA_MINIMA, nombre="dibujo"):
+    """Revisa los rótulos de un dibujo (planos.Dibujo): ninguno se encima con otro, ninguno se sale ni se corta en el borde del
+    lienzo y ninguno baja de `letra_minima` px. Cada rótulo es (texto, x0, y0, x1, y1, letra) en px del lienzo."""
+    ancho, alto = dibujo.px()
+    rotulos, hallazgos = dibujo.rotulos(), []
+    for i, a in enumerate(rotulos):
+        if a.x0 < -0.5 or a.y0 < -0.5 or a.x1 > ancho + 0.5 or a.y1 > alto + 0.5:
+            hallazgos.append(f"rótulo: «{a.texto[:30]}» de {nombre} se sale del lienzo de {ancho:.0f}×{alto:.0f} px "
+                             f"({a.x0:.0f},{a.y0:.0f} a {a.x1:.0f},{a.y1:.0f})")
+        if a.letra < letra_minima - 0.05:
+            hallazgos.append(f"rótulo: «{a.texto[:30]}» de {nombre} tiene letra de {a.letra:g} px (mínimo {letra_minima} px)")
+        for b in rotulos[i + 1:]:
+            cruce_x, cruce_y = min(a.x1, b.x1) - max(a.x0, b.x0), min(a.y1, b.y1) - max(a.y0, b.y0)
+            if cruce_x > 0.5 and cruce_y > 0.5:
+                hallazgos.append(f"rótulo: «{a.texto[:30]}» y «{b.texto[:30]}» de {nombre} se enciman {cruce_x:.0f}×{cruce_y:.0f} px")
+    return hallazgos
+
+
+def rotulos_de_las_vistas(ventana):
+    """Los rótulos de los dibujos que están a la vista en la ventana (los de un robot sin visor no existen)."""
+    visor = getattr(ventana, "visor", None)
+    hallazgos = []
+    for dibujo in getattr(visor, "dibujos", ()):
+        if dibujo.lienzo.isVisible():
+            hallazgos.extend(rotulos_de(dibujo, nombre=f"{type(dibujo).__name__} ({dibujo.lienzo.objectName() or 'lienzo'})"))
+    return hallazgos
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% TODO JUNTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-REVISIONES = (solapes, recortes, textos_cortados, textos_pegados_al_borde, controles_chicos, contrastes, filas_desalineadas)
+REVISIONES = (solapes, recortes, textos_cortados, textos_pegados_al_borde, controles_chicos, contrastes, filas_desalineadas,
+              rotulos_de_las_vistas)
 
 
 def auditar(ventana, revisiones=REVISIONES):
