@@ -580,6 +580,16 @@ HALLAZGOS = (
     ), "en «En cola», con un cambio de postura ya pendiente (aceptado en «girar despacio»), se pasa a «negarse» y se arrastra otra "
        "vez el mismo slider: su tramo se retraza desde donde salía y el rojo se midió desde donde llega; el planeador se niega "
        "(«tendría que cambiar de postura») y el slider vuelve. Con un solo modo de postura de principio a fin no pasa"),
+    ("D7-rebote-reemplazar-con-la-punta-en-camino", "rebote", (
+        Gesto(tipo='elegir', control='PESTANAS_MOVIMIENTO', v=0.5, s=0, dt=0.0),
+        Gesto(tipo='elegir', control='SELECTOR_EN_CAMINO', v=0.2238158098647538, s=0, dt=0.0),
+        Gesto(tipo='arrastrar', control='SLIDER_Z', v=0.5457821488113972, s=477770, dt=0.3),
+        Gesto(tipo='arrastrar', control='SLIDER_X', v=0.8835869371580177, s=34855, dt=0.3),
+        Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.14673451377324587, s=607881, dt=1.5),
+    ), "riesgo declarado de «Reemplazar»: con la punta en camino (aquí, 0.3 s entre soltar un slider y agarrar el otro) el rojo "
+       "se mide desde el punto al que va y el tramo nuevo sale en diagonal desde donde va la punta; la diagonal cruza una zona "
+       "que el robot no alcanza, el planeador se niega («pasa por … una zona que el robot no alcanza») y el slider vuelve. "
+       "Lo encontró la exploración larga del 25-nov-2026. Esperando a que llegue, o en «En cola» y «Cancelar», no pasa"),
 )
 
 
