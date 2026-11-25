@@ -399,6 +399,28 @@ def test_s3_con_el_teclado_el_slider_tampoco_entra_al_rojo(ventana, pose, eje):
     assert defectos_de_lo_pintado(w) == []
 
 
+# LOS RINCONES QUE HALLÓ LA AUDITORÍA DEL 24-NOV: UN TRAMO SIN NI UN MILÍMETRO ENTERO, Y LA PUNTA POR DEBAJO DE LA BASE
+def negativas_del_planeador(w):
+    """Si el slider frena bien, el planeador nunca tiene que negarse (y el slider nunca rebota)."""
+    return [e.mensaje for e in eventos(w, "aviso") if e.origen == "Jog" and "No se mueve" in e.mensaje]
+
+
+def test_s3_en_una_esquina_de_los_limites_el_slider_no_entra_al_rojo(ventana, robot):
+    """Con el hombro y el codo en su límite, lo que la punta alcanza sobre Y es un solo punto: el tramo no tiene ni un
+    milímetro entero donde detenerse. El slider se queda donde está la punta, y lo dice una vez."""
+    w = ventana
+    hombro, codo = (robot.articulaciones[j].servo.minimo for j in (1, 2))
+    colocar(w, (90, hombro, codo))
+    slider, punta = w.SLIDER_Y, tuple(w.posicion)
+    propio, = [t for t in slider.tramos if t[0] - 0.5 <= punta[1] <= t[1] + 0.5]
+    assert math.ceil(propio[0]) > math.floor(propio[1]), "control: el tramo sí tiene un milímetro entero"
+    inicial = slider.value()
+    vistos = arrastrar_hasta(w, slider, inicial + 60)
+    assert set(vistos) == {inicial}, "el slider entró al rojo"
+    assert len(topes(w)) == 1 and negativas_del_planeador(w) == []
+    assert tuple(w.posicion) == pytest.approx(punta, abs=0.5)
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% S4: UN SOLO AVISO AL TOPAR, NO UNA LLUVIA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def avisos_del_jog(w):
     return [e for e in eventos(w, "aviso") if e.origen == "Jog"]

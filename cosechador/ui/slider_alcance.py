@@ -27,13 +27,14 @@ class SliderConAlcance(QtWidgets.QSlider):
         """El valor más cercano a `valor` que sigue dentro del tramo donde está `desde` (la punta ahora).
 
         Así el slider se detiene en la frontera: no entra al rojo ni salta al tramo de al lado. Si no hay tramos, o
-        `desde` no está en ninguno, el valor pasa tal cual (no hay de dónde frenar).
+        `desde` no está en ninguno, el valor pasa tal cual (no hay de dónde frenar). Si el tramo es tan angosto que no
+        tiene ni un valor entero (una esquina de los límites del robot), el slider se queda donde está la punta.
         """
         for a, b in self.tramos or ():
             if a - TOLERANCIA_TRAMOS_MM <= desde <= b + TOLERANCIA_TRAMOS_MM:
                 # EL SLIDER ES ENTERO: LA FRONTERA ES EL ENTERO MÁS CERCANO QUE QUEDA DENTRO DEL TRAMO
                 minimo, maximo = math.ceil(a), math.floor(b)
-                return valor if minimo > maximo else min(max(valor, minimo), maximo)
+                return int(round(desde)) if minimo > maximo else min(max(valor, minimo), maximo)
         return valor
 
     def _rojos(self):
