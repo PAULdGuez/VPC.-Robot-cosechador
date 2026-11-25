@@ -40,7 +40,7 @@ efector:
   color: "#c9d1d9"
   # Herramienta: cuánto sobresale del extremo del antebrazo, alineada con él. Lo que se pide por coordenadas
   # (X, Y, Z, un fruto, HOME) lo alcanza su PUNTA. Sin este campo, 0: no hay herramienta.
-  # 120 es provisional (falta medir la herramienta real). Se puede cambiar en la interfaz, que lo recuerda.
+  # 120 es provisional (falta medir la herramienta real). Se cambia aquí: la interfaz solo lo enseña.
   largo: 120
 
 camara:

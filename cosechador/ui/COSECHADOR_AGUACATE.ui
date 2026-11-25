@@ -1983,8 +1983,8 @@ del punto</string>
                                 <property name="text">
                                   <string>Herramienta (mm)</string>
                                 </property>
-                                <property name="buddy">
-                                  <cstring>TE_HERRAMIENTA</cstring>
+                                <property name="toolTip">
+                                  <string>Largo de la herramienta: del extremo del antebrazo a su punta. Se cambia en el archivo del robot.</string>
                                 </property>
                                 <property name="rol" stdset="0">
                                   <string>etiqueta</string>
@@ -1992,9 +1992,15 @@ del punto</string>
                               </widget>
                             </item>
                             <item>
-                              <widget class="QLineEdit" name="TE_HERRAMIENTA">
+                              <widget class="QLabel" name="LARGO_HERRAMIENTA">
+                                <property name="minimumSize">
+                                  <size>
+                                    <width>0</width>
+                                    <height>24</height>
+                                  </size>
+                                </property>
                                 <property name="toolTip">
-                                  <string>Largo de la herramienta: del extremo del antebrazo a su punta</string>
+                                  <string>Largo de la herramienta: del extremo del antebrazo a su punta. Se cambia en el archivo del robot.</string>
                                 </property>
                               </widget>
                             </item>

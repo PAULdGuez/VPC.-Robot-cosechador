@@ -22,7 +22,6 @@ from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import angulos_servo
 from cosechador.ui import tema
 from test_grabacion_ventana import correr, eventos, otro_programa, ventana  # noqa: F401 (ventana ES EL FIXTURE)
-from test_punta import escribir_herramienta
 
 
 # LA RECTA DE A A B CRUZA EL EJE DE LA BASE: NO SE PUEDE RECORRER (EL MISMO CASO DE test_trayectorias.py)
@@ -447,18 +446,6 @@ def test_b3_7_tambien_se_revisa_al_cambiar_el_modo_de_postura(ventana, robot):
     assert "cambiar de postura" in w.LISTA_PUNTOS.item(1).text() and "«negar»" in w.LISTA_PUNTOS.item(1).text()
     postura.setCurrentIndex(postura.findData("despacio"))
     assert imposibles(w) == []
-
-
-def test_b3_7_tambien_se_revisa_al_cambiar_el_largo_de_la_herramienta(ventana, poses):
-    # LOS PUNTOS SE GUARDAN COMO ÁNGULOS: CON OTRA HERRAMIENTA, LA PUNTA RECORRE OTRA RECTA ENTRE LOS MISMOS DOS PUNTOS
-    w = ventana
-    abrir(w, "p.yaml", Punto(poses["a"]), Punto(poses["b"], "lineal", 40))
-    assert imposibles(w) == [2]
-    elegir(w, 2)
-    escribir_herramienta(w, "200")                                # CON 200 mm ESA RECTA YA NO PASA POR DONDE NO SE ALCANZA
-    assert imposibles(w) == [] and w.fila_elegida() == 1          # SE REVISA SOLO, Y EL PUNTO SIGUE ELEGIDO
-    escribir_herramienta(w, "120")
-    assert imposibles(w) == [2] and "no alcanza" in w.LISTA_PUNTOS.item(1).text()
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B3.8: PASO A PASO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

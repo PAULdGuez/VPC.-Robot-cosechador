@@ -205,6 +205,15 @@ def como_hoy(request, robot, datos_yaml):
 
 
 @pytest.fixture
+def con_largo(robot, datos_yaml):
+    """El robot del archivo, pero con otro largo de herramienta puesto en el archivo (así se cambia el largo)."""
+    def hacer(largo):
+        datos_yaml["efector"]["largo"] = largo
+        return robot_desde_dict(datos_yaml, carpeta_modelos=robot.carpeta_modelos)
+    return hacer
+
+
+@pytest.fixture
 def abrir(tmp_path):
     """Abre la ventana de la app (QT_QPA_PLATFORM=offscreen: nada a la vista). Los ajustes de la persona viven en
     un archivo de la prueba: volver a abrir con los mismos ajustes es cerrar la app y abrirla otra vez."""
@@ -216,7 +225,7 @@ def abrir(tmp_path):
     def abrir(robot, programas=None, recordado=None):
         ajustes = QtCore.QSettings(str(tmp_path / "ajustes.ini"), QtCore.QSettings.IniFormat)
         if recordado is not None:  # LO QUE HABRÍA QUEDADO GUARDADO DE OTRA VEZ
-            ajustes.setValue(ventana.clave_herramienta(robot), recordado)
+            ajustes.setValue(f"herramienta/{robot.nombre}", recordado)
         w = ventana.VentanaPrincipal(robot, ajustes=ajustes, carpeta_programas=programas or str(tmp_path / "programas"),
                                      registro=reg.Registro(carpeta=None))
         w.enviados = []  # LO QUE SALE HACIA LA PLACA, ANTES DE QUE ELLA LO REDONDEE A GRADOS ENTEROS
@@ -261,12 +270,6 @@ def reproducir(w, archivo, desde):
     w.SELECTOR_PROGRAMA.setCurrentIndex(w.SELECTOR_PROGRAMA.findData(archivo))
     w.BTN_REPRODUCIR.click()
     correr(w)
-
-
-def escribir_herramienta(w, texto):
-    """La persona escribe en «Herramienta (mm)» y sale del campo (o da Enter)."""
-    w.TE_HERRAMIENTA.setText(texto)
-    w.TE_HERRAMIENTA.editingFinished.emit()
 
 
 def ultimo_aviso(w):
@@ -563,153 +566,72 @@ def test_p7_el_brazo_de_4_articulaciones_queda_como_hoy(robot_4gdl):
         assert np.linalg.norm(posicion(con, servos) - posicion(robot_4gdl, servos)) == pytest.approx(55)
 
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P8: EL LARGO SE CAMBIA DESDE LA APP Y SE RECUERDA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-def test_p8_el_campo_arranca_con_el_largo_del_archivo_junto_al_boton_del_volumen(robot, abrir):
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P8: EL LARGO SE LEE DEL ARCHIVO DEL ROBOT Y LA APP SOLO LO ENSEÑA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_p8_la_app_ensena_el_largo_del_archivo_junto_al_boton_del_volumen_y_no_deja_editarlo(robot, abrir):
     w = abrir(robot)
     assert w.ETIQUETA_HERRAMIENTA.text() == "Herramienta (mm)"
-    assert w.TE_HERRAMIENTA.text() == "120"
-    assert w.TARJETA_VOLUMEN.isAncestorOf(w.TE_HERRAMIENTA) and w.TARJETA_VOLUMEN.isAncestorOf(w.VER_VOLUMEN)
-    # NINGÚN ESTILO SUELTO: LA ETIQUETA SE VISTE POR SU ROL DEL TEMA Y EL CAMPO POR SU TIPO
+    assert isinstance(w.LARGO_HERRAMIENTA, QtWidgets.QLabel) and w.LARGO_HERRAMIENTA.text() == "120"
+    assert w.TARJETA_VOLUMEN.isAncestorOf(w.LARGO_HERRAMIENTA) and w.TARJETA_VOLUMEN.isAncestorOf(w.VER_VOLUMEN)
+    # NO SE EDITA: NO QUEDA NINGÚN CAMPO DE TEXTO EN LA TARJETA, Y LA AYUDA DICE DÓNDE SE CAMBIA
+    assert not w.TARJETA_VOLUMEN.findChildren(QtWidgets.QLineEdit) and not hasattr(w, "TE_HERRAMIENTA")
+    for texto in (w.ETIQUETA_HERRAMIENTA.toolTip(), w.LARGO_HERRAMIENTA.toolTip()):
+        assert "archivo del robot" in texto
+    # NINGÚN ESTILO SUELTO: LA ETIQUETA SE VISTE POR SU ROL DEL TEMA
     assert w.ETIQUETA_HERRAMIENTA.property("rol") == "etiqueta"
-    assert not w.ETIQUETA_HERRAMIENTA.styleSheet() and not w.TE_HERRAMIENTA.styleSheet()
+    assert not w.ETIQUETA_HERRAMIENTA.styleSheet() and not w.LARGO_HERRAMIENTA.styleSheet()
 
 
-def test_p8_cambiar_el_largo_actualiza_herramienta_coordenadas_linea_y_volumen(robot, abrir):
-    w = abrir(robot)
+@pytest.mark.parametrize("largo", [60, 300])
+def test_p8_el_largo_del_archivo_manda_en_el_texto_el_dibujo_las_coordenadas_y_el_volumen(robot, con_largo, abrir, largo):
+    r = con_largo(largo)
+    w = abrir(r)
     w.VER_VOLUMEN.click()
-    ir_a(w, (356, 711, 1014))  # PARA QUE HAYA LÍNEA NARANJA
     w.poner_servos((60, 110, 100))
-    assert len(w.escena.puntos_recorrido) > 30
-    servos, mandado, en_la_placa = w.servos, len(w.enviados), len(w.enlace.dispositivo.historial)
-    dibujado = len(w.escena.plotter.renderer.actors)
-
-    escribir_herramienta(w, "300")
-
-    assert w.robot.efector.largo == 300 and w.TE_HERRAMIENTA.text() == "300"
-    punta = punta_a_mano(robot, servos, largo=300)
+    w._sincronizar_sliders()
+    assert w.robot.efector.largo == largo and w.LARGO_HERRAMIENTA.text() == f"{largo}"
+    punta = punta_a_mano(r, w.servos)
     (desde, hasta), puntos = herramienta_dibujada(w.escena)                    # LA HERRAMIENTA DIBUJADA
-    assert (desde, hasta) == pytest.approx((0, 300), abs=1e-6)
+    assert (desde, hasta) == pytest.approx((0, largo), abs=1e-6)
     assert np.linalg.norm(puntos - punta, axis=1).min() < 1e-3
-    assert w.posicion == pytest.approx(punta, abs=1e-6)                        # LAS COORDENADAS
+    assert w.posicion == pytest.approx(punta, abs=1e-6)                        # LAS COORDENADAS SON LAS DE LA PUNTA
     assert [valor.text() for valor in w.valores_xyz] == [f"{round(c) + 0:.0f}" for c in punta]
-    assert [s.value() for s in w.sliders_xyz] == [round(c) for c in punta]
-    assert w.SLIDER_Z.maximum() == HOY_SLIDERS_XYZ[2][1] + 300                 # SE PUEDE PEDIR HASTA DONDE AHORA LLEGA
-    assert np.array(w.escena.puntos_recorrido) == pytest.approx(punta[None], abs=1e-6)  # LA LÍNEA EMPIEZA EN LA PUNTA NUEVA
+    assert w.SLIDER_Z.maximum() == HOY_SLIDERS_XYZ[2][1] + largo               # SE PUEDE PEDIR HASTA DONDE LLEGA LA PUNTA
     rng = np.random.default_rng(8)                                             # EL VOLUMEN, QUE ESTABA A LA VISTA
-    for servo_base in bases_al_azar(robot, rng, 2):
-        puntas = en_el_corte(robot, servo_base, puntas_a_mano(robot, servo_base, rng, largo=300))
-        assert fuera_por(tajada(superficie_dibujada(w), robot, servo_base), puntas).max() <= MARGEN_MM
-    assert superficie_dibujada(w).bounds[5] == pytest.approx(HOY_CORTE["arriba"] + 300, abs=0.01)
-    # NADA SE ENCIMA: LA HERRAMIENTA Y EL VOLUMEN NUEVOS REEMPLAZAN A LOS DE ANTES, Y EL BOTÓN SIGUE OFRECIENDO OCULTARLO
-    assert (len(w.escena.plotter.renderer.actors), len(w.escena.actores_volumen)) == (dibujado, 2)
-    assert w.VER_VOLUMEN.text() == "OCULTAR VOLUMEN"
-    # Y AL ROBOT NO SE LE MANDA NADA: CAMBIAR LA HERRAMIENTA NO MUEVE NINGÚN SERVO
-    assert (w.servos, len(w.enviados), len(w.enlace.dispositivo.historial)) == (servos, mandado, en_la_placa)
+    for servo_base in bases_al_azar(r, rng, 2):
+        puntas = en_el_corte(r, servo_base, puntas_a_mano(r, servo_base, rng))
+        assert fuera_por(tajada(superficie_dibujada(w), r, servo_base), puntas).max() <= MARGEN_MM
+    assert superficie_dibujada(w).bounds[5] == pytest.approx(HOY_CORTE["arriba"] + largo, abs=0.01)
 
 
-def test_p8_con_el_volumen_oculto_cambiar_el_largo_no_lo_dibuja(robot, abrir):
-    w = abrir(robot)
-    escribir_herramienta(w, "200")
-    assert w.robot.efector.largo == 200 and w.escena.actores_volumen == []
-
-
-def test_p8_el_largo_se_recuerda_al_cerrar_y_el_archivo_del_robot_no_se_toca(robot, robot_4gdl, abrir):
+def test_p8_un_largo_viejo_en_los_ajustes_se_ignora_ni_se_lee_ni_se_borra(robot, abrir):
     with open(ROBOT_POR_OMISION, "rb") as f:
         archivo = f.read()
-    w = abrir(robot)
-    escribir_herramienta(w, "87.5")
-    abrir.cerrar(w)
-
-    otra = abrir(robot)  # LA APP SE ABRE OTRA VEZ CON EL MISMO ARCHIVO DEL ROBOT, QUE SIGUE DICIENDO 120
-    assert otra.robot.efector.largo == 87.5 and otra.TE_HERRAMIENTA.text() == "87.5"
-    assert herramienta_dibujada(otra.escena)[0] == pytest.approx((0, 87.5), abs=1e-6)
-    assert punta_a_mano(robot, otra.servos, largo=87.5) == pytest.approx(robot.home, abs=1e-3)  # HOME, CON ESA PUNTA
-    assert otra.SLIDER_Z.maximum() == math.ceil(HOY_SLIDERS_XYZ[2][1] + 87.5)
+    clave = f"herramienta/{robot.nombre}"  # DONDE LA VERSIÓN ANTERIOR RECORDABA EL LARGO QUE LA PERSONA ESCRIBÍA
+    w = abrir(robot, recordado="300")
+    assert w.robot.efector.largo == 120 and w.LARGO_HERRAMIENTA.text() == "120"  # MANDA EL ARCHIVO
+    assert herramienta_dibujada(w.escena)[0] == pytest.approx((0, 120), abs=1e-6)
+    assert w.ajustes.value(clave) == "300"                                       # NI SE BORRÓ...
+    assert not any(e.origen == "Herramienta" for e in w.registro.filtrar(reg.NIVELES))  # ...NI SE AVISÓ DE ELLA
     with open(ROBOT_POR_OMISION, "rb") as f:
-        assert f.read() == archivo
-    # LO RECORDADO ES DE ESE ROBOT: OTRO ROBOT NO LO HEREDA
-    assert abrir(robot_4gdl).robot.efector.largo == 0
+        assert f.read() == archivo                                               # Y EL ARCHIVO DEL ROBOT NO SE TOCÓ
 
 
-def test_p8_acortar_la_herramienta_no_mueve_el_robot(robot, abrir):
-    # CON EL BRAZO CASI VERTICAL LA PUNTA ESTÁ MÁS ARRIBA DE LO QUE EL BRAZO SOLO ALCANZA: AL QUITAR LA HERRAMIENTA,
-    # EL SLIDER DE Z YA NO LLEGA HASTA AHÍ. QUE SE RECORTE NO ES UNA ORDEN DE MOVERSE.
+def test_p8_la_app_no_trae_ya_el_cambio_de_largo_con_la_app_abierta(robot, abrir):
+    from cosechador.ui import ventana
     w = abrir(robot)
-    w.poner_servos(angulos_servo(robot, (300, 0, 2100)))
-    w._sincronizar_sliders()
-    assert w.SLIDER_Z.value() == 2100 > HOY_SLIDERS_XYZ[2][1]
-    servos, mandado = w.servos, len(w.enviados)
-    escribir_herramienta(w, "0")
-    assert w.robot.efector.largo == 0 and [(s.minimum(), s.maximum()) for s in w.sliders_xyz] == HOY_SLIDERS_XYZ
-    assert not w.en_movimiento and not w.cola and (w.servos, len(w.enviados)) == (servos, mandado)
-    assert w.posicion == pytest.approx(punta_a_mano(robot, servos, largo=0), abs=1e-6)
-    assert [s.value() for s in w.sliders_xyz] == [round(c) for c in w.posicion]
-    # NI SIQUIERA SE INTENTÓ: UN INTENTO HACIA DONDE YA NO SE LLEGA DEJARÍA UN «NO SE MUEVE» EN LA CONSOLA
-    assert not any(e.origen == "Jog" for e in w.registro.filtrar(reg.NIVELES))
+    assert not hasattr(ventana, "clave_herramienta") and not hasattr(w, "cambiar_herramienta")
+    assert not hasattr(w.escena, "cambiar_herramienta")
 
 
-# "400": ES UNA MEDIDA, PERO CON ESA HERRAMIENTA LA PUNTA YA NO ALCANZA HOME (EL HOMBRO BAJARÍA DE SU LÍMITE)
-@pytest.mark.parametrize("escrito", ["", "abc", "-5", "nan", "inf", "1e9", "12 mm", "400"])
-def test_p8_un_largo_que_no_sirve_no_cambia_nada_y_avisa(robot, abrir, escrito):
-    w = abrir(robot)
-    w.poner_servos((60, 110, 100))
-    estela, punta, mandado = len(w.escena.puntos_recorrido), w.posicion, len(w.enviados)
-    escribir_herramienta(w, escrito)
-    assert w.robot.efector.largo == 120 and w.TE_HERRAMIENTA.text() == "120"  # EL CAMPO VUELVE A DECIR LO QUE VALE
-    assert (len(w.escena.puntos_recorrido), w.posicion, len(w.enviados)) == (estela, punta, mandado)
-    assert (ultimo_aviso(w).nivel, ultimo_aviso(w).origen) == ("aviso", "Herramienta")
-    abrir.cerrar(w)
-    assert abrir(robot).robot.efector.largo == 120  # NI SE QUEDA RECORDADO
-
-
-def test_p8_salir_del_campo_sin_cambiarlo_no_hace_nada(robot, abrir):
-    # UN LARGO CON MÁS CIFRAS DE LAS QUE EL CAMPO MUESTRA: SALIR DEL CAMPO NO LO CAMBIA POR EL REDONDEADO
-    w = abrir(config.con_herramienta(robot, 87.123456789))
-    assert w.TE_HERRAMIENTA.text() == "87.1235"
-    w.TE_HERRAMIENTA.editingFinished.emit()
-    assert w.robot.efector.largo == 87.123456789 and not any(e.origen == "Herramienta" for e in w.registro.filtrar(reg.NIVELES))
-    abrir.cerrar(w)
-
-    w = abrir(robot)
-    ir_a(w, (356, 711, 1014))
-    estela, eventos = len(w.escena.puntos_recorrido), len(w.registro.filtrar(reg.NIVELES))
-    for escrito in ("120", " 120 ", "120.0"):
-        escribir_herramienta(w, escrito)
-    assert (len(w.escena.puntos_recorrido), len(w.registro.filtrar(reg.NIVELES))) == (estela, eventos)
-    assert w.TE_HERRAMIENTA.text() == "120"
-
-
-@pytest.mark.parametrize("recordado", ["doce", "-3", "5000", "87,5", "400"])
-def test_p8_un_largo_recordado_que_ya_no_sirve_no_impide_abrir(robot, abrir, recordado):
-    w = abrir(robot, recordado=recordado)
-    assert w.robot.efector.largo == 120 and w.TE_HERRAMIENTA.text() == "120"  # VALE EL DEL ARCHIVO DEL ROBOT
-    assert any(e.origen == "Herramienta" and e.nivel == "aviso" for e in w.registro.filtrar(reg.NIVELES))
-    # Y SE OLVIDA: NO VUELVE A AVISAR CADA VEZ QUE SE ABRE LA APP
-    assert not [clave for clave in w.ajustes.allKeys() if clave.startswith("herramienta")]
-
-
-def test_p8_mientras_el_robot_se_mueve_la_herramienta_no_se_cambia(robot, abrir):
-    w = abrir(robot)
-    for campo, valor in zip((w.TE_X, w.TE_Y, w.TE_Z), (356, 711, 1014)):
-        campo.setText(str(valor))
-    w.CALCULAR.click()  # EN MOVIMIENTO: EL PLAN YA ESTÁ CALCULADO PARA LA PUNTA DE 120 mm
-    assert not w.TE_HERRAMIENTA.isEnabled()
-    escribir_herramienta(w, "300")
-    assert w.robot.efector.largo == 120 and w.TE_HERRAMIENTA.text() == "120"
-    correr(w)
-    assert w.TE_HERRAMIENTA.isEnabled()
-    assert punta_a_mano(robot, w.servos, largo=120) == pytest.approx(robot.home, abs=1e-3)
-
-
-def test_p8_el_campo_no_ensancha_la_ventana_y_el_auditor_no_halla_nada(robot, abrir):
+def test_p8_el_texto_no_ensancha_la_ventana_y_el_auditor_no_halla_nada(robot, abrir):
     w = abrir(robot)
     minimo = w.minimumSizeHint()
-    assert minimo.width() <= HOY_VENTANA_MINIMA[0] and minimo.height() <= 720  # EL ANCHO MÍNIMO NO CRECE
+    assert minimo.width() <= HOY_VENTANA_MINIMA[0] and minimo.height() <= 648  # EL MÍNIMO NO CRECE (648 DE ALTO ANTES DE ESTE CAMBIO)
     w.resize(1280, 720)
     w.show()  # OFFSCREEN: NO SE ABRE NADA A LA VISTA
     QtWidgets.QApplication.processEvents()
-    assert w.TE_HERRAMIENTA.height() >= 24 and w.ETIQUETA_HERRAMIENTA.height() >= 24
-    assert w.TE_HERRAMIENTA.geometry().top() == w.ETIQUETA_HERRAMIENTA.geometry().top()  # EN LA MISMA FILA
+    assert w.LARGO_HERRAMIENTA.height() >= 24 and w.ETIQUETA_HERRAMIENTA.height() >= 24
+    assert w.LARGO_HERRAMIENTA.geometry().top() == w.ETIQUETA_HERRAMIENTA.geometry().top()  # EN LA MISMA FILA
     assert au.auditar(w) == []
     w.VER_VOLUMEN.click()  # CON EL OTRO RÓTULO DEL BOTÓN TAMPOCO SE CORTA NI SE ENCIMA NADA
     assert au.auditar(w) == []
