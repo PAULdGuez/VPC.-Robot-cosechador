@@ -35,6 +35,7 @@ if QtGui.QGuiApplication.platformName() != "offscreen":
 
 DESCARTAR_NOMBRE = "<descartar>"    # LA RESPUESTA DEL DIÁLOGO DEL NOMBRE QUE PIDE TIRAR LA GRABACIÓN
 TOPE_PASOS = 20000                  # MÁS PASOS QUE ESTOS SIN TERMINAR = EL MOVIMIENTO NO TERMINA (LA COSECHA MÁS LARGA TIENE ~1000)
+SEGUNDOS_TRAS_ABRIR = 1.0           # LO QUE TARDA UNA PERSONA, COMO POCO, EN TOCAR ALGO DESPUÉS DE QUE ABRE LA VENTANA
 
 
 EXCEPCIONES = []                    # LO QUE REVENTÓ DENTRO DE UN SLOT DE Qt (UNA LISTA PARA TODAS LAS VENTANAS: SE ANOTA AL AZAR EN CUALQUIERA)
@@ -99,6 +100,9 @@ def _espiar_la_placa(w):
     x = w.x
     x.guardia = GuardiaDeSalida(EnlaceFalso(x.reloj), w.robot, reloj=x.reloj)
     x.guardia.enviar(*w.servos)       # LA POSE CON LA QUE ARRANCÓ LA VENTANA YA SALIÓ
+    # ...Y SALIÓ HACE RATO: NADIE TOCA UN CONTROL EN EL MISMO MILISEGUNDO EN QUE ABRE LA VENTANA. SIN ESTO EL RELOJ FALSO NO
+    # AVANZA Y EL PRIMER PASO DEL PRIMER GESTO «SALE» 1 ms DESPUÉS DE LA POSE INICIAL: LA GUARDIA LO NIEGA POR RITMO Y ES MENTIRA
+    x.reloj.t += SEGUNDOS_TRAS_ABRIR
     original = w.enlace.enviar
 
     def enviar(*servos):
@@ -120,6 +124,8 @@ def _contestar_los_dialogos(w):
 
     def pedir_nombre(sugerido, tipo="grabacion"):
         respuesta = x.nombres.popleft() if x.nombres else None
+        if respuesta == DESCARTAR_NOMBRE and tipo != "grabacion":
+            respuesta = None          # EL DIÁLOGO REAL SOLO TRAE «Descartar…» AL GUARDAR UNA GRABACIÓN; EN LOS DEMÁS, «Cancelar»
         x.dialogos.append(("nombre", f"{tipo}: {sugerido}", respuesta))
         if respuesta == DESCARTAR_NOMBRE:
             from cosechador.ui.ventana import DESCARTAR

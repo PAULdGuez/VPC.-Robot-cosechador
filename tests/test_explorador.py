@@ -42,7 +42,8 @@ from cosechador.robot import cargar_robot
 from cosechador.ui import ventana as ventana_real
 from cosechador.ui.slider_alcance import SliderConAlcance
 from explorador import Gesto, Hallazgo
-from helpers_ventana import (NoTermina, borrar_desechable, carpeta_desechable, cerrar, correr, ventana_aislada)
+from helpers_ventana import (DESCARTAR_NOMBRE, NoTermina, borrar_desechable, carpeta_desechable, cerrar, correr,
+                             ventana_aislada)
 from rachas import forma_del_aviso, rachas_de_avisos, rachas_del_archivo
 
 CARPETA_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -142,6 +143,31 @@ def test_ex01_sin_pantalla():
     from PyQt5 import QtGui, QtWidgets
     assert QtGui.QGuiApplication.platformName() == "offscreen"
     assert not [w for w in QtWidgets.QApplication.topLevelWidgets() if w.isVisible()], "quedó una ventana visible"
+
+
+def test_ex01_abrir_la_ventana_y_mover_de_inmediato_no_es_ir_demasiado_rapido():
+    """La guardia observadora anota la pose inicial como enviada al abrir. Si el reloj falso no avanzara después, el primer
+    paso del primer gesto «saldría» 1 ms más tarde y la guardia lo negaría por ritmo: un hallazgo falso (nadie toca un
+    control en el milisegundo en que abre la ventana)."""
+    h = ex.reproducir([Gesto("arrastrar", "SLIDER_1", 0.0, 88, 0.0), Gesto("llegar", "", 0.0, 0, 0.0)])
+    assert h is None, str(h)
+
+
+def test_ex01_el_dialogo_del_nombre_solo_contesta_lo_que_el_de_verdad_ofrece():
+    """«Descartar…» solo existe al guardar una GRABACIÓN; un programa por puntos trae «Guardar» y «Cancelar». Si el gancho
+    de pruebas contestara «descartar» ahí, la ventana recibiría una respuesta que su diálogo no puede dar."""
+    carpeta = carpeta_desechable()
+    w = ventana_aislada(ROBOT, carpeta)
+    try:
+        botones = {tipo: [b.text() for b in w._dialogo_del_nombre("x", tipo)[2]] for tipo in ("puntos", "grabacion")}
+        assert botones == {"puntos": ["Guardar", "Cancelar"], "grabacion": ["Guardar", "Seguir grabando", "Descartar…"]}
+        w.x.nombres.extend([DESCARTAR_NOMBRE, DESCARTAR_NOMBRE])
+        assert w._pedir_nombre("x", "puntos") is None, "en un programa por puntos, «descartar» no existe: es cancelar"
+        assert w._pedir_nombre("x", "grabacion") is ventana_real.DESCARTAR
+        assert [d[2] for d in w.x.dialogos] == [None, DESCARTAR_NOMBRE], "la bitácora debe decir lo que de verdad se contestó"
+    finally:
+        cerrar(w)
+        borrar_desechable(carpeta)
 
 
 def test_ex11_la_corrida_corta_cabe_en_la_suite(corrida_corta):
