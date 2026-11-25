@@ -1,0 +1,522 @@
+"""El explorador al azar (tests/explorador.py) y sus pruebas: EX1 a EX11.
+
+Cada criterio aprobado tiene su prueba, con el número en el nombre (test_ex01_…, test_ex02_…): si se rompe, la suite se pone
+roja y dice cuál.
+
+  EX1  un comando hace cientos de gestos al azar sobre la ventana real, sin pantalla, en todos los modos
+  EX2  tras cada gesto revisa: avisos idénticos en racha, rebotes, brincos, pérdidas, excepciones, órdenes negadas, no terminar
+  EX3  lo que encuentra queda reproducible (semilla y lista de gestos)
+  EX4  misma semilla, mismo recorrido
+  EX5  demuestra que caza: con los defectos de anoche sembrados a propósito, encuentra el del rojo y el del brinco
+  EX6  un detector de rachas lee el registro real y encuentra la racha de 31 avisos del 25-nov
+  EX7  trabaja en carpeta desechable: nunca escribe ni borra en lo de la persona
+  EX8  al terminar dice qué controles y modos tocó, cuántas veces, y cuáles nunca
+  EX9  reduce cada hallazgo a la lista de gestos más corta que lo reproduce
+  EX10 cada hallazgo se queda como prueba fija
+  EX11 dos tamaños: corto (siempre, con la suite) y largo (a pedido: EXPLORADOR_LARGO=1)
+
+Los defectos que el explorador encontró en el código de hoy están en HALLAZGOS como fallo esperado ESTRICTO: la prueba falla
+(xfail) mientras el defecto siga vivo y se pone ROJA (XPASS estricto) el día que se arregle, para que alguien quite la marca.
+"""
+import datetime as dt
+import glob
+import hashlib
+import os
+import sys
+import tempfile
+from unittest import mock
+
+import numpy as np
+import pytest
+from PyQt5 import QtCore
+
+import explorador as ex
+from cosechador import registro as reg
+from cosechador.movimiento import programa as prog
+from cosechador.movimiento.invariantes import avance_punta_mm
+from cosechador.movimiento.trayectorias import Paso
+from cosechador.robot import cargar_robot
+from cosechador.ui import ventana as ventana_real
+from cosechador.ui.slider_alcance import SliderConAlcance
+from explorador import Gesto, Hallazgo
+from helpers_ventana import (NoTermina, borrar_desechable, carpeta_desechable, cerrar, correr, ventana_aislada)
+from rachas import forma_del_aviso, rachas_de_avisos, rachas_del_archivo
+
+CARPETA_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROBOT = cargar_robot()
+PRUEBA = Gesto("tecla", "PRUEBA", 0.0, 0, 0.0)       # UN GESTO QUE NO EXISTE: LOS EFECTOS DE ABAJO LO ATRAPAN EN _ejecutar
+SEMILLA_DEL_ROJO = 2                                 # SEMILLAS DONDE EL CORTO ENCUENTRA CADA DEFECTO SEMBRADO (CALIBRADAS)
+SEMILLA_DEL_BRINCO = 5
+SEMILLA_DE_LA_PERDIDA = 10
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LOS DEFECTOS DE ANOCHE, SEMBRADOS A PROPÓSITO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def _sembrar_el_rojo():
+    """Defectos 1 y 2: el slider no se frena en el rojo: deja entrar donde el planeador se niega y rebota solo."""
+    return mock.patch.object(SliderConAlcance, "acotar", lambda self, valor, desde: valor)
+
+
+def _sembrar_el_brinco():
+    """Defecto 4 llevado al extremo: un tramo articular que llega de un solo paso (sin partirlo en pasos de 15°)."""
+    return mock.patch.object(ventana_real, "tramo_articular",
+                             lambda robot, a, b, ms=None: [Paso(servos=tuple(float(v) for v in b), ms=ms)])
+
+
+def _sembrar_la_grabacion_tirada():
+    """Defecto 3: «Cancelar» en el diálogo del nombre tiraba la grabación sin preguntar."""
+    original = ventana_real.VentanaPrincipal.terminar_grabacion
+
+    def terminar_grabacion(self):
+        if self.grabadora.muestras is not None:
+            guardado = self._guardar_con_nombre("g", "grabacion",
+                                                lambda nombre: ventana_real.programa_de_grabacion(self.grabadora.muestras, nombre,
+                                                                                                  self.robot))
+            if guardado is None:
+                self._soltar_grabacion()           # LO VIEJO: TIRAR LO GRABADO SIN PREGUNTAR
+                return
+        original(self)
+    return mock.patch.object(ventana_real.VentanaPrincipal, "terminar_grabacion", terminar_grabacion)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX1 y EX11: LA CORRIDA CORTA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+@pytest.fixture(scope="module")
+def corrida_corta():
+    """UNA sola corrida corta compartida por las pruebas que miran su informe (cuesta unos 5 s)."""
+    return ex.explorar("corto", ex.SEMILLA)
+
+
+def test_ex01_un_comando_hace_cientos_de_gestos_en_todos_los_modos(corrida_corta):
+    cob = corrida_corta.cobertura
+    assert corrida_corta.hallazgo is None, str(corrida_corta.hallazgo)
+    assert cob.gestos >= 200, f"se esperaban cientos de gestos y hubo {cob.gestos}"
+    assert cob.ventanas >= 2, "cada ejemplo de Hypothesis abre su propia ventana"
+    posturas = {p for p, _ in cob.modos}
+    caminos = {c for _, c in cob.modos}
+    assert posturas == {"despacio", "negar"}, f"posturas tocadas: {posturas}"
+    assert caminos == {"reemplazar", "en_cola", "cancelar"}, f"modos «en camino» tocados: {caminos}"
+    assert cob.pasos_a_la_placa > 0, "ningún gesto movió el robot"
+
+
+def test_ex01_sin_pantalla():
+    """Nunca una ventana en la pantalla: la plataforma de Qt es offscreen y ninguna ventana queda abierta al terminar."""
+    from PyQt5 import QtGui, QtWidgets
+    assert QtGui.QGuiApplication.platformName() == "offscreen"
+    assert not [w for w in QtWidgets.QApplication.topLevelWidgets() if w.isVisible()], "quedó una ventana visible"
+
+
+def test_ex11_la_corrida_corta_cabe_en_la_suite(corrida_corta):
+    assert corrida_corta.segundos < 10, f"la corrida corta tardó {corrida_corta.segundos:.1f} s (el tope son 10 s)"
+
+
+def test_ex11_los_dos_tamanos_existen():
+    corto, largo = ex.TAMANOS["corto"], ex.TAMANOS["largo"]
+    assert corto[0] * corto[1] <= 200, "el corto es de unos cientos de gestos como mucho"
+    assert largo[0] * largo[1] >= 50 * corto[0] * corto[1], "el largo debe ser MUCHO más largo que el corto"
+
+
+@pytest.mark.skipif(not os.environ.get("EXPLORADOR_LARGO"),
+                    reason="la corrida larga (≈15 min) es solo a pedido: EXPLORADOR_LARGO=1 pytest tests/test_explorador.py "
+                           "(o: python tests/explorador.py --largo)")
+def test_ex11_la_corrida_larga_a_pedido():
+    resultado = ex.explorar("largo", int(os.environ.get("EXPLORADOR_SEMILLA", ex.SEMILLA)), con_reduccion=True)
+    print(resultado.cobertura.informe())
+    assert resultado.hallazgo is None, str(resultado.hallazgo) + "\n" + resultado.hallazgo.como_prueba_fija()
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX2: LO QUE SE REVISA TRAS CADA GESTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def _servos_lejanos(robot):
+    """Dos poses válidas cuya punta queda muy lejos (más de lo que ningún paso legal recorre)."""
+    minimos = tuple(j.servo.minimo for j in robot.articulaciones)
+    maximos = tuple(j.servo.maximo for j in robot.articulaciones)
+    return minimos, maximos
+
+
+def _efecto_racha(s):
+    for i in range(3):
+        s.w.avisar(f"Aviso repetido número {i}", "aviso", "Prueba")
+
+
+def _efecto_rebote(s):
+    s.w.avisar("No se mueve. Para pasar por (1, 0, 1) hay que cambiar de postura.", "aviso", "Jog", destino_mm=[1, 0, 1])
+
+
+def _efecto_brinco(s):
+    a, b = _servos_lejanos(s.w.robot)
+    s.w.enlace.enviar(*a)
+    s.w.enlace.enviar(*b)
+
+
+def _efecto_perdida_borra_un_programa(s):
+    os.remove(os.path.join(s.w.carpeta_programas, ex.SEMBRADOS[0]))
+
+
+def _efecto_perdida_cambia_un_programa_sin_preguntar(s):
+    with open(os.path.join(s.w.carpeta_programas, ex.SEMBRADOS[0]), "a", encoding="utf-8") as f:
+        f.write("\n# cambiado a escondidas\n")
+
+
+def _efecto_excepcion(s):
+    raise RuntimeError("algo reventó")
+
+
+def _efecto_excepcion_en_un_slot(s):
+    try:
+        raise ValueError("algo reventó dentro de un slot")
+    except ValueError:
+        sys.excepthook(*sys.exc_info())          # LO QUE HACE PyQt5 CUANDO UN SLOT LEVANTA
+
+
+def _efecto_orden_negada(s):
+    s.w.enlace.enviar(*(j.servo.maximo + 50 for j in s.w.robot.articulaciones))
+
+
+def _efecto_reposo_boton_detener_trabado(s):
+    s.w.BTN_DETENER.setEnabled(True)
+
+
+EFECTOS = [
+    ("racha_de_avisos", _efecto_racha),
+    ("rebote", _efecto_rebote),
+    ("brinco", _efecto_brinco),
+    ("perdida", _efecto_perdida_borra_un_programa),
+    ("perdida", _efecto_perdida_cambia_un_programa_sin_preguntar),
+    ("excepcion", _efecto_excepcion),
+    ("excepcion", _efecto_excepcion_en_un_slot),
+    ("orden_negada", _efecto_orden_negada),
+    ("reposo", _efecto_reposo_boton_detener_trabado),
+]
+
+
+@pytest.fixture
+def con_efecto(monkeypatch):
+    """Hace que el gesto PRUEBA ejecute un defecto sembrado, en vez de tocar un control."""
+    def poner(efecto):
+        original = ex.Sesion._ejecutar
+
+        def _ejecutar(self, g):
+            if g == PRUEBA:
+                efecto(self)
+            else:
+                original(self, g)
+        monkeypatch.setattr(ex.Sesion, "_ejecutar", _ejecutar)
+    return poner
+
+
+@pytest.mark.parametrize("clase,efecto", EFECTOS, ids=[f"{c}-{e.__name__[8:]}" for c, e in EFECTOS])
+def test_ex02_cada_revision_caza_su_defecto(con_efecto, clase, efecto):
+    con_efecto(efecto)
+    hallazgo = ex.reproducir([Gesto("esperar", "", 0.0, 0, 0.1), PRUEBA])
+    assert hallazgo is not None, f"nadie vio el defecto de clase «{clase}»"
+    assert hallazgo.clase == clase, f"se esperaba «{clase}» y fue «{hallazgo.clase}»: {hallazgo.detalle}"
+    assert hallazgo.gestos[-1] == PRUEBA, "el hallazgo debe señalar el gesto que lo provocó"
+
+
+def test_ex02_un_movimiento_que_no_termina_es_hallazgo(monkeypatch):
+    def nunca_termina(w, tope=0):
+        raise NoTermina("el movimiento sigue pidiendo pasos")
+    monkeypatch.setattr(ex, "correr", nunca_termina)
+    hallazgo = ex.reproducir([Gesto("llegar")])
+    assert hallazgo is not None and hallazgo.clase == "no_termina"
+
+
+def test_ex02_sin_defecto_no_hay_acusacion_falsa():
+    """El control de sanidad de cada revisión: gestos normales sobre una ventana sana no acusan a nadie."""
+    gestos = [Gesto("elegir", "PESTANAS_MOVIMIENTO", 0.5), Gesto("arrastrar", "SLIDER_1", 0.3, 5, 0.05),
+              Gesto("arrastrar", "SLIDER_2", 0.6, 7, 0.3), Gesto("llegar"), Gesto("esperar", "", 0.0, 0, 1.0)]
+    assert ex.reproducir(gestos) is None
+
+
+def test_ex02_los_clics_repetidos_de_la_persona_no_son_una_racha(con_efecto):
+    """Tres avisos seguidos escritos por TRES CLICS del mismo botón son decisión de la persona, no un defecto."""
+    def efecto(s):
+        s.w.avisar("Mismo aviso de un clic", "aviso", "Prueba")
+    con_efecto(efecto)
+    # el gesto PRUEBA es de tipo «tecla»; uno de tipo click con el mismo efecto sí queda exento
+    clic = Gesto("click", "PRUEBA", 0.0, 0, 0.0)
+    original = ex.Sesion._ejecutar
+
+    def _ejecutar(self, g):
+        if g.control == "PRUEBA":
+            efecto(self)
+        else:
+            original(self, g)
+    with mock.patch.object(ex.Sesion, "_ejecutar", _ejecutar):
+        assert ex.reproducir([clic, clic, clic]) is None
+
+
+def test_ex02_el_tope_del_brinco_no_deja_fuera_un_paso_legal():
+    """El umbral de «brinco» (BRINCO_ROJO_MM) tiene que estar POR ENCIMA de lo que un paso legal (15° por servo) puede mover
+    la punta; si no, el explorador acusaría a pasos legales. Medido con poses al azar en todo el rango de cada servo."""
+    rng = np.random.default_rng(20261125)
+    minimos = np.array([j.servo.minimo for j in ROBOT.articulaciones], float)
+    maximos = np.array([j.servo.maximo for j in ROBOT.articulaciones], float)
+    salto = ROBOT.movimiento.salto_max_por_paso
+    mayor = 0.0
+    for _ in range(4000):
+        a = rng.uniform(minimos, maximos)
+        b = np.clip(a + rng.uniform(-salto, salto, size=a.shape), minimos, maximos)
+        mayor = max(mayor, avance_punta_mm(ROBOT, a, b))
+    assert mayor < ex.BRINCO_ROJO_MM, f"un paso legal movió la punta {mayor:.0f} mm: el umbral {ex.BRINCO_ROJO_MM} no sirve"
+    assert ex.BRINCO_REPORTE_MM < ex.BRINCO_ROJO_MM
+    a, b = _servos_lejanos(ROBOT)
+    assert avance_punta_mm(ROBOT, a, b) > ex.BRINCO_ROJO_MM, "el brinco sembrado de la prueba tiene que pasar el umbral"
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX3 y EX4: REPRODUCIBLE, MISMA SEMILLA MISMO RECORRIDO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_ex03_un_hallazgo_trae_semilla_y_gestos_y_se_repite():
+    with _sembrar_el_rojo():
+        resultado = ex.explorar("corto", SEMILLA_DEL_ROJO, tolerar=False)
+        h = resultado.hallazgo
+        assert h is not None, "el rojo sembrado debía encontrarse"
+        assert h.semilla == SEMILLA_DEL_ROJO and len(h.gestos) > 0
+        otra_vez = ex.reproducir(h.gestos, semilla=h.semilla)
+    assert otra_vez is not None and otra_vez.clase == h.clase, "la lista de gestos no repite el hallazgo"
+    assert str(h.semilla) in str(h) and "Gesto(" in str(h), "el reporte debe traer la semilla y los gestos"
+    # EL TEXTO QUE SE PEGA COMO PRUEBA FIJA SE PUEDE LEER DE VUELTA Y DA LOS MISMOS GESTOS
+    texto = h.como_prueba_fija("copia")
+    nombre, clase, gestos = eval(texto.split("\n", 1)[1].strip().rstrip(","), {"Gesto": Gesto})
+    assert (nombre, clase, tuple(gestos)) == ("copia", h.clase, h.gestos)
+
+
+def test_ex04_misma_semilla_mismo_recorrido():
+    a = ex.explorar("corto", 31, tolerar=True).cobertura.recorrido
+    b = ex.explorar("corto", 31, tolerar=True).cobertura.recorrido
+    c = ex.explorar("corto", 32, tolerar=True).cobertura.recorrido
+    assert len(a) > 50 and a == b, "la misma semilla debe dar exactamente los mismos gestos"
+    assert a != c, "otra semilla debe dar otro recorrido"
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX5: DEMUESTRA QUE CAZA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_ex05_encuentra_el_rojo_que_dejaba_rebotar_al_slider():
+    with _sembrar_el_rojo():
+        hallazgo = ex.explorar("corto", SEMILLA_DEL_ROJO, tolerar=False).hallazgo
+    assert hallazgo is not None and hallazgo.clase in ("rebote", "racha_de_avisos"), str(hallazgo)
+
+
+def test_ex05_encuentra_el_brinco_grosero():
+    with _sembrar_el_brinco():
+        hallazgo = ex.explorar("corto", SEMILLA_DEL_BRINCO, tolerar=False).hallazgo
+    assert hallazgo is not None and hallazgo.clase == "brinco", str(hallazgo)
+
+
+def test_ex05_encuentra_la_grabacion_tirada_al_cancelar():
+    with _sembrar_la_grabacion_tirada():
+        hallazgo = ex.explorar("corto", SEMILLA_DE_LA_PERDIDA, tolerar=True).hallazgo
+    assert hallazgo is not None and hallazgo.clase == "perdida", str(hallazgo)
+
+
+def test_ex05_sin_los_defectos_las_mismas_semillas_no_encuentran_nada_de_eso():
+    """El control: con el código de hoy, las MISMAS semillas no acusan lo que acusaron con el defecto sembrado (si no, las
+    pruebas de arriba no probarían que el explorador caza: acusaría siempre, o acusaría un defecto real distinto)."""
+    for semilla, clases in ((SEMILLA_DEL_ROJO, ("rebote", "racha_de_avisos")), (SEMILLA_DEL_BRINCO, ("brinco", "orden_negada")),
+                            (SEMILLA_DE_LA_PERDIDA, ("perdida",))):
+        h = ex.explorar("corto", semilla, tolerar=False).hallazgo
+        assert h is None or h.clase not in clases, f"semilla {semilla} sin sembrar acusa {h.clase}: {h}"
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX6: EL DETECTOR DE RACHAS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def _aviso(segundo, mensaje, nivel="aviso", origen="Jog"):
+    return reg.Evento(dt.datetime(2026, 11, 25, 1, 6, 12) + dt.timedelta(seconds=segundo), nivel, origen, mensaje, {})
+
+
+def _registro_del_25_de_nov():
+    """Un extracto SINTÉTICO con la forma del registro real: 31 negativas seguidas del planeador en 21 s, rodeadas de lo normal."""
+    eventos = [_aviso(-30, "Programa «demo» cargado", "info", "Programa"),
+               _aviso(-20, "La punta no llega más allá de Y = 0 mm desde esta pose."),
+               _aviso(-10, "La punta no llega más allá de Y = 0 mm desde esta pose."),
+               _aviso(-5, "Cosecha lista", "ok", "Cosecha")]
+    eventos += [_aviso(21 * i / 30, f"No se mueve. Para pasar por ({155 + i}, 0, 1654) el robot tendría que cambiar de postura "
+                                    f"(el brazo barrería hasta {20 - i % 7} mm fuera de la línea) y el modo es «negar».")
+                for i in range(31)]
+    eventos += [_aviso(30, "Cambio de postura cerca de (855, 0, 1654)"), _aviso(31, "Listo", "ok", "Jog")]
+    return eventos
+
+
+def test_ex06_el_detector_encuentra_la_racha_de_31_avisos():
+    rachas = rachas_de_avisos(_registro_del_25_de_nov())
+    assert [r.longitud for r in rachas] == [31], rachas
+    r = rachas[0]
+    assert (r.nivel, r.origen) == ("aviso", "Jog") and r.primero == 4
+    assert r.segundos == pytest.approx(21)
+
+
+def test_ex06_dos_avisos_iguales_no_son_racha_y_tres_si():
+    dos = [_aviso(i, f"Mismo aviso en ({i}, 0, 0)") for i in range(2)]
+    tres = [_aviso(i, f"Mismo aviso en ({i}, 0, 0)") for i in range(3)]
+    assert rachas_de_avisos(dos) == [] and len(rachas_de_avisos(tres)) == 1
+    assert forma_del_aviso("Para (155, 0, 1654) y 3,5") == forma_del_aviso("Para (1, -2, 99) y 40")
+
+
+def test_ex06_lo_que_rompe_una_racha_la_corta():
+    eventos = [_aviso(0, "A"), _aviso(1, "A"), _aviso(2, "otro aviso"), _aviso(3, "A"), _aviso(4, "A"),
+               _aviso(5, "A", "info"), _aviso(6, "A"), _aviso(7, "A", origen="Otro")]
+    assert rachas_de_avisos(eventos) == []
+
+
+def test_ex06_lee_un_archivo_de_registro(tmp_path):
+    ruta = tmp_path / "registro-2026-11-25.jsonl"
+    reg.exportar_jsonl(_registro_del_25_de_nov(), str(ruta))
+    rachas = rachas_del_archivo(str(ruta))
+    assert [r.longitud for r in rachas] == [31]
+    assert rachas[0].desde == dt.datetime(2026, 11, 25, 1, 6, 12)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX7: CARPETA DESECHABLE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def _huella_de(carpeta):
+    if not os.path.isdir(carpeta):
+        return None
+    huellas = {}
+    for raiz, _dirs, archivos in os.walk(carpeta):
+        for a in sorted(archivos):
+            ruta = os.path.join(raiz, a)
+            huellas[os.path.relpath(ruta, carpeta)] = hashlib.sha1(open(ruta, "rb").read()).hexdigest()
+    return huellas
+
+
+def _ajustes_reales():
+    s = QtCore.QSettings("robot-cosechador", "cosechador")
+    return {k: str(s.value(k)) for k in s.allKeys()}
+
+
+def _desechables_en_el_tmp():
+    return set(glob.glob(os.path.join(tempfile.gettempdir(), "cosechador-exploracion-*")))
+
+
+def test_ex07_no_toca_programas_ni_registro_ni_ajustes_de_la_persona():
+    programas, logs = prog.CARPETA_PROGRAMAS, reg.CARPETA_LOGS
+    antes = (_huella_de(programas), _huella_de(logs), _ajustes_reales(), _desechables_en_el_tmp())
+    resultado = ex.explorar("corto", 77, tolerar=True)         # CON GRABAR, GUARDAR, DESCARTAR Y EDITAR AL AZAR
+    despues = (_huella_de(programas), _huella_de(logs), _ajustes_reales(), _desechables_en_el_tmp())
+    assert resultado.cobertura.gestos > 50
+    assert antes[0] == despues[0], "cambió la carpeta programas/ de la persona"
+    assert antes[1] == despues[1], "cambió la carpeta logs/ de la persona"
+    assert antes[2] == despues[2], "cambiaron los ajustes (QSettings) de la persona"
+    assert antes[3] == despues[3], "quedó una carpeta desechable sin borrar (o se borró otra)"
+
+
+def test_ex07_la_ventana_aislada_vive_toda_en_la_carpeta_desechable():
+    carpeta = carpeta_desechable()
+    w = ventana_aislada(ROBOT, carpeta)
+    try:
+        base = os.path.realpath(tempfile.gettempdir())
+        assert os.path.realpath(w.carpeta_programas).startswith(base + os.sep)
+        assert os.path.realpath(w.ajustes.fileName()).startswith(base + os.sep)
+        assert w.registro.carpeta is None, "el registro de la ventana escribiría un archivo"
+        assert os.path.realpath(w.carpeta_programas) != os.path.realpath(prog.CARPETA_PROGRAMAS)
+    finally:
+        cerrar(w)
+        borrar_desechable(carpeta)
+    assert not os.path.exists(carpeta)
+
+
+def test_ex07_se_niega_a_trabajar_o_borrar_fuera_de_lo_desechable():
+    with pytest.raises(RuntimeError):
+        ventana_aislada(ROBOT, CARPETA_REPO)
+    with pytest.raises(RuntimeError):
+        borrar_desechable(os.path.join(CARPETA_REPO, "programas"))
+    assert os.path.isdir(os.path.join(CARPETA_REPO, "programas"))
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX8: EL INFORME DE COBERTURA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_ex08_el_informe_dice_que_se_toco_cuantas_veces_y_que_nunca(corrida_corta):
+    cob = corrida_corta.cobertura
+    informe = cob.informe()
+    assert cob.tocados and cob.controles
+    for nombre, veces in cob.tocados.most_common(3):
+        assert f"{nombre} {veces}" in informe, f"el informe no dice cuántas veces se tocó {nombre}"
+    nunca = cob.nunca_tocados()
+    assert all(n not in cob.tocados for n in nunca)
+    assert set(nunca) | set(cob.tocados) | set(ex.EXCLUIDOS) >= set(cob.controles), "un control no está ni tocado ni en «nunca»"
+    assert f"Controles NUNCA tocados ({len(nunca)})" in informe
+    for nombre in nunca[:3]:
+        assert nombre in informe
+    for (postura, camino), n in cob.modos.items():
+        assert f"{postura:<9} / {camino:<10} {n}" in informe, "el informe no lista un modo tocado"
+    for excluido in ex.EXCLUIDOS:
+        assert excluido in informe, "lo excluido a propósito debe declararse en el informe"
+    assert sum(cob.tocados.values()) + cob.sin_efecto <= cob.gestos
+
+
+def test_ex08_los_controles_se_descubren_no_se_listan_a_mano():
+    carpeta = carpeta_desechable()
+    w = ventana_aislada(ROBOT, carpeta)
+    try:
+        todos = ex.descubrir(w)
+        for esperado in ("SLIDER_1", "SLIDER_X", "BTN_GRABAR", "SELECTOR_POSTURA", "PESTANAS_MOVIMIENTO", "TE_X", "LISTA_PUNTOS"):
+            assert esperado in todos, f"{esperado} no se descubrió"
+        assert len(todos) >= 40
+    finally:
+        cerrar(w)
+        borrar_desechable(carpeta)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX9: REDUCIR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def test_ex09_reduce_a_la_lista_mas_corta_que_reproduce():
+    with _sembrar_el_rojo():
+        h = ex.explorar("corto", SEMILLA_DEL_ROJO, tolerar=False).hallazgo
+        assert h is not None
+        corto = ex.reducir(h)
+        assert corto.clase == h.clase and len(corto.gestos) < len(h.gestos), (len(h.gestos), len(corto.gestos))
+        assert ex.reproducir(corto.gestos) is not None, "la lista reducida ya no reproduce el hallazgo"
+        # MÍNIMA: quitarle cualquier gesto, de uno en uno, y ya no hay hallazgo de esa clase
+        for i in range(len(corto.gestos)):
+            sin = corto.gestos[:i] + corto.gestos[i + 1:]
+            r = ex.reproducir(sin) if sin else None
+            assert r is None or r.clase != corto.clase, f"el gesto {i + 1} sobraba: {corto.gestos[i]}"
+
+
+def test_ex09_un_hallazgo_que_no_se_repite_se_entrega_tal_cual():
+    h = Hallazgo("rebote", "no se repite", (Gesto("esperar", "", 0.0, 0, 0.1),) * 3)
+    assert ex.reducir(h, reproducir_con=lambda gestos: None) is h
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX10: LOS HALLAZGOS SE QUEDAN COMO PRUEBA FIJA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# (nombre, clase, gestos, motivo si el defecto sigue vivo en el código de hoy). Los pega, ya reducidos, `python tests/explorador.py`.
+# Si el defecto sigue vivo: fallo esperado ESTRICTO (xfail strict) con su motivo. El día que se arregle, esta prueba se pone roja
+# (XPASS) para que alguien quite la marca: así un arreglo no pasa sin que la prueba lo registre.
+HALLAZGOS = (
+    ("D5-calcular-con-inf-o-nan", "excepcion", (
+        Gesto(tipo='escribir', control='TE_X', v=0.0, s=10, dt=0.0),
+        Gesto(tipo='escribir', control='TE_Y', v=0.0, s=10, dt=0.0),
+        Gesto(tipo='escribir', control='TE_Z', v=0.0, s=9, dt=0.0),
+        Gesto(tipo='click', control='CALCULAR', v=0.0, s=778166, dt=0.008),
+    ), "escribir «inf» y «nan» en los campos X, Y, Z y pulsar CALCULAR revienta dentro del slot (OverflowError en _texto de "
+       "trayectorias.py: int(round(inf))): la persona ve «Error inesperado» en vez de «punto fuera del volumen»"),
+    ("D6-rebote-negar-con-la-punta-en-camino", "rebote", (
+        Gesto(tipo='elegir', control='PESTANAS_MOVIMIENTO', v=0.5, s=0, dt=0.0),
+        Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.1901583561638126, s=402479, dt=1.5),
+        Gesto(tipo='arrastrar', control='SLIDER_X', v=0.25891675029296335, s=536110, dt=0.008),
+        Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.9677999949201714, s=375441, dt=0.05),
+        Gesto(tipo='elegir', control='SELECTOR_POSTURA', v=0.6424961212029794, s=0, dt=0.0),
+        Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.6837036588129731, s=624556, dt=0.008),
+    ), "en «negarse» y «En cola» con la punta en camino, el rojo del slider de Y deja entrar a Y = 0 (el plano del frente) y el "
+       "planeador se niega («el brazo barrería hasta 16 mm fuera de la línea»): el slider rebota. Con la punta quieta no pasa"),
+)
+
+
+def _prueba_fija(nombre, clase, gestos, motivo):
+    marcas = [pytest.mark.xfail(strict=True, reason=motivo)] if motivo else []
+    return pytest.param(clase, gestos, id=nombre, marks=marcas)
+
+
+@pytest.mark.parametrize("clase,gestos", [_prueba_fija(*h) for h in HALLAZGOS])
+def test_ex10_hallazgo_fijo(clase, gestos):
+    hallazgo = ex.reproducir(list(gestos))
+    assert hallazgo is None, f"el hallazgo sigue vivo:\n{hallazgo}"
+
+
+def test_ex10_cada_defecto_conocido_tiene_su_prueba_fija():
+    """Lo que el explorador deja pasar como «conocido» (CONOCIDOS) tiene que tener su prueba fija arriba, y al revés."""
+    fijos = {h[0].split("-")[0] for h in HALLAZGOS}
+    conocidos = {c.id.split("-")[0] for c in ex.CONOCIDOS}
+    assert conocidos == fijos, f"conocidos sin prueba fija o al revés: {conocidos ^ fijos}"
+    for c in ex.CONOCIDOS:
+        assert c.motivo and c.contiene
+
+
+def test_ex10_las_pruebas_fijas_reproducen_de_verdad_lo_que_dicen():
+    """El control de que el instrumento no miente: cada defecto abierto SÍ se reproduce, con la clase que dice."""
+    for nombre, clase, gestos, motivo in HALLAZGOS:
+        if motivo:
+            hallazgo = ex.reproducir(list(gestos))
+            assert hallazgo is not None and hallazgo.clase == clase, f"{nombre}: ya no se reproduce como «{clase}»: {hallazgo}"
