@@ -585,3 +585,93 @@ def test_s5_un_robot_de_otra_medida_pinta_lo_suyo(robot, datos_yaml, abrir):
     colocar(w, angulos_servo(w.robot, (100, 200, 500)))
     assert defectos_de_lo_pintado(w) == []
     assert max(b for _, b in w.SLIDER_X.tramos) < 1100
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% J8: LLEVAR UN SLIDER AL BORDE DEL ROJO LLEVA LA PUNTA HASTA AHÍ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def poses_al_azar(w, cuantas, semilla=2411):
+    """Servos al azar con la punta dentro de los tres sliders. Semilla fija: siempre salen las mismas poses.
+
+    Con poses elegidas a mano el defecto no se veía (las de S3 pasaban): depende de los decimales de la punta, y solo
+    aparece en 7 de cada 100 poses."""
+    rng = np.random.default_rng(semilla)
+    limites = [(j.servo.minimo, j.servo.maximo) for j in w.robot.articulaciones]
+    poses = []
+    while len(poses) < cuantas:
+        servos = tuple(float(rng.uniform(lo, hi)) for lo, hi in limites)
+        if all(s.minimum() <= c <= s.maximum() for s, c in zip(w.sliders_xyz, posicion(w.robot, servos))):
+            poses.append(servos)
+    return poses
+
+
+def test_j08_llevar_un_slider_al_borde_del_rojo_lleva_la_punta_hasta_ahi(ventana):
+    """Criterio J8, en 30 poses al azar. El aviso «No se mueve» lo calla el candado del tope, así que se mira el efecto:
+    el movimiento salió y termina en el borde. El borde se toma ANTES de mover: si el planeador se niega, el slider
+    rebota a donde estaba, y leerlo después esconde justo el defecto (así pasó en verde la primera versión de esta prueba)."""
+    w = ventana
+    pedidos, no_llega = 0, []
+    for servos in poses_al_azar(w, 30):
+        for eje, slider in enumerate(w.sliders_xyz):
+            for extremo in (slider.minimum(), slider.maximum()):
+                colocar(w, servos)
+                salida = tuple(w.posicion)
+                borde = slider.acotar(extremo, salida[eje])   # DONDE EMPIEZA EL ROJO (O SE ACABA EL SLIDER)
+                if abs(borde - salida[eje]) < 0.5:
+                    continue                                  # LA PUNTA YA ESTABA EN ESE BORDE: NO HAY NADA QUE RECORRER
+                pedidos += 1
+                slider.setValue(extremo)                      # DE UN SALTO: TECLA Fin O Inicio, O UN CLIC EN LA PISTA
+                camino = [paso.servos for paso in w.cola if paso.servos is not None]
+                if slider.value() != borde or not camino or tuple(posicion(w.robot, camino[-1])) != pytest.approx(
+                        con_el_eje(salida, eje, borde), abs=0.5):
+                    no_llega.append((tuple(round(c, 2) for c in salida), "XYZ"[eje], borde))
+    w.detener()
+    assert pedidos > 150, "control: casi ninguna pose tenía a dónde ir; la prueba no mide nada"
+    assert no_llega == [], f"{len(no_llega)} de {pedidos} veces el slider se detuvo en el borde y la punta no fue"
+
+
+# AL REDONDEAR A MILÍMETROS ENTEROS, Y Y Z SE ALEJAN DEL ROBOT: EL BORDE DE X QUEDA UN POCO MÁS ADENTRO
+PUNTA_CON_DECIMALES = (100.3, 700.55, 800.55)
+
+
+def test_j08_con_la_tecla_fin_la_punta_llega_al_borde_y_el_slider_no_rebota(ventana, robot):
+    """Un caso concreto de los que fallaban, de principio a fin y por el teclado: la punta con decimales."""
+    w = ventana
+    colocar(w, angulos_servo(robot, PUNTA_CON_DECIMALES))
+    borde = math.floor(w.SLIDER_X.tramos[-1][1])
+    assert borde < w.SLIDER_X.maximum() - 5, "control: sobre X no hay rojo a la derecha"
+    teclear(w, w.SLIDER_X, "Fin")
+    assert w.SLIDER_X.value() == borde, "el slider rebotó a donde estaba"
+    assert tuple(w.posicion) == pytest.approx(con_el_eje(PUNTA_CON_DECIMALES, 0, borde), abs=0.01)
+    assert len(topes(w)) == 1 and negativas_del_planeador(w) == []
+
+
+def test_j08_mover_un_slider_no_cambia_las_otras_dos_coordenadas(ventana):
+    """La causa del defecto: los otros dos sliders guardan milímetros enteros y la punta tiene decimales. Si se toman
+    como destino, la punta se sale de la recta sobre la que se pintó el rojo."""
+    w = ventana
+    movimientos = 0
+    for servos in poses_al_azar(w, 8):
+        for eje, slider in enumerate(w.sliders_xyz):
+            colocar(w, servos)
+            salida = tuple(w.posicion)
+            destino = slider.acotar(slider.value() + 37, salida[eje])   # UN PASO CORTO HACIA DENTRO DE LO ALCANZABLE
+            if abs(destino - salida[eje]) < 0.5:
+                continue
+            movimientos += 1
+            slider.setValue(destino)
+            correr(w)
+            assert tuple(w.posicion) == pytest.approx(con_el_eje(salida, eje, destino), abs=0.01), \
+                f"al mover {'XYZ'[eje]} la punta se salió de su recta"
+    assert movimientos > 15, "control: casi ninguna pose tenía a dónde ir; la prueba no mide nada"
+
+
+def test_j08_un_slider_ya_movido_sigue_siendo_destino_con_el_robot_en_camino(ventana, robot):
+    """Lo que NO cambia: con la punta en camino sobre X, mover Y la lleva a la X y la Y pedidas (el slider de X ya no
+    marca dónde está la punta: es una orden)."""
+    w = ventana
+    colocar(w, angulos_servo(robot, (575, 996, 1147)))
+    w.SLIDER_X.setValue(875)
+    correr_pasos(w, 6)
+    assert w.cola and 580 < w.posicion[0] < 870, "control: la punta no quedó a medio camino"
+    w.SLIDER_Y.setValue(1296)
+    correr(w)
+    assert tuple(w.posicion) == pytest.approx((875, 1296, 1147), abs=0.5)

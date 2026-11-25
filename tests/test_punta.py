@@ -374,7 +374,7 @@ def test_p2_la_pestana_punta_xyz_mueve_la_punta_y_la_muestra(robot, abrir):
     w.PESTANAS_MOVIMIENTO.setCurrentIndex(1)
     w.SLIDER_X.setValue(300)  # DE LA PUNTA EN HOME (0, 120, 1065: LA HERRAMIENTA APUNTA A +Y) A (300, 120, 1065)
     correr(w)
-    destino = (300, *(round(c) for c in robot.home[1:]))  # LOS SLIDERS PIDEN MILÍMETROS ENTEROS
+    destino = (300, *robot.home[1:])  # SOLO CAMBIA LA COORDENADA DEL SLIDER QUE SE MOVIÓ: LAS OTRAS DOS NO SE REDONDEAN (J8)
     puntas = np.array([punta_a_mano(robot, s) for s in w.enviados])
     assert puntas[-1] == pytest.approx(destino, abs=1e-3)
     assert lejos_de_la_recta(puntas, salida, destino) < RECTA_MM

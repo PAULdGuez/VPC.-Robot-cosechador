@@ -77,6 +77,11 @@ PASO_VELOCIDAD_PUNTO = 5  # LA VELOCIDAD DE UN PUNTO SE ELIGE DE 5 EN 5 %
 MARCA_IMPOSIBLE = "imposible"  # LO QUE LLEVA EN UserRole EL RENGLÓN DE UN PUNTO AL QUE NO SE PUEDE LLEGAR
 
 
+def _marca(slider, valor):
+    """El valor con el que un slider marca `valor`: un entero dentro de su rango."""
+    return min(max(int(round(valor)), slider.minimum()), slider.maximum())
+
+
 def _cuantos_puntos(n):
     """«sin puntos», «1 punto», «4 puntos»: el conteo en palabras. Lo dicen igual la pestaña Programa y el editor."""
     return "sin puntos" if not n else "1 punto" if n == 1 else f"{n} puntos"
@@ -487,9 +492,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         `eje` es el slider que se movió. True si el movimiento salió."""
         destino = [float(slider.value()) for slider in self.sliders_xyz]
         for otro, slider in enumerate(self.sliders_xyz):
-            # UN SLIDER QUE NO PUEDE MARCAR DÓNDE ESTÁ LA PUNTA (BAJO LA BASE, EL DE Z MARCA 0 PORQUE NO BAJA MÁS) NO ES
-            # UNA ORDEN: SI EL QUE SE MOVIÓ ES OTRO, ESE EJE SE QUEDA DONDE ESTÁ
-            if otro != eje and not slider.minimum() <= self.posicion[otro] <= slider.maximum():
+            # UN SLIDER QUE SOLO MARCA DÓNDE ESTÁ LA PUNTA NO ES UNA ORDEN: SI EL QUE SE MOVIÓ ES OTRO, ESE EJE SE QUEDA
+            # EXACTAMENTE DONDE ESTÁ. EL SLIDER GUARDA MILÍMETROS ENTEROS Y LA PUNTA TIENE DECIMALES (Y BAJO LA BASE EL DE Z
+            # MARCA 0 PORQUE NO BAJA MÁS): TOMAR SU VALOR SACA EL DESTINO DE LA RECTA SOBRE LA QUE SE PINTÓ EL ROJO, Y JUSTO
+            # EN LA FRONTERA EL PLANEADOR SE NIEGA. UN SLIDER QUE YA SE MOVIÓ (EL ROBOT VA EN CAMINO HACIA ÉL) SÍ ES UNA ORDEN
+            if otro != eje and slider.value() == _marca(slider, self.posicion[otro]):
                 destino[otro] = float(self.posicion[otro])
         distancia = math.dist(self.posicion, destino)
         if distancia < 0.5:
@@ -509,7 +516,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _sincronizar(sliders, valores):
         for slider, valor in zip(sliders, valores):
             slider.blockSignals(True)
-            slider.setValue(int(round(valor)))
+            slider.setValue(_marca(slider, valor))
             slider.blockSignals(False)
 
     def _sincronizar_sliders(self):
