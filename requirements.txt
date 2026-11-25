@@ -4,6 +4,7 @@ opencv-python
 PyQt5
 pyvista
 pyvistaqt
+matplotlib
 pyserial
 pyyaml
 pytest
