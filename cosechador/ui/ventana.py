@@ -7,6 +7,7 @@ import dataclasses
 import datetime as dt
 import math
 import os
+import time
 from collections import deque
 
 import html
@@ -19,6 +20,7 @@ from pyvistaqt import QtInteractor
 
 from cosechador import registro as reg
 from cosechador.hardware.enlace import abrir_enlace
+from cosechador.hardware.guardia import GuardiaDeSalida, OrdenNegada
 from cosechador.movimiento import programa as programas
 from cosechador.movimiento.grabadora import Grabadora, programa_de_grabacion
 from cosechador.movimiento.trayectorias import (duracion_ms, hasta_donde_llega, plan_cosecha, plan_grabacion,
@@ -86,6 +88,9 @@ TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:"
 DESCARTAR = object()        # LO QUE DEVUELVE EL DIÁLOGO DEL NOMBRE CUANDO SE PIDE TIRAR LA GRABACIÓN
 RESULTADO_DESCARTAR = 2     # CÓDIGO DEL DIÁLOGO (0 = RECHAZADO, 1 = ACEPTADO)
 ANCHO_DEL_NOMBRE = 320      # px DEL CAMPO: CABE ENTERO EL NOMBRE QUE SE SUGIERE (grabacion-AAAA-MM-DD-HHMM)
+TEXTO_GUARDIA_TITULO = "MOVIMIENTO DETENIDO"
+TEXTO_GUARDIA_RESTO = "No se mandó esa orden: el robot sigue donde estaba. Revise y pulse Reiniciar para volver a moverlo."
+PAUSA_AVISO_GUARDIA_S = 0.5  # DETENIDA, FUERA DE UN ARRASTRE (RUEDA, FLECHAS) NO HAY MÁS DE UN AVISO CADA TANTO: NUNCA UNA RACHA
 TEXTO_NUEVO_PROGRAMA = "+ Nuevo programa"  # EL ÚLTIMO RENGLÓN DEL SELECTOR, EL ÚNICO QUE NO ES UN ARCHIVO
 # EDITOR DE PUNTOS
 MOTIVO_NO_SE_EDITA = "Una grabación son muestras por tiempo:\nno se edita por puntos."
@@ -146,7 +151,8 @@ class _RenglonDePunto(_RenglonDelRegistro):
 
 class VentanaPrincipal(QtWidgets.QMainWindow):
 
-    def __init__(self, robot, enlace=None, fuente_camara=None, ajustes=None, carpeta_programas=None, registro=None):
+    def __init__(self, robot, enlace=None, fuente_camara=None, ajustes=None, carpeta_programas=None, registro=None,
+                 reloj=time.monotonic):
         super().__init__()
         uic.loadUi(RUTA_UI, self)
         tema.aplicar(self)  # COLORES, TAMAÑOS Y ESPACIOS: TODO EN cosechador/ui/tema.py
@@ -161,8 +167,15 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.escena = Escena(QtInteractor(self), robot)
         self.visor = Visor(self.PANTALLA, self.escena, robot, self.ajustes)
 
-        # ESP32 REAL SI HAY ROBOT_PUERTO; SI NO, LA VIRTUAL
-        self.enlace = enlace or abrir_enlace(rangos=[(j.servo.minimo, j.servo.maximo) for j in robot.articulaciones])
+        # ESP32 REAL SI HAY ROBOT_PUERTO; SI NO, LA VIRTUAL. SIEMPRE DENTRO DE LA GUARDIA DE SALIDA: ES EL ÚNICO CAMINO A LA
+        # PLACA (SIN PARÁMETRO NI AJUSTE QUE LA QUITE). EL RELOJ SOLO SE INYECTA PARA QUE LAS PRUEBAS COMPARTAN EL SUYO FALSO:
+        # LA GUARDIA LO LEE SIEMPRE DE `self.reloj`, ASÍ QUE CAMBIARLO DESPUÉS TAMBIÉN VALE
+        crudo = enlace or abrir_enlace(rangos=[(j.servo.minimo, j.servo.maximo) for j in robot.articulaciones])
+        self.reloj = reloj
+        self.enlace = GuardiaDeSalida(crudo, robot, reloj=lambda: self.reloj())
+        self._gesto_avisado = False          # YA SE AVISÓ «SIGUE DETENIDO» EN ESTE ARRASTRE: NO SE REPITE HASTA SOLTAR EL SLIDER
+        self._hora_aviso_guardia = -math.inf  # CUÁNDO FUE EL ÚLTIMO AVISO DE «SIGUE DETENIDO» (LO QUE NO ES UN ARRASTRE)
+        self._configurar_guardia()
         for respuesta in self.enlace.dispositivo.leer_respuestas():
             self.avisar(respuesta, "info", "ESP32")
         # LA BARRA DE ARRIBA DICE QUÉ ROBOT ESTÁ CARGADO Y A QUÉ PLACA SE LE MANDAN LOS ÁNGULOS
@@ -244,18 +257,81 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.statusBar().showMessage(f"{ICONO_NIVEL[nivel]} {texto}")
 
     def poner_servos(self, servos, duracion_s=None):
-        """Dibuja el robot con esos ángulos de servo y se los manda a la placa.
+        """Manda a la placa esos ángulos de servo, los dibuja y devuelve True. Si la guardia de salida no los deja salir,
+        no se dibuja nada, `self.servos` no cambia, nada se graba y devuelve False: quien llama no debe seguir su plan.
 
         duracion_s: lo que dura este paso (para la grabación); None = un paso a velocidad 100 %.
         """
-        self.servos = tuple(servos)
+        pedido = tuple(servos)
+        try:
+            comando, respuestas = self.enlace.enviar(*pedido)  # LA ORDEN VA ANTES DE DIBUJAR: SI SE NIEGA, EL ROBOT NO SE MOVIÓ
+        except OrdenNegada as negada:                          # EL ÚNICO LUGAR QUE ATIENDE LA NEGATIVA DE LA GUARDIA
+            self._guardia_se_nego(negada, pedido)
+            return False
+        self.servos = pedido
         self._dibujar(self.servos)
         self.poner_etiquetas()
-        comando, respuestas = self.enlace.enviar(*self.servos)
         # SE GRABA AQUÍ, JUSTO DESPUÉS DE MANDARLA: LO GRABADO ES LO QUE RECIBIÓ LA PLACA, NO LO QUE DICEN LOS SLIDERS
         self.grabadora.anotar(self.servos, duracion_s if duracion_s is not None else self.robot.movimiento.ms_por_paso / 1000)
         for respuesta in respuestas:
             self.avisar(respuesta, "aviso", "ESP32", comando=comando, placa=self.enlace.nombre)
+        return True
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% GUARDIA DE SALIDA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def _configurar_guardia(self):
+        """La franja roja bajo el título está en el .ui, oculta: aquí solo se conecta su botón y se le pone el texto fijo."""
+        self.BTN_REINICIAR_GUARDIA.clicked.connect(self._reiniciar_guardia)
+        self.TITULO_GUARDIA.setText(TEXTO_GUARDIA_TITULO)
+
+    def _guardia_se_nego(self, negada, pedido):
+        """La guardia no dejó salir la orden: lo que faltaba del movimiento se cancela, los sliders y las etiquetas vuelven a
+        donde está el robot (que no se movió), aparece la franja y se avisa. La primera negativa es un error en el registro;
+        mientras siga detenida, cada intento nuevo de mover avisa (una vez por gesto) que sigue detenida."""
+        violacion = negada.violacion
+        if self.servos is not None:                # (SI NI LA POSE DE ARRANQUE SALIÓ, NO HAY DONDE VOLVER)
+            self._fin_del_movimiento()             # COLA VACÍA, TEMPORIZADOR PARADO, SLIDERS DONDE ESTÁ EL ROBOT
+            self.poner_etiquetas()
+        else:
+            self.cola.clear()
+            self.temporizador_movimiento.stop()
+        self.TEXTO_GUARDIA.setText(f"{violacion.motivo} {TEXTO_GUARDIA_RESTO}")
+        self.FRANJA_GUARDIA.show()
+        if negada.nueva:
+            self.avisar(f"{violacion.motivo} No se mandó esa orden: el robot sigue donde estaba.", "error", "Guardia",
+                        clave=violacion.clave, motivo=violacion.motivo, servos=pedido, servo=violacion.servo,
+                        pedido=violacion.pedido, tope=violacion.tope, detalle=violacion.detalle)
+            self._gesto_avisado = self._arrastrando()
+        else:
+            self._avisar_sigue_detenida(violacion)
+
+    def _avisar_sigue_detenida(self, violacion):
+        """Un intento de mover con la guardia detenida. Un aviso por gesto: un arrastre completo de un slider es UN gesto
+        (no uno por pixel); fuera de un arrastre (rueda, flechas, botones) no hay más de uno cada PAUSA_AVISO_GUARDIA_S."""
+        ahora = self.reloj()
+        if self._arrastrando():
+            if self._gesto_avisado:
+                return
+            self._gesto_avisado = True
+        elif ahora - self._hora_aviso_guardia < PAUSA_AVISO_GUARDIA_S:
+            return
+        self._hora_aviso_guardia = ahora
+        self.avisar(f"El movimiento sigue detenido: {violacion.motivo} Pulse Reiniciar para volver a moverlo.", "aviso",
+                    "Guardia", clave=violacion.clave)
+
+    def _gesto_de_slider_termina(self):
+        """Se soltó un slider: el siguiente arrastre es otro gesto. Si la guardia se negó con la perilla agarrada, los
+        sliders no se tocaron (no se le quita a la persona lo que sostiene): ahora que la soltó, vuelven al robot."""
+        self._gesto_avisado = False
+        if self.enlace.detenida:
+            self._sincronizar_sliders()
+
+    def _reiniciar_guardia(self):
+        """Lo único que levanta el candado, y solo lo pulsa una persona: no mueve el robot ni reenvía la orden negada."""
+        self.enlace.reiniciar()
+        self.FRANJA_GUARDIA.hide()
+        self._gesto_avisado = False
+        self.avisar("Guardia reiniciada: no se mandó nada y el robot sigue donde estaba. Ya se puede volver a mover.", "info",
+                    "Guardia")
 
     def _dibujar(self, servos):
         """El robot de la simulación con esos ángulos de servo. Solo el dibujo: a la placa no le llega nada."""
@@ -267,8 +343,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         servos = self.robot.postura_home
         if servos is None:  # SIN SOLVER (O HOME INALCANZABLE): CADA SERVO AL CENTRO DE SU RANGO
             servos = tuple(j.servo.centro for j in self.robot.articulaciones)
-        self.poner_servos(servos)
-        self._sincronizar_sliders()
+        if self.poner_servos(servos):
+            self._sincronizar_sliders()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EJECUCIÓN DE PLANES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def ejecutar(self, plan, bloquear=True, origen="Movimiento", solo_simulacion=False, conservar=0):
@@ -311,7 +387,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if paso.servos is not None and self.en_vista_previa:
             self._dibujar(paso.servos)  # NI PLACA, NI GRABACIÓN, NI self.servos: EL ROBOT NO SE MOVIÓ
         elif paso.servos is not None:
-            self.poner_servos(paso.servos, intervalo / 1000)
+            if not self.poner_servos(paso.servos, intervalo / 1000):
+                return  # LA GUARDIA SE NEGÓ: YA SE CANCELÓ LO PENDIENTE Y NO HAY PLAN QUE SEGUIR
             if self._destino_jog is not None:  # LA PUNTA VA EN CAMINO POR UN SLIDER: SU ROJO SE PONE AL DÍA CADA POCOS PASOS
                 self._pasos_jog += 1
                 if self._pasos_jog % PASOS_POR_REPINTADO_JOG == 0:
@@ -512,6 +589,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             slider.setRange(int(j.servo.minimo), int(j.servo.maximo))
             etiqueta.setToolTip(j.nombre)
             slider.valueChanged.connect(self._slider_servo_movido)
+            slider.sliderReleased.connect(self._gesto_de_slider_termina)
 
         self.sliders_xyz = (self.SLIDER_X, self.SLIDER_Y, self.SLIDER_Z)
         self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
@@ -524,6 +602,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             slider.valueChanged.connect(lambda _valor, eje=eje: self._slider_xyz_movido(eje))
             slider.sliderPressed.connect(lambda: self._jog_arrastre(True))
             slider.sliderReleased.connect(lambda: self._jog_arrastre(False))
+            slider.sliderReleased.connect(self._gesto_de_slider_termina)
 
     def _poner_rangos_xyz(self):
         """Los sliders de la punta llegan hasta donde llega la punta de la herramienta. Con las señales calladas:

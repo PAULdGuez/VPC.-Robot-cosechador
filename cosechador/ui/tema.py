@@ -47,6 +47,12 @@ QFrame#BARRA_TITULO { background: $primario; border-radius: $radio; }
 QLabel#TITULO_APP { color: white; font-size: $letra_titulo; font-weight: bold; }
 QLabel[rol="estado"] { color: white; font-size: $letra_chica; }
 
+/* %%%%% FRANJA DE LA GUARDIA DE SALIDA (SOLO SE VE CON EL MOVIMIENTO DETENIDO) %%%%% */
+QFrame#FRANJA_GUARDIA { background: $rojo; border-radius: $radio; }
+QLabel[rol="guardia-titulo"] { color: white; background: transparent; font-size: $letra_titulo; font-weight: bold; }
+QLabel[rol="guardia-texto"] { color: white; background: transparent; font-size: $letra_chica; }
+QPushButton#BTN_REINICIAR_GUARDIA { font-weight: bold; padding: 0px 22px; border-color: $tinta; }
+
 /* %%%%% PANELES Y TARJETAS %%%%% */
 QFrame[rol="panel"] { background: $panel; border-radius: $radio_chico; }
 QFrame#FONDO_ACCIONES { background: $panel; }
