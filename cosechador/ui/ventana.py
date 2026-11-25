@@ -383,6 +383,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             return
         try:
             destino = tuple(float(campo.text()) for campo in (self.TE_X, self.TE_Y, self.TE_Z))
+            if not all(math.isfinite(c) for c in destino):  # «inf» Y «nan» SON NÚMEROS PARA float(), NO PARA EL ROBOT
+                raise ValueError(destino)
         except ValueError:
             self.avisar("Escribe números en X, Y y Z (en mm).", "aviso", "Movimiento",
                         escrito=[campo.text() for campo in (self.TE_X, self.TE_Y, self.TE_Z)])

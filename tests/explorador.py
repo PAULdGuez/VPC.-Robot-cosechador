@@ -87,10 +87,6 @@ CONOCIDOS = (
              "MISMO slider antes de que su tramo empiece: «En cola» retraza ese tramo desde donde SALÍA, y el rojo del slider se "
              "midió desde donde LLEGA. Desde la llegada no hay cambio de postura; desde la salida sí: el planeador se niega (con "
              "un aviso veraz) y el slider vuelve. Con un solo modo de postura de principio a fin no puede pasar"),
-    Conocido("D5-calcular-con-inf-o-nan", "excepcion", "cannot convert float infinity to integer",
-             "CALCULAR con «inf» en X, Y o Z: plan_ir_y_volver revienta al armar el aviso (_texto hace int(round(inf)))"),
-    Conocido("D5-calcular-con-inf-o-nan", "excepcion", "cannot convert float NaN to integer",
-             "CALCULAR con «nan» en X, Y o Z: plan_ir_y_volver revienta al armar el aviso (_texto hace int(round(nan)))"),
 )
 
 TAMANOS = {   # (ejemplos de Hypothesis, pasos por ejemplo). Un «paso» puede ser una macro de varios gestos.

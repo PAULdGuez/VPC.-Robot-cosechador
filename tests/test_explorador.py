@@ -569,8 +569,7 @@ HALLAZGOS = (
         Gesto(tipo='escribir', control='TE_Y', v=0.0, s=10, dt=0.0),
         Gesto(tipo='escribir', control='TE_Z', v=0.0, s=9, dt=0.0),
         Gesto(tipo='click', control='CALCULAR', v=0.0, s=778166, dt=0.008),
-    ), "escribir «inf» y «nan» en los campos X, Y, Z y pulsar CALCULAR revienta dentro del slot (OverflowError en _texto de "
-       "trayectorias.py: int(round(inf))): la persona ve «Error inesperado» en vez de «punto fuera del volumen»"),
+    ), ""),   # ARREGLADO EL 25-nov-2026 (tests/test_calcular.py, D5): SIN MOTIVO, LA PRUEBA FIJA EXIGE QUE YA NO SE REPITA
     ("D6-rebote-negar-con-la-punta-en-camino", "rebote", (
         Gesto(tipo='elegir', control='PESTANAS_MOVIMIENTO', v=0.5, s=0, dt=0.0),
         Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.1901583561638126, s=402479, dt=1.5),
@@ -597,7 +596,7 @@ def test_ex10_hallazgo_fijo(clase, gestos):
 
 def test_ex10_cada_defecto_conocido_tiene_su_prueba_fija():
     """Lo que el explorador deja pasar como «conocido» (CONOCIDOS) tiene que tener su prueba fija arriba, y al revés."""
-    fijos = {h[0].split("-")[0] for h in HALLAZGOS}
+    fijos = {h[0].split("-")[0] for h in HALLAZGOS if h[3]}       # LOS ABIERTOS: UNO ARREGLADO YA NO TIENE MOTIVO
     conocidos = {c.id.split("-")[0] for c in ex.CONOCIDOS}
     assert conocidos == fijos, f"conocidos sin prueba fija o al revés: {conocidos ^ fijos}"
     for c in ex.CONOCIDOS:
