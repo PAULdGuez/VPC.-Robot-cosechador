@@ -52,12 +52,29 @@ class Grabadora:
         # NUNCA HACIA ATRÁS (EL TEMPORIZADOR REDONDEA A ms): EL ARCHIVO EXIGE TIEMPOS CRECIENTES
         self._muestras.append(Muestra(max(t, anterior.t) + duracion_s, tuple(float(s) for s in servos)))
 
-    def terminar(self):
-        """Deja de grabar. Devuelve las muestras, o None si el robot no se movió (no hay nada que guardar)."""
-        muestras, self._muestras, self._t0 = self._muestras, None, None
+    @property
+    def muestras(self):
+        """Lo grabado hasta ahora, o None si el robot no se ha movido (no hay nada que guardar)."""
+        muestras = self._muestras
         if not muestras or all(salto(m.servos, muestras[0].servos) < UMBRAL_QUIETO for m in muestras):
             return None
         return tuple(muestras)
+
+    def resumen(self):
+        """(cuántas muestras, cuántos segundos) lleva la grabación: para decir cuánto se perdería al descartarla."""
+        muestras = self.muestras
+        return (len(muestras), muestras[-1].t) if muestras else (0, 0.0)
+
+    def reanudar(self):
+        """Se sigue grabando después de una interrupción (el diálogo del nombre): ese rato no es parte de la grabación."""
+        if self._muestras and self._t0 is not None:
+            self._t0 = self.reloj() - self._muestras[-1].t
+
+    def terminar(self):
+        """Deja de grabar. Devuelve las muestras, o None si el robot no se movió (no hay nada que guardar)."""
+        muestras = self.muestras
+        self._muestras, self._t0 = None, None
+        return muestras
 
 
 def programa_de_grabacion(muestras, nombre, robot):

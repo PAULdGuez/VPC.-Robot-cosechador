@@ -177,7 +177,7 @@ def test_j01_mientras_se_graba_el_aviso_y_el_selector_caben_juntos_en_la_esquina
     barra = pestanas.tabBar()
     assert barra.width() >= barra.sizeHint().width(), "las pestañas quedaron recortadas"
     assert auditar_la_banda(w) == []
-    w.alternar_grabacion()                                # SIN NOMBRE: SE DESCARTA
+    w.alternar_grabacion()                                # NO SE MOVIÓ: NO HAY NADA QUE GUARDAR
     procesar()
     assert not w.aviso_grabando.isVisible() and w.etiqueta_en_camino.isVisible()
 

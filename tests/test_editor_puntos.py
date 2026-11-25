@@ -96,7 +96,7 @@ def llevar(w, servos):
 def contestar(w, respuesta):
     """Las preguntas de sí o no se contestan desde la prueba. Devuelve la lista de lo que se va preguntando."""
     preguntado = []
-    w._confirmar = lambda titulo, pregunta: (preguntado.append((titulo, pregunta)), respuesta)[1]
+    w._confirmar = lambda titulo, pregunta, si, no: (preguntado.append((titulo, pregunta)), respuesta)[1]
     return preguntado
 
 

@@ -78,6 +78,9 @@ TEXTO_VER_VOLUMEN, TEXTO_OCULTAR_VOLUMEN = "VOLUMEN DE TRABAJO", "OCULTAR VOLUME
 # PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
 TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:", "Grabación"),
                   "puntos": ("Guardar programa", "Nombre del programa:", "Programa")}
+DESCARTAR = object()        # LO QUE DEVUELVE EL DIÁLOGO DEL NOMBRE CUANDO SE PIDE TIRAR LA GRABACIÓN
+RESULTADO_DESCARTAR = 2     # CÓDIGO DEL DIÁLOGO (0 = RECHAZADO, 1 = ACEPTADO)
+ANCHO_DEL_NOMBRE = 320      # px DEL CAMPO: CABE ENTERO EL NOMBRE QUE SE SUGIERE (grabacion-AAAA-MM-DD-HHMM)
 TEXTO_NUEVO_PROGRAMA = "+ Nuevo programa"  # EL ÚLTIMO RENGLÓN DEL SELECTOR, EL ÚNICO QUE NO ES UN ARCHIVO
 # EDITOR DE PUNTOS
 MOTIVO_NO_SE_EDITA = "Una grabación son muestras por tiempo:\nno se edita por puntos."
@@ -890,18 +893,30 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.avisar("Grabando: lo que se mueva con los sliders queda guardado.", "info", "Grabación", servos=self.servos)
 
     def terminar_grabacion(self):
-        muestras = self.grabadora.terminar()
-        self._boton_grabar(grabando=False)
-        self._ocupado(False)
-        self._programa_elegido()
+        """⏹ Detener grabación. El nombre se pide CON LA GRABADORA VIVA: «Seguir grabando» no pierde nada, y para
+        tirar lo grabado hay que pedirlo y confirmarlo (un «Cancelar» que destruye le costó a Paul 170 muestras)."""
+        muestras = self.grabadora.muestras
         if muestras is None:
+            self._soltar_grabacion()
             self.avisar("No se guardó: no hubo movimiento mientras se grababa.", "aviso", "Grabación")
             return
-        guardado = self._guardar_con_nombre(f"grabacion-{dt.datetime.now():%Y-%m-%d-%H%M}", "grabacion",
-                                            lambda nombre: programa_de_grabacion(muestras, nombre, self.robot))
-        if guardado is None:
-            self.avisar("Grabación descartada (no se le dio nombre).", "aviso", "Grabación", muestras=len(muestras))
-            return
+        cuantas, segundos = self.grabadora.resumen()
+        while True:
+            guardado = self._guardar_con_nombre(f"grabacion-{dt.datetime.now():%Y-%m-%d-%H%M}", "grabacion",
+                                                lambda nombre: programa_de_grabacion(muestras, nombre, self.robot))
+            if guardado is None:
+                self.grabadora.reanudar()  # EL RATO CON EL DIÁLOGO ABIERTO NO ES PARTE DE LA GRABACIÓN
+                self.avisar("Sigue grabando: no se perdió nada.", "info", "Grabación", muestras=cuantas)
+                return
+            if guardado is not DESCARTAR:
+                break
+            if self._confirmar("Descartar grabación", f"Se pierden {cuantas} muestras ({segundos:.1f} s). "
+                                                      "¿Descartar la grabación?", "Descartar", "Conservar"):
+                self._soltar_grabacion()
+                self.avisar(f"Grabación descartada: {cuantas} muestras ({segundos:.1f} s).", "aviso", "Grabación",
+                            muestras=cuantas, duracion_s=segundos)
+                return
+        self._soltar_grabacion()
         archivo, p = guardado
         self.ajustes.setValue("programa/ultimo", archivo)
         self.recargar_programas()  # APARECE EN EL SELECTOR Y QUEDA ELEGIDA
@@ -913,13 +928,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
         Las reglas del nombre son UNAS para todo programa: si no sirve se vuelve a pedir, y si ya existe un
         archivo con ese nombre se pregunta antes de reemplazarlo. Devuelve (archivo, programa), o None si la
-        persona cancela.
+        persona cancela, o DESCARTAR si pide tirar la grabación.
         """
         origen = TEXTOS_GUARDAR[tipo][2]
         while True:
             nombre = self._pedir_nombre(sugerido, tipo)
-            if nombre is None:
-                return None
+            if nombre is None or nombre is DESCARTAR:
+                return nombre
             try:
                 archivo = programas.nombre_de_archivo(nombre)
             except programas.ErrorPrograma as e:
@@ -938,6 +953,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                 continue
             return archivo, p
 
+    def _soltar_grabacion(self):
+        """La grabación terminó (guardada, descartada o vacía): la grabadora se cierra y la pantalla vuelve a su estado."""
+        self.grabadora.terminar()
+        self._boton_grabar(grabando=False)
+        self._ocupado(False)
+        self._programa_elegido()
+
     def _boton_grabar(self, grabando):
         """Aspecto de «grabando» (rol de tema.py): el botón en rojo y el aviso que se ve desde las tres pestañas."""
         self.aviso_grabando.setVisible(grabando)
@@ -948,19 +970,65 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.BTN_GRABAR.style().polish(self.BTN_GRABAR)
 
     def _pedir_nombre(self, sugerido, tipo="grabacion"):
-        """El nombre que escribe la persona, o None si cancela."""
+        """El nombre que escribe la persona; None si cancela; DESCARTAR si pide tirar la grabación."""
+        dialogo, campo, _ = self._dialogo_del_nombre(sugerido, tipo)
+        dialogo.exec_()
+        return self._respuesta_del_nombre(dialogo, campo)
+
+    def _dialogo_del_nombre(self, sugerido, tipo):
+        """El diálogo del nombre, sin abrirlo: (diálogo, campo, botones). Una grabación trae, además de «Guardar»,
+        «Seguir grabando» (no se pierde nada) y «Descartar…» (pregunta antes); un programa por puntos, «Cancelar»."""
         titulo, etiqueta, _ = TEXTOS_GUARDAR[tipo]
-        texto, ok = QtWidgets.QInputDialog.getText(self, titulo, etiqueta, QtWidgets.QLineEdit.Normal, sugerido)
-        return texto if ok else None
+        dialogo = QtWidgets.QDialog(self)
+        dialogo.setWindowTitle(titulo)
+        caja = QtWidgets.QVBoxLayout(dialogo)
+        caja.addWidget(QtWidgets.QLabel(etiqueta))
+        campo = QtWidgets.QLineEdit(sugerido)
+        campo.setMinimumWidth(ANCHO_DEL_NOMBRE)
+        campo.selectAll()
+        caja.addWidget(campo)
+        guardar = QtWidgets.QPushButton("Guardar")
+        volver = QtWidgets.QPushButton("Seguir grabando" if tipo == "grabacion" else "Cancelar")
+        guardar.clicked.connect(dialogo.accept)
+        volver.clicked.connect(dialogo.reject)
+        botones, fila = [guardar, volver], QtWidgets.QHBoxLayout()
+        if tipo == "grabacion":  # LO QUE DESTRUYE VA APARTE, A LA IZQUIERDA
+            botones.append(QtWidgets.QPushButton("Descartar…"))
+            botones[-1].clicked.connect(lambda: dialogo.done(RESULTADO_DESCARTAR))
+            fila.addWidget(botones[-1])
+            fila.addSpacing(32)
+        fila.addStretch(1)
+        fila.addWidget(volver)
+        fila.addWidget(guardar)
+        for boton in botones:  # «Intro» SIEMPRE ES «Guardar», TENGA EL FOCO QUIEN LO TENGA: NUNCA DESCARTA
+            boton.setAutoDefault(False)
+        guardar.setDefault(True)
+        caja.addLayout(fila)
+        return dialogo, campo, botones
+
+    @staticmethod
+    def _respuesta_del_nombre(dialogo, campo):
+        if dialogo.result() == RESULTADO_DESCARTAR:
+            return DESCARTAR
+        return campo.text() if dialogo.result() == QtWidgets.QDialog.Accepted else None
 
     def _confirmar_sobrescribir(self, archivo, tipo="grabacion"):
-        return self._confirmar(TEXTOS_GUARDAR[tipo][0], f"Ya existe «{archivo}». ¿Reemplazarlo?")
+        return self._confirmar(TEXTOS_GUARDAR[tipo][0], f"Ya existe «{archivo}». ¿Reemplazarlo?", "Reemplazar", "Cancelar")
 
-    def _confirmar(self, titulo, pregunta):
-        """Sí o no, con «No» por omisión: para lo que reemplaza algo sin vuelta atrás."""
-        respuesta = QtWidgets.QMessageBox.question(
-            self, titulo, pregunta, QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
-        return respuesta == QtWidgets.QMessageBox.Yes
+    def _confirmar(self, titulo, pregunta, si, no):
+        """Para lo que no tiene vuelta atrás: dos botones con su verbo (si, no); el que no destruye va por omisión."""
+        caja, boton_si, _ = self._caja_de_confirmar(titulo, pregunta, si, no)
+        caja.exec_()
+        return caja.clickedButton() is boton_si
+
+    def _caja_de_confirmar(self, titulo, pregunta, si, no):
+        """La pregunta, sin abrirla: (caja, botón que confirma, botón que no). «Intro» y «Esc» son el que no."""
+        caja = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Question, titulo, pregunta, parent=self)
+        boton_si = caja.addButton(si, QtWidgets.QMessageBox.DestructiveRole)
+        boton_no = caja.addButton(no, QtWidgets.QMessageBox.RejectRole)
+        caja.setDefaultButton(boton_no)
+        caja.setEscapeButton(boton_no)
+        return caja, boton_si, boton_no
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EDITOR DE PUNTOS (COLUMNA PUNTOS) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_editor(self):
@@ -1203,7 +1271,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         fila = self.fila_elegida()
         if not self._puede_editar() or fila is None:
             return
-        if not self._confirmar("Re-enseñar", f"¿Reemplazar el punto {fila + 1} con la pose actual del robot?"):
+        if not self._confirmar("Re-enseñar", f"¿Reemplazar el punto {fila + 1} con la pose actual del robot?",
+                               "Reemplazar", "Cancelar"):
             return
         puntos = list(self.editado.puntos)
         puntos[fila] = dataclasses.replace(puntos[fila], servos=tuple(self.servos))

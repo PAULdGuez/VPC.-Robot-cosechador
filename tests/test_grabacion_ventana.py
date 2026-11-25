@@ -15,6 +15,7 @@ from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
 from cosechador.movimiento.grabadora import Grabadora, programa_de_grabacion
 from cosechador.robot.cinematica_inversa import salto
+from cosechador.ui.ventana import DESCARTAR, TEXTO_DETENER_GRABACION, TEXTO_GRABAR
 
 PASO_S = 0.05  # LO QUE DURA UN PASO A VELOCIDAD 100 % (ms_por_paso DEL ROBOT)
 
@@ -138,13 +139,144 @@ def test_b2_3_si_el_nombre_ya_existe_pregunta_antes_de_sobrescribir(ventana):
         assert w.SELECTOR_PROGRAMA.currentData() == queda
 
 
-def test_b2_3_cancelar_el_nombre_no_guarda_y_avisa(ventana):
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% G1, G2 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+# (25-nov-2026) ANTES, «Cancelar» EN EL NOMBRE TIRABA LA GRABACIÓN: A PAUL LE COSTÓ 170 MUESTRAS. UN «Cancelar» NO DESTRUYE.
+
+def test_g01_cancelar_el_nombre_sigue_grabando_y_no_pierde_nada(ventana):
     w = ventana
     w.alternar_grabacion()
     mover_con_las_dos_pestanas(w)
-    w.alternar_grabacion()                                            # SIN NOMBRES: LA PERSONA CANCELA
+    antes = w.grabadora.resumen()[0]
+    assert antes > 2
+
+    def cancela_tras_medio_minuto(sugerido, tipo="grabacion"):
+        w.reloj.t += 30.0                                             # LO QUE TARDÓ CON EL DIÁLOGO ABIERTO
+        return None
+    w._pedir_nombre = cancela_tras_medio_minuto
+    w.alternar_grabacion()                                            # ⏹ DETENER → «Cancelar»
+    assert w.grabadora.grabando and w.grabadora.resumen()[0] == antes
+    assert w.BTN_GRABAR.text() == TEXTO_DETENER_GRABACION and not w.aviso_grabando.isHidden()
     assert prog.listar(w.carpeta_programas) == []
-    assert any("descartada" in e.mensaje for e in eventos(w, "aviso"))
+    assert not any("descartada" in e.mensaje for e in eventos(w))
+
+    w.SLIDER_1.setValue(w.SLIDER_1.value() - 20)                      # SIGUE MOVIENDO: SE SIGUE GRABANDO
+    correr(w)
+    w._pedir_nombre = lambda sugerido, tipo="grabacion": "dos partes"
+    w.alternar_grabacion()
+    assert prog.listar(w.carpeta_programas) == ["dos-partes.yaml"]
+    muestras = prog.cargar(os.path.join(w.carpeta_programas, "dos-partes.yaml"), w.robot).muestras
+    assert len(muestras) > antes
+    huecos = [b.t - a.t for a, b in zip(muestras, muestras[1:])]
+    assert max(huecos) < 5.0, "el tiempo con el diálogo abierto no es parte de la grabación"
+
+
+def test_g02_descartar_pregunta_antes_y_dice_cuanto_se_pierde(ventana):
+    w = ventana
+    w.alternar_grabacion()
+    mover_con_las_dos_pestanas(w)
+    cuantas, segundos = w.grabadora.resumen()
+    preguntas, respuestas = [], [False, True]
+    w._pedir_nombre = lambda sugerido, tipo="grabacion": DESCARTAR if len(preguntas) < 2 else None
+    w._confirmar = lambda titulo, pregunta, si, no: (preguntas.append(pregunta), respuestas[len(preguntas) - 1])[1]
+    w.alternar_grabacion()                                            # «Descartar…» → No → «Descartar…» → Sí
+    assert len(preguntas) == 2
+    assert str(cuantas) in preguntas[0] and f"{segundos:.1f} s" in preguntas[0]
+    assert not w.grabadora.grabando and w.BTN_GRABAR.text() == TEXTO_GRABAR
+    assert prog.listar(w.carpeta_programas) == []
+    assert any("descartada" in e.mensaje and str(cuantas) in e.mensaje for e in eventos(w, "aviso"))
+
+
+def test_g02_decir_que_no_a_descartar_no_tira_nada(ventana):
+    w = ventana
+    w.alternar_grabacion()
+    mover_con_las_dos_pestanas(w)
+    cuantas = w.grabadora.resumen()[0]
+    pedidos = []
+    w._pedir_nombre = lambda sugerido, tipo="grabacion": (pedidos.append(1), DESCARTAR if len(pedidos) == 1 else None)[1]
+    w._confirmar = lambda titulo, pregunta, si, no: False
+    w.alternar_grabacion()                                            # «Descartar…» → No → vuelve al nombre → «Cancelar»
+    assert len(pedidos) == 2
+    assert w.grabadora.grabando and w.grabadora.resumen()[0] == cuantas
+
+
+def test_g02_el_dialogo_del_nombre_guarda_sigue_o_descarta(ventana):
+    w = ventana
+    dialogo, campo, botones = w._dialogo_del_nombre("prueba", "grabacion")
+    assert [b.text() for b in botones] == ["Guardar", "Seguir grabando", "Descartar…"]
+    assert campo.text() == "prueba"
+    botones[2].click()
+    assert w._respuesta_del_nombre(dialogo, campo) is DESCARTAR
+    dialogo, campo, botones = w._dialogo_del_nombre("prueba", "grabacion")
+    botones[1].click()
+    assert w._respuesta_del_nombre(dialogo, campo) is None
+    dialogo, campo, botones = w._dialogo_del_nombre("prueba", "grabacion")
+    campo.setText("otra")
+    botones[0].click()
+    assert w._respuesta_del_nombre(dialogo, campo) == "otra"
+    _, _, de_puntos = w._dialogo_del_nombre("p", "puntos")
+    assert [b.text() for b in de_puntos] == ["Guardar", "Cancelar"]  # UN PROGRAMA POR PUNTOS NO TIENE QUÉ DESCARTAR
+
+
+def test_g02_en_el_dialogo_intro_guarda_y_descartar_queda_aparte(ventana):
+    """Lo que destruye no es el botón por omisión ni queda junto a «Guardar»; y el nombre sugerido se lee entero."""
+    w, sugerido = ventana, "grabacion-2026-11-25-0131"
+    dialogo, campo, (guardar, seguir, descartar) = w._dialogo_del_nombre(sugerido, "grabacion")
+    dialogo.show()
+    QtWidgets.QApplication.processEvents()
+    assert guardar.isDefault() and not any(b.autoDefault() for b in (guardar, seguir, descartar))
+    assert descartar.geometry().right() < seguir.geometry().left() < guardar.geometry().left()
+    assert seguir.geometry().left() - descartar.geometry().right() > guardar.geometry().left() - seguir.geometry().right()
+    assert dialogo.rect().contains(guardar.geometry()) and dialogo.rect().contains(descartar.geometry())
+    dialogo.close()
+    for tipo, nombre in (("grabacion", sugerido), ("puntos", "programa-2026-11-25-0131")):
+        dialogo, campo, _ = w._dialogo_del_nombre(nombre, tipo)
+        dialogo.show()
+        QtWidgets.QApplication.processEvents()
+        assert campo.fontMetrics().horizontalAdvance(nombre) < campo.contentsRect().width() - 8, tipo
+        dialogo.close()
+
+
+def test_g02_de_punta_a_punta_con_los_dialogos_de_verdad(ventana, monkeypatch):
+    """Sin simular _pedir_nombre ni _confirmar: se contestan los diálogos reales, botón por botón."""
+    w, respuestas = ventana, []
+    del w._pedir_nombre                                               # EL DE VERDAD (EL FIXTURE LO HABÍA SUSTITUIDO)
+
+    def contestar(dialogo):
+        boton = next(b for b in dialogo.findChildren(QtWidgets.QPushButton) if b.text() == respuestas[0])
+        respuestas.pop(0)
+        boton.click()
+        return dialogo.result()
+    monkeypatch.setattr(QtWidgets.QDialog, "exec_", contestar)
+    monkeypatch.setattr(QtWidgets.QMessageBox, "exec_", contestar, raising=False)
+    w.alternar_grabacion()
+    mover_con_las_dos_pestanas(w)
+    cuantas = w.grabadora.resumen()[0]
+
+    respuestas[:] = ["Descartar…", "Conservar", "Seguir grabando"]
+    w.alternar_grabacion()
+    assert respuestas == [] and w.grabadora.grabando and w.grabadora.resumen()[0] == cuantas
+
+    respuestas[:] = ["Descartar…", "Descartar"]
+    w.alternar_grabacion()
+    assert respuestas == [] and not w.grabadora.grabando and prog.listar(w.carpeta_programas) == []
+
+    w.alternar_grabacion()                                            # OTRA GRABACIÓN, Y ESTA SÍ SE GUARDA
+    mover_con_las_dos_pestanas(w)
+    respuestas[:] = ["Guardar"]
+    w.alternar_grabacion()
+    assert respuestas == [] and len(prog.listar(w.carpeta_programas)) == 1
+
+
+def test_g02_la_pregunta_trae_sus_dos_verbos_y_por_omision_no_destruye(ventana):
+    w = ventana
+    caja, si, no = w._caja_de_confirmar("Descartar grabación", "¿Descartar la grabación?", "Descartar", "Conservar")
+    assert (si.text(), no.text()) == ("Descartar", "Conservar") and set(caja.buttons()) == {si, no}
+    assert caja.defaultButton() is no and caja.escapeButton() is no
+    si.click()
+    assert caja.clickedButton() is si
+    caja, si, no = w._caja_de_confirmar("Descartar grabación", "¿Descartar la grabación?", "Descartar", "Conservar")
+    no.click()
+    assert caja.clickedButton() is no and caja.clickedButton() is not si
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% B2.4 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -223,7 +355,10 @@ def test_b2_8_mientras_graba_el_aviso_se_ve_desde_las_tres_pestanas(ventana):
     mover_con_las_dos_pestanas(w)
     assert aviso.isVisible()                              # SIGUE AHÍ DESPUÉS DE MOVER
 
-    w.alternar_grabacion()                                # SIN NOMBRE: SE DESCARTA
+    w.alternar_grabacion()                                # «Seguir grabando» (G1): EL AVISO NO SE VA
+    assert aviso.isVisible()
+    w.nombres = ["b2-8"]
+    w.alternar_grabacion()                                # AL GUARDAR, SÍ
     assert not aviso.isVisible()
 
 
