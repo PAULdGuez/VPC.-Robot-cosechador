@@ -628,6 +628,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
         self._poner_rangos_xyz()
         self._jog_avisado = False  # YA SE AVISÓ UN TOPE O UN «NO SE MUEVE» EN ESTE ARRASTRE: NO SE REPITE
+        self._jog_de_paso_avisado = False  # YA SE AVISÓ EL PUNTO DE PASO EN ESTE ARRASTRE (LLEVA SU PROPIA CUENTA)
         self._aviso_jog_dado = None  # EL ÚLTIMO AVISO DEL JOG (SLIDER Y MOTIVO): NO SE REPITE HASTA QUE ALGO SE MUEVA
         self._jog_arrastrando = False
         for eje, slider in enumerate(self.sliders_xyz):
@@ -692,13 +693,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if self._jog_cartesiano(eje, desde) and not topado:
             self._aviso_jog_dado = None
             if not self._jog_arrastrando:
-                self._jog_avisado = False
+                self._jog_avisado = self._jog_de_paso_avisado = False
 
     def _jog_arrastre(self, empieza):
         """Se agarra o se suelta un slider de la punta: arrastre nuevo, aviso nuevo. Durante el arrastre el rojo de los
         otros dos sliders no se recalcula en cada pixel: se pone al día cada pocos pasos y aquí, al soltar."""
         self._jog_arrastrando = empieza
-        self._jog_avisado = False
+        self._jog_avisado = self._jog_de_paso_avisado = False
         if not empieza:
             self._pintar_alcance(solo_lo_cambiado=True)
 
@@ -732,10 +733,20 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _avisar_jog(self, texto, clave, **datos):
         """Un aviso del jog por arrastre: tras el primero se calla hasta que se suelte el slider. Sin arrastre (teclado,
         rueda) se calla hasta que algo se mueva. Y el mismo aviso (`clave`: qué slider y por qué) no se repite aunque se
-        suelte el slider y se vuelva a agarrar: insistir contra el rojo avisa una vez, hasta que algo se mueva."""
-        if not self._jog_avisado and clave != self._aviso_jog_dado:
+        suelte el slider y se vuelva a agarrar: insistir contra el rojo avisa una vez, hasta que algo se mueva.
+
+        El aviso del punto de paso (`de_paso`) lleva su propia cuenta: sale una vez por arrastre aunque ya haya salido
+        otro. Cuando el arrastre topa con el rojo, el aviso del tope se pide antes, y sin esto la punta iba de paso sin
+        decirlo. Al revés no: si el de paso ya salió, el del tope de ese arrastre se calla."""
+        if datos.get("de_paso"):
+            if self._jog_de_paso_avisado:
+                return
+            self._jog_avisado = self._jog_de_paso_avisado = True
+        elif self._jog_avisado or clave == self._aviso_jog_dado:
+            return
+        else:
             self._jog_avisado, self._aviso_jog_dado = True, clave
-            self.avisar(texto, "aviso", "Jog", **datos)
+        self.avisar(texto, "aviso", "Jog", **datos)
 
     def _jog_cartesiano(self, eje, desde):
         """Pestaña Punta X Y Z: se movió el slider `eje`. La punta va en línea recta a `desde` (el punto del que se mide

@@ -168,6 +168,67 @@ def test_d7_2_sale_un_solo_aviso_que_dice_que_no_se_pudo_ir_directo_y_que_ira_al
     assert not negativas, negativas
 
 
+@pytest.mark.parametrize("caso", CASOS)
+def test_d7_2_si_el_arrastre_topa_con_el_rojo_tambien_sale_el_aviso_del_punto_de_paso(sesion, caso):
+    """Si el arrastre entra al rojo, el aviso del tope se pide antes que el del punto de paso. Con un solo aviso por
+    arrastre se quedaba el del tope y la punta iba de paso sin decirlo (112 de 133 órdenes en la medición del 25-nov-2026).
+    Salen los dos, una vez cada uno, aunque se siga empujando contra el rojo."""
+    s, w = sesion, sesion.w
+    ultimo = _con_la_punta_en_camino(s, caso)
+    eje, iba_a = "XYZ".index(ultimo.control[-1]), tuple(w._destino_jog)
+    slider, eventos = w.sliders_xyz[eje], len(w.x.eventos)
+    extremo = slider.minimum() if ultimo.v < 0.5 else slider.maximum()
+    tope = slider.acotar(extremo, iba_a[eje])
+    assert tope != extremo and abs(tope - iba_a[eje]) > 50, "el caso ya no tiene rojo de ese lado: no probaría nada"
+    slider.setSliderDown(True)
+    for _ in range(3):                               # UN SALTO HASTA EL EXTREMO Y DOS EMPUJONES MÁS CONTRA EL ROJO, SIN SOLTAR
+        slider.setSliderPosition(extremo)
+        ex.avanzar(w, 0.008)
+    slider.setSliderDown(False)
+    jog = [e for e in w.x.eventos[eventos:] if e.origen == "Jog"]
+    assert [bool(e.datos.get("de_paso")) for e in jog] == [False, True], [e.mensaje for e in jog]
+    assert "tope_mm" in jog[0].datos and slider.value() == tope
+    s.hacer(LLEGAR)
+    assert math.dist(w.posicion, [*iba_a[:eje], float(tope), *iba_a[eje + 1:]]) < 1.0 and not w.x.negadas
+
+
+def test_d7_2_si_el_aviso_del_punto_de_paso_sale_primero_el_del_tope_ya_no_sale(sesion, monkeypatch):
+    """Lo aprobado no cambia: en un arrastre fino el aviso del punto de paso sale antes de llegar al rojo, y al topar
+    después con el rojo ya no sale el del tope. Un arrastre no se llena de avisos."""
+    s, w = sesion, sesion.w
+    ultimo = _con_la_punta_en_camino(s, "girar despacio")
+    eje, iba_a = "XYZ".index(ultimo.control[-1]), tuple(w._destino_jog)
+    slider = w.sliders_xyz[eje]
+    tope = slider.acotar(slider.minimum(), iba_a[eje])
+    assert slider.minimum() < tope - 60, "el caso ya no tiene rojo de ese lado: no probaría nada"
+    pixeles, eventos = [], len(w.x.eventos)
+    _con_arrastre_fino(monkeypatch, slider, (tope - 60,), pixeles)      # 60 mm DENTRO DEL ROJO
+    s.hacer(FINO)
+    jog = [e for e in w.x.eventos[eventos:] if e.origen == "Jog"]
+    assert [bool(e.datos.get("de_paso")) for e in jog] == [True], [e.mensaje for e in jog]
+    assert slider.value() == tope and any(pixel[0] < tope for pixel in pixeles), "el arrastre no llegó a entrar al rojo"
+
+
+def test_d7_2_cada_arrastre_que_va_de_paso_da_su_aviso(sesion, monkeypatch):
+    """Una vez por arrastre, no una vez para siempre: soltar el slider y arrastrarlo otra vez hacia otro punto al que
+    tampoco se puede ir directo es otra orden, y avisa otra vez."""
+    s, w = sesion, sesion.w
+    ultimo = _con_la_punta_en_camino(s, "girar despacio")
+    eje, iba_a = "XYZ".index(ultimo.control[-1]), tuple(w._destino_jog)
+    slider = w.sliders_xyz[eje]
+    fondo = slider.acotar(slider.minimum() + round(ultimo.v * (slider.maximum() - slider.minimum())), iba_a[eje])
+    regreso = fondo + round((iba_a[eje] - fondo) / 4)
+    paradas, pixeles, eventos = [regreso], [], len(w.x.eventos)
+    _con_arrastre_fino(monkeypatch, slider, paradas, pixeles)
+    s.hacer(FINO)
+    assert len(_avisos_de_paso(w, eventos)) == 1
+    paradas[:], primer_arrastre = [fondo], len(pixeles)
+    s.hacer(FINO)
+    segundo = pixeles[primer_arrastre:]
+    assert segundo and all(pixel[2][:1] == (False,) for pixel in segundo), "control: en el segundo arrastre ya se puede ir directo"
+    assert len(_avisos_de_paso(w, eventos)) == 2, "el segundo arrastre fue de paso y no avisó"
+
+
 def test_d7_3_si_se_puede_ir_directo_todo_pasa_igual_que_antes(sesion):
     s, w = sesion, sesion.w
     for g in (PUNTA, REEMPLAZAR, Gesto("arrastrar", "SLIDER_Z", 0.55, 7, 0.1)):
