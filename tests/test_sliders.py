@@ -497,7 +497,8 @@ def test_s4_el_aviso_dice_el_eje_y_hasta_donde_se_puede(ventana, pose):
 
 
 def test_s4_el_aviso_del_planeador_tampoco_es_una_lluvia(ventana, robot):
-    """Un punto alcanzable al que el camino recto no se puede en modo «negar»: se avisa por qué, una vez por arrastre."""
+    """Un punto alcanzable al que el camino recto no se puede en modo «negar». Desde N1 ese trozo va en rojo y el slider
+    frena en su borde: se avisa por qué, una vez, y el planeador ya no tiene que negarse."""
     w = ventana
     w.SELECTOR_POSTURA.setCurrentIndex(w.SELECTOR_POSTURA.findData("negar"))
     colocar(w, angulos_servo(robot, (-600, 0, 1100)))
@@ -507,12 +508,13 @@ def test_s4_el_aviso_del_planeador_tampoco_es_una_lluvia(ventana, robot):
         w.SLIDER_X.setValue(x)
     w.SLIDER_X.setSliderDown(False)
     nuevos = avisos_del_jog(w)[n0:]
-    assert len(nuevos) == 1 and "postura" in nuevos[0].mensaje
-    w.SLIDER_X.setSliderDown(True)       # OTRO ARRASTRE, OTRO AVISO
+    assert len(nuevos) == 1 and "postura" in nuevos[0].mensaje and nuevos[0].datos["por_postura"]
+    assert negativas_del_planeador(w) == []
+    w.SLIDER_X.setSliderDown(True)       # OTRO ARRASTRE CONTRA EL MISMO BORDE: EL MISMO AVISO NO SE REPITE (N4)
     w.SLIDER_X.setValue(550)
     w.SLIDER_X.setValue(551)
     w.SLIDER_X.setSliderDown(False)
-    assert len(avisos_del_jog(w)) == n0 + 2
+    assert len(avisos_del_jog(w)) == n0 + 1
 
 
 def test_s4_con_el_teclado_topar_avisa_una_vez_y_vuelve_a_avisar_tras_moverse(ventana, pose):

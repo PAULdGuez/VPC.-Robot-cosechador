@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from cosechador.robot.cinematica import cinematica_directa, servo_a_dh
-from cosechador.robot.cinematica_inversa import alcanzable, angulos_servo_cercanos, salto
+from cosechador.robot.cinematica_inversa import TOLERANCIA_TRAMOS_MM, alcanzable, angulos_servo_cercanos, salto
 
 PASOS_POR_TRAMO = 20          # MUESTRAS MÍNIMAS DE CADA RECTA (ANTES DE PARTIR POR CONTINUIDAD)
 DISTANCIA_MINIMA_MM = 0.5     # POR DEBAJO DE ESTO, UN SALTO GRANDE YA NO ES VELOCIDAD: ES CAMBIO DE POSTURA
@@ -86,21 +86,47 @@ def _refinar(robot, pa, sa, pb, postura):
     return izquierda + _refinar(robot, medio, servos_del_plan(izquierda)[-1], pb, postura)
 
 
-def tramo_continuo(robot, servos_inicio, destino, postura=None, pasos=PASOS_POR_TRAMO):
-    """Recta desde la pose actual hasta destino. Devuelve (pasos, None) o (None, motivo)."""
-    postura = postura or robot.movimiento.al_cambiar_postura
+def _recta(robot, servos_inicio, destino, postura, pasos):
+    """La recta desde la pose actual hacia destino, hasta donde se pueda: (pasos, punto, servos, motivo, atorado). Los
+    pasos que sí salen, el punto y los servos donde termina el último, y si no se llegó al destino, por qué y cuál era
+    el siguiente punto de la recta (si se llegó, motivo y atorado son None)."""
     origen = posicion(robot, servos_inicio)
     destino = np.asarray(destino, dtype=float)
     plan, actual_p, actual_s = [], origen, tuple(servos_inicio)
-    try:
-        for k in np.linspace(0, 1, pasos)[1:]:
-            siguiente = origen + (destino - origen) * k
+    for k in np.linspace(0, 1, pasos)[1:]:
+        siguiente = origen + (destino - origen) * k
+        try:
             parte = _refinar(robot, actual_p, actual_s, siguiente, postura)
-            plan.extend(parte)
-            actual_p, actual_s = siguiente, servos_del_plan(parte)[-1]
-    except _NoSePuede as e:
-        return None, e.motivo
-    return plan, None
+        except _NoSePuede as e:
+            return plan, actual_p, actual_s, e.motivo, siguiente
+        plan.extend(parte)
+        actual_p, actual_s = siguiente, servos_del_plan(parte)[-1]
+    return plan, actual_p, actual_s, None, None
+
+
+def tramo_continuo(robot, servos_inicio, destino, postura=None, pasos=PASOS_POR_TRAMO):
+    """Recta desde la pose actual hasta destino. Devuelve (pasos, None) o (None, motivo)."""
+    plan, _, _, motivo, _ = _recta(robot, servos_inicio, destino, postura or robot.movimiento.al_cambiar_postura, pasos)
+    return (plan, None) if motivo is None else (None, motivo)
+
+
+def hasta_donde_llega(robot, servos_inicio, destino, postura=None, pasos=PASOS_POR_TRAMO):
+    """Hasta qué punto de la recta pose actual -> destino llega un tramo, y con qué servos: (punto, servos). Si
+    tramo_continuo llega al destino, es el destino. Si no, el último punto al que sí se llega, a menos de
+    TOLERANCIA_TRAMOS_MM de donde se atora. Lo decide el mismo recorrido que traza los tramos (_recta y _refinar): así lo
+    que aquí «no llega» es lo que el planeador va a negar, y no hay dos lugares opinando del cambio de postura."""
+    postura = postura or robot.movimiento.al_cambiar_postura
+    _, bueno, servos, motivo, malo = _recta(robot, servos_inicio, destino, postura, pasos)
+    if motivo is None:
+        return bueno, servos
+    while np.linalg.norm(malo - bueno) > TOLERANCIA_TRAMOS_MM:
+        medio = (bueno + malo) / 2
+        try:
+            servos = servos_del_plan(_refinar(robot, bueno, servos, medio, postura))[-1]
+            bueno = medio
+        except _NoSePuede:
+            malo = medio
+    return bueno, servos
 
 
 def tramo_recto(robot, origen, destino, pasos=PASOS_POR_TRAMO):

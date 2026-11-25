@@ -21,11 +21,11 @@ from cosechador import registro as reg
 from cosechador.hardware.enlace import abrir_enlace
 from cosechador.movimiento import programa as programas
 from cosechador.movimiento.grabadora import Grabadora, programa_de_grabacion
-from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_grabacion, plan_ir_y_volver,
-                                                plan_puntos, posicion, tramo_a_punto, tramo_articular,
-                                                tramo_continuo)
+from cosechador.movimiento.trayectorias import (duracion_ms, hasta_donde_llega, plan_cosecha, plan_grabacion,
+                                                plan_ir_y_volver, plan_puntos, posicion, tramo_a_punto,
+                                                tramo_articular, tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
-from cosechador.robot.cinematica_inversa import alcanzable, tramos_alcanzables
+from cosechador.robot.cinematica_inversa import TOLERANCIA_TRAMOS_MM, alcanzable, tramos_alcanzables
 from cosechador.robot.espacio_trabajo import barrer, contorno_del_corte, giro_de_la_base
 from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
@@ -88,6 +88,12 @@ INVITACION_SIN_PUNTOS = ("Sin puntos.\n\nLleva el robot a una pose con las pesta
                          "y pulsa «+ Punto»: se guarda la pose actual.")
 PASO_VELOCIDAD_PUNTO = 5  # LA VELOCIDAD DE UN PUNTO SE ELIGE DE 5 EN 5 %
 MARCA_IMPOSIBLE = "imposible"  # LO QUE LLEVA EN UserRole EL RENGLÓN DE UN PUNTO AL QUE NO SE PUEDE LLEGAR
+
+
+def muestras_del_jog(distancia_mm):
+    """En cuántas muestras se parte una recta de la punta: una cada MM_POR_MUESTRA_JOG. La usan la orden del jog y el rojo
+    de «negarse», para que los dos le pregunten lo mismo al planeador."""
+    return max(2, int(distancia_mm / MM_POR_MUESTRA_JOG) + 1)
 
 
 def _marca(slider, valor):
@@ -270,6 +276,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self._fin_del_movimiento()  # LO QUE FALTABA DE UNA VISTA PREVIA NUNCA SE MANDA A LA PLACA
         self.en_vista_previa = solo_simulacion
         self._destino_jog = self._tramo_jog = None  # TODO MOVIMIENTO NUEVO OLVIDA EL JOG PENDIENTE (EL JOG LO VUELVE A ANOTAR)
+        if origen != "Jog":
+            self._aviso_jog_dado = None             # EL ROBOT SE MUEVE POR OTRO LADO: EL AVISO DEL JOG VUELVE A VALER
         if not bloquear:
             while len(self.cola) > conservar:
                 self.cola.pop()
@@ -408,6 +416,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         for clave, texto in POSTURAS:
             self.SELECTOR_POSTURA.addItem(texto, clave)
         self.SELECTOR_POSTURA.setCurrentIndex([c for c, _ in POSTURAS].index(self.robot.movimiento.al_cambiar_postura))
+        # EN «NEGARSE» EL ROJO CUBRE TAMBIÉN LO QUE PIDE CAMBIAR DE POSTURA: AL CAMBIAR DE MODO SE PINTA OTRA VEZ, COMPLETO
+        self.SELECTOR_POSTURA.currentIndexChanged.connect(lambda _indice: self._pintar_alcance())
         self.SLIDER_VELOCIDAD.valueChanged.connect(self._velocidad_cambiada)
         self._velocidad_cambiada()
         if self.robot.cinematica_inversa is None:  # SIN SOLVER NO HAY JOG XYZ NI TRAYECTORIAS
@@ -497,6 +507,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
         self._poner_rangos_xyz()
         self._jog_avisado = False  # YA SE AVISÓ UN TOPE O UN «NO SE MUEVE» EN ESTE ARRASTRE: NO SE REPITE
+        self._aviso_jog_dado = None  # EL ÚLTIMO AVISO DEL JOG (SLIDER Y MOTIVO): NO SE REPITE HASTA QUE ALGO SE MUEVA
         self._jog_arrastrando = False
         for eje, slider in enumerate(self.sliders_xyz):
             slider.color_fuera = QtGui.QColor(COLOR_NIVEL["error"])  # EL ROJO DE LOS ERRORES, EL MISMO DEL REGISTRO
@@ -535,19 +546,31 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         slider = self.sliders_xyz[eje]
         desde = self._referencia_del_jog()
         self._pintar_alcance(solo_lo_cambiado=True, ejes=(eje,))  # EL SLIDER FRENA CON EL ROJO DE ESTE MOMENTO
-        tope = slider.acotar(slider.value(), desde[eje])
-        topado = tope != slider.value()
+        pedido = slider.value()
+        tope = slider.acotar(pedido, desde[eje])
+        topado = tope != pedido
         if topado:
             slider.blockSignals(True)
             slider.setValue(tope)
             slider.blockSignals(False)
-            self._avisar_jog(f"La punta no llega más allá de {NOMBRES_EJES[eje]} = {tope} mm desde esta pose: "
-                             f"el resto del slider (en rojo) no se alcanza.", eje=NOMBRES_EJES[eje], tope_mm=tope,
-                             desde_mm=desde)
+            # EN «NEGARSE» EL ROJO TAMBIÉN ES LO QUE PIDE CAMBIAR DE POSTURA: SI UN MILÍMETRO MÁS ALLÁ SÍ SE ALCANZA, EL TOPE
+            # ES POR ESO Y EL AVISO LO DICE (Y DICE CÓMO SÍ SE PASA), EN VEZ DE AFIRMAR QUE NO SE ALCANZA
+            mas_alla = list(desde)
+            mas_alla[eje] = tope + (1 if pedido > tope else -1)
+            por_postura = self.postura == "negar" and alcanzable(self.robot, mas_alla)
+            nombre = NOMBRES_EJES[eje]
+            self._avisar_jog(f"La punta no pasa de {nombre} = {tope} mm sin cambiar de postura y el modo es «negarse»: "
+                             f"con «girar despacio» sí pasa." if por_postura else
+                             f"La punta no llega más allá de {nombre} = {tope} mm desde esta pose: "
+                             f"el resto del slider (en rojo) no se alcanza.", ("tope", eje, tope),
+                             eje=nombre, tope_mm=tope, desde_mm=desde, por_postura=por_postura)
         # DURANTE UN ARRASTRE EL AVISO NO SE REARMA (EL PLANEADOR ACEPTA Y NIEGA DESTINOS ALTERNADOS Y SE REPETIRÍA): SOLO
-        # SOLTAR EL SLIDER. SIN ARRASTRE (TECLADO, RUEDA), UN MOVIMIENTO DENTRO DEL TRAMO LO REARMA
-        if self._jog_cartesiano(eje, desde) and not topado and not self._jog_arrastrando:
-            self._jog_avisado = False
+        # SOLTAR EL SLIDER. SIN ARRASTRE (TECLADO, RUEDA), UN MOVIMIENTO DENTRO DEL TRAMO LO REARMA. Y EL MISMO AVISO
+        # (_aviso_jog_dado) SOLO VUELVE A VALER SI ALGO SE MOVIÓ DENTRO DEL TRAMO: SOLTAR Y VOLVER A AGARRAR NO BASTA
+        if self._jog_cartesiano(eje, desde) and not topado:
+            self._aviso_jog_dado = None
+            if not self._jog_arrastrando:
+                self._jog_avisado = False
 
     def _jog_arrastre(self, empieza):
         """Se agarra o se suelta un slider de la punta: arrastre nuevo, aviso nuevo. Durante el arrastre el rojo de los
@@ -561,15 +584,22 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """El punto del que se mide una orden nueva de la punta: su destino, el freno de cada slider y su rojo. Con la
         punta quieta, o en «Cancelar» (el tramo nuevo sale de donde va la punta), es donde está la punta. En «Reemplazar»
         y «En cola», con la punta en camino, es el punto al que va: el que marcan los tres sliders, con sus decimales."""
-        if self._destino_jog is None or self.en_camino == "cancelar":
-            return self.posicion
-        return self._destino_jog
+        return self.posicion if self._jog_desde_la_punta() else self._destino_jog
 
-    def _avisar_jog(self, texto, **datos):
+    def _jog_desde_la_punta(self):
+        """True si una orden nueva de la punta se mide desde donde está; False si se mide desde el punto al que va."""
+        return self._destino_jog is None or self.en_camino == "cancelar"
+
+    def _servos_al_terminar(self):
+        """Los servos con los que el robot termina lo que tiene pendiente (los de ahora, si no hay nada pendiente)."""
+        return next((p.servos for p in reversed(self.cola) if p.servos is not None), self.servos)
+
+    def _avisar_jog(self, texto, clave, **datos):
         """Un aviso del jog por arrastre: tras el primero se calla hasta que se suelte el slider. Sin arrastre (teclado,
-        rueda) se calla hasta que algo se mueva."""
-        if not self._jog_avisado:
-            self._jog_avisado = True
+        rueda) se calla hasta que algo se mueva. Y el mismo aviso (`clave`: qué slider y por qué) no se repite aunque se
+        suelte el slider y se vuelva a agarrar: insistir contra el rojo avisa una vez, hasta que algo se mueva."""
+        if not self._jog_avisado and clave != self._aviso_jog_dado:
+            self._jog_avisado, self._aviso_jog_dado = True, clave
             self.avisar(texto, "aviso", "Jog", **datos)
 
     def _jog_cartesiano(self, eje, desde):
@@ -590,7 +620,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             eje_ultimo, pasos_ultimo, servos_ultimo, salida_ultimo = self._tramo_jog
             if eje_ultimo != eje:                    # OTRO SLIDER: SU TRAMO VA DETRÁS DE TODO LO PENDIENTE
                 conservar, salida = len(self.cola), desde
-                servos = next((p.servos for p in reversed(self.cola) if p.servos is not None), self.servos)
+                servos = self._servos_al_terminar()
             elif len(self.cola) >= pasos_ultimo:     # EL MISMO SLIDER Y SU TRAMO NO HA EMPEZADO: SE TRAZA OTRA VEZ DESDE DONDE SALÍA
                 conservar, servos, salida = len(self.cola) - pasos_ultimo, servos_ultimo, salida_ultimo
             # EL MISMO SLIDER Y SU TRAMO YA EMPEZÓ: SALE DE DONDE VA LA PUNTA, COMO EN LOS OTROS DOS MODOS
@@ -600,11 +630,11 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if distancia < 0.5:
             plan, motivo = [], None                  # EL SLIDER VOLVIÓ A DONDE SALE SU TRAMO: ESE TRAMO YA NO HACE FALTA
         else:
-            muestras = max(2, int(distancia / MM_POR_MUESTRA_JOG) + 1)
-            plan, motivo = tramo_continuo(self.robot, servos, destino, self.postura, pasos=muestras)
+            plan, motivo = tramo_continuo(self.robot, servos, destino, self.postura, pasos=muestras_del_jog(distancia))
         if plan is None:
             self._avisar_jog(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
                              if not motivo.startswith("Para") else f"No se mueve. {motivo}",
+                             ("negado", eje, motivo.startswith("Para")),
                              destino_mm=destino, desde_mm=salida, postura=self.postura)
             # EL SLIDER REGRESA A DONDE ESTABA SU ORDEN (O LA PUNTA); LO QUE YA IBA EN CAMINO SIGUE IGUAL
             self._sincronizar((slider,), ((self._destino_jog or self.posicion)[eje],))
@@ -662,7 +692,37 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             if solo_lo_cambiado and pintada is not None and max(abs(a - b) for a, b in zip(recta, pintada)) < MISMA_RECTA_MM:
                 continue
             self._rectas_pintadas[eje] = recta
-            slider.poner_tramos(tramos_alcanzables(self.robot, desde, eje, lo, hi))
+            tramos = tramos_alcanzables(self.robot, desde, eje, lo, hi)
+            if self.postura == "negar":  # EL TRAMO DONDE ESTÁ LA PERILLA SE RECORTA A LO QUE NO PIDE CAMBIAR DE POSTURA
+                tramos = [self._sin_cambiar_de_postura(eje, desde, tramo)
+                          if tramo[0] - TOLERANCIA_TRAMOS_MM <= aqui <= tramo[1] + TOLERANCIA_TRAMOS_MM else tramo
+                          for tramo in tramos]
+            slider.poner_tramos(tramos)
+
+    def _sin_cambiar_de_postura(self, eje, desde, tramo):
+        """En «negarse»: el trozo de `tramo` (el de un slider, donde está su perilla) al que la punta llega en línea recta
+        sin cambiar de postura. El resto se pinta en rojo igual que lo que no se alcanza, porque el planeador se va a negar:
+        lo decide su mismo recorrido (hasta_donde_llega), con las mismas muestras que usa la orden del jog.
+
+        Se mide sobre el eje, desde la referencia del jog y con los servos que el robot tendrá ahí. Con la punta en camino
+        en «Reemplazar» el tramo nuevo sale en diagonal desde donde va la punta: ahí esto es una aproximación (como el rojo
+        de lo que no se alcanza) y el planeador conserva la última palabra."""
+        servos = self.servos if self._jog_desde_la_punta() else self._servos_al_terminar()
+        bordes = []
+        for extremo, entero_de_afuera in zip(tramo, (math.floor, math.ceil)):
+            destino = list(desde)
+            destino[eje] = extremo
+            punto, servos_ahi = hasta_donde_llega(self.robot, servos, destino, "negar",
+                                                  pasos=muestras_del_jog(abs(extremo - desde[eje])))
+            borde = float(punto[eje])
+            # EL BORDE SALE AFINADO A TOLERANCIA_TRAMOS_MM Y EL SLIDER ES ENTERO: SI EL ENTERO QUE SIGUE TAMBIÉN SE ACEPTA
+            # (Y = 0, EL PLANO DEL FRENTE, ES EL CASO DE TODOS LOS DÍAS), EL BORDE ES ESE ENTERO Y NO UN MILÍMETRO ANTES
+            destino[eje] = float(entero_de_afuera(borde))
+            if (destino[eje] != borde and tramo[0] <= destino[eje] <= tramo[1]
+                    and tramo_continuo(self.robot, servos_ahi, destino, "negar", pasos=2)[0] is not None):
+                borde = destino[eje]
+            bordes.append(borde)
+        return tuple(bordes)
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CONSOLA DE REGISTRO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_registro(self):
