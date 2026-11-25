@@ -25,7 +25,8 @@ from test_grabacion_ventana import correr, eventos, otro_programa, ventana  # no
 
 
 # LA RECTA DE A A B CRUZA EL EJE DE LA BASE: NO SE PUEDE RECORRER (EL MISMO CASO DE test_trayectorias.py)
-A, B = (-1656, 0, 630), (1656, 0, 630)
+# (A z = 500: CON LA HERRAMIENTA DE 120 mm, A z = 630 YA SE PUEDE)
+A, B = (-1656, 0, 500), (1656, 0, 500)
 # DE IDA A VUELTA LA RECTA SÍ SE PUEDE, Y EN ARTICULAR LA PUNTA SE ALEJA MUCHO DE ELLA: SIRVE PARA DISTINGUIR EL TIPO
 IDA, VUELTA = (800, 300, 900), (-800, 300, 900)
 
@@ -370,13 +371,13 @@ def test_b3_7_un_punto_imposible_sale_en_rojo_con_su_motivo_escrito_debajo(venta
     abrir(w, "p.yaml", Punto(poses["a"]), Punto(poses["b"], "lineal", 40), Punto(poses["home"]))
     assert imposibles(w) == [2]
     malo, bueno = w.LISTA_PUNTOS.item(1), w.LISTA_PUNTOS.item(0)
-    assert malo.text() == "2   Lineal · 40 %   ⚠\nEl camino pasa por (-87, 0, 630), una zona que el robot no alcanza"
+    assert malo.text() == "2   Lineal · 40 %   ⚠\nEl camino pasa por (-87, 0, 500), una zona que el robot no alcanza"
     assert malo.foreground().color().name() == tema.TOKENS["rojo"] != bueno.foreground().color().name()
-    assert "Punto 2 (lineal): el camino pasa por (-87, 0, 630)" in malo.toolTip() and bueno.toolTip() == ""
+    assert "Punto 2 (lineal): el camino pasa por (-87, 0, 500)" in malo.toolTip() and bueno.toolTip() == ""
     assert bueno.text() == "1   Articular · 100 %"
     # ES LO MISMO QUE DICE «REPRODUCIR» CUANDO SE NIEGA A ARRANCAR: LO DECIDE UN SOLO LUGAR
     w.BTN_REPRODUCIR.click()
-    assert eventos(w, "aviso")[-1].mensaje == ("No arranca: Punto 2 (lineal): el camino pasa por (-87, 0, 630), "
+    assert eventos(w, "aviso")[-1].mensaje == ("No arranca: Punto 2 (lineal): el camino pasa por (-87, 0, 500), "
                                                 "una zona que el robot no alcanza")
 
 
@@ -433,10 +434,11 @@ def test_b3_7_se_revisa_otra_vez_tras_cada_cambio(ventana, poses):
 
 def test_b3_7_tambien_se_revisa_al_cambiar_el_modo_de_postura(ventana, robot):
     # LA RECTA ENTRE ESTOS DOS PUNTOS CRUZA y = 0, DONDE EL ROBOT TIENE QUE CAMBIAR DE POSTURA (EL CASO DE test_trayectorias.py)
+    # (A z = 1500: CON LA HERRAMIENTA DE 120 mm, A z = 1300 EL SEGUNDO PUNTO YA NO SE ALCANZA)
     w = ventana
     postura = w.SELECTOR_POSTURA
     postura.setCurrentIndex(postura.findData("despacio"))
-    abrir(w, "p.yaml", Punto(angulos_servo(robot, (-1400, 150, 1300))), Punto(angulos_servo(robot, (-1400, -150, 1300)), "lineal", 100))
+    abrir(w, "p.yaml", Punto(angulos_servo(robot, (-1400, 150, 1500))), Punto(angulos_servo(robot, (-1400, -150, 1500)), "lineal", 100))
     assert imposibles(w) == []
     elegir(w, 2)
     postura.setCurrentIndex(postura.findData("negar"))
@@ -510,7 +512,7 @@ def test_b3_8_si_no_se_puede_llegar_el_paso_no_mueve_el_robot_y_dice_por_que(ven
     w.BTN_PASO_ADELANTE.click()                                   # AL 2: LA RECTA DESDE EL 1 NO SE PUEDE RECORRER
     assert not w.cola and not w.en_movimiento and len(w.enviados) == antes
     assert w.fila_elegida() == 0                                  # LA LISTA SIGUE DICIENDO DÓNDE ESTÁ EL ROBOT
-    assert eventos(w, "aviso")[-1].mensaje == ("No se mueve: Punto 2 (lineal): el camino pasa por (-87, 0, 630), "
+    assert eventos(w, "aviso")[-1].mensaje == ("No se mueve: Punto 2 (lineal): el camino pasa por (-87, 0, 500), "
                                                 "una zona que el robot no alcanza")
 
 
