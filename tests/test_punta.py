@@ -905,3 +905,72 @@ def test_v8_al_ocultarlo_la_escena_se_ve_como_antes(robot):
     assert distintos(foto(escena)) > 5000  # CON EL VOLUMEN, LA IMAGEN CAMBIA
     escena.ocultar_volumen()
     assert distintos(foto(escena)) == 0    # Y AL OCULTARLO QUEDA IGUAL QUE ANTES, PIXEL POR PIXEL
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P13: UNA LLAVE QUE LA APP NO CONOCE NO SE IGNORA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def secciones(datos):
+    """Cada sección del archivo del robot: cómo la nombra la app en sus mensajes → la sección."""
+    return {
+        "el robot": datos, "base": datos["base"], "efector": datos["efector"],
+        "articulaciones[0]": datos["articulaciones"][0], "articulaciones[1].dh": datos["articulaciones"][1]["dh"],
+        "articulaciones[2].servo": datos["articulaciones"][2]["servo"], "camara": datos["camara"],
+        "vision": datos["vision"], "vision.verde": datos["vision"]["verde"], "vision.cafe": datos["vision"]["cafe"],
+        "movimiento": datos["movimiento"],
+    }
+
+
+with open(ROBOT_POR_OMISION, encoding="utf-8") as _archivo:
+    LLAVES_DEL_ARCHIVO = [(donde, llave) for donde, seccion in secciones(yaml.safe_load(_archivo)).items() for llave in seccion]
+SECCIONES = list(dict.fromkeys(donde for donde, _ in LLAVES_DEL_ARCHIVO))
+
+
+def rechazo(datos):
+    with pytest.raises(ErrorConfiguracion) as error:
+        robot_desde_dict(datos)
+    return str(error.value)
+
+
+def test_p13_largo_con_mayuscula_ya_no_abre_con_herramienta_cero(datos_yaml):
+    """El caso que lo destapó (banco de ataque, 24-nov): `Largo: 120` se ignoraba y la app abría con herramienta 0."""
+    assert robot_desde_dict(datos_yaml).efector.largo == 120  # CONTROL: BIEN ESCRITA, ABRE CON SU HERRAMIENTA
+    datos_yaml["efector"]["Largo"] = datos_yaml["efector"].pop("largo")
+    texto = rechazo(datos_yaml)
+    assert "'Largo'" in texto and "en efector" in texto and "¿Será 'largo'?" in texto  # CUÁL, DÓNDE Y CUÁL ERA
+
+
+def test_p13_las_11_secciones_del_archivo_estan_en_la_prueba():
+    assert len(SECCIONES) == 11 and len(LLAVES_DEL_ARCHIVO) == 42, "el archivo del robot cambió: revisar `secciones`"
+
+
+@pytest.mark.parametrize("donde", SECCIONES)
+def test_p13_una_llave_inventada_se_rechaza_en_cualquier_seccion_y_dice_cuales_se_aceptan(datos_yaml, donde):
+    seccion = secciones(datos_yaml)[donde]
+    aceptadas = list(seccion)
+    seccion["zzz_inventada"] = 1
+    texto = rechazo(datos_yaml)
+    assert "'zzz_inventada'" in texto and f"en {donde}" in texto
+    assert all(llave in texto.split("se aceptan:")[1] for llave in aceptadas)
+    assert "¿Será" not in texto  # NO SE PARECE A NINGUNA: NO SE INVENTA UNA SUGERENCIA
+
+
+@pytest.mark.parametrize("donde, llave", LLAVES_DEL_ARCHIVO)
+def test_p13_cada_llave_del_archivo_mal_escrita_se_rechaza_y_se_sugiere_la_buena(datos_yaml, donde, llave):
+    seccion = secciones(datos_yaml)[donde]
+    seccion[llave.capitalize()] = seccion.pop(llave)  # "largo" → "Largo", "home_mm" → "Home_mm", "a" → "A"
+    texto = rechazo(datos_yaml)
+    assert f"'{llave.capitalize()}'" in texto and f"en {donde}" in texto and f"¿Será '{llave}'?" in texto
+
+
+@pytest.mark.parametrize("mal, buena", [("larg0", "largo"), ("largo_mm", "largo"), ("colour", "color")])
+def test_p13_un_error_de_dedo_tambien_se_reconoce(datos_yaml, mal, buena):
+    datos_yaml["efector"][mal] = datos_yaml["efector"].pop(buena)
+    assert f"¿Será '{buena}'?" in rechazo(datos_yaml)
+
+
+def test_p13_al_abrir_la_app_el_aviso_trae_el_nombre_del_archivo(tmp_path, datos_yaml):
+    datos_yaml["efector"]["Largo"] = datos_yaml["efector"].pop("largo")
+    (tmp_path / "robots").mkdir()
+    ruta = tmp_path / "robots" / "mi_robot.yaml"
+    ruta.write_text(yaml.safe_dump(datos_yaml, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ErrorConfiguracion, match=r"mi_robot\.yaml: No se reconoce 'Largo' en efector"):
+        cargar_robot(str(ruta))
