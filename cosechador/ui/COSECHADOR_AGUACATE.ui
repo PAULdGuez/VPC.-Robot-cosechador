@@ -1472,7 +1472,7 @@ del punto</string>
                             </widget>
                           </item>
                           <item row="0" column="1">
-                            <widget class="QSlider" name="SLIDER_X">
+                            <widget class="SliderConAlcance" name="SLIDER_X">
                               <property name="minimumSize">
                                 <size>
                                   <width>120</width>
@@ -1526,7 +1526,7 @@ del punto</string>
                             </widget>
                           </item>
                           <item row="1" column="1">
-                            <widget class="QSlider" name="SLIDER_Y">
+                            <widget class="SliderConAlcance" name="SLIDER_Y">
                               <property name="minimumSize">
                                 <size>
                                   <width>120</width>
@@ -1580,7 +1580,7 @@ del punto</string>
                             </widget>
                           </item>
                           <item row="2" column="1">
-                            <widget class="QSlider" name="SLIDER_Z">
+                            <widget class="SliderConAlcance" name="SLIDER_Z">
                               <property name="minimumSize">
                                 <size>
                                   <width>120</width>
@@ -2342,6 +2342,13 @@ del punto</string>
     </widget>
     <widget class="QStatusBar" name="statusbar" />
   </widget>
+  <customwidgets>
+    <customwidget>
+      <class>SliderConAlcance</class>
+      <extends>QSlider</extends>
+      <header>cosechador.ui.slider_alcance</header>
+    </customwidget>
+  </customwidgets>
   <resources />
   <connections />
 </ui>

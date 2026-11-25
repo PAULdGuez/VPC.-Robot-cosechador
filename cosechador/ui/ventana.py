@@ -25,7 +25,7 @@ from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_
                                                 plan_puntos, posicion, tramo_a_punto, tramo_articular,
                                                 tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
-from cosechador.robot.cinematica_inversa import alcanzable
+from cosechador.robot.cinematica_inversa import alcanzable, tramos_alcanzables
 from cosechador.robot.espacio_trabajo import barrer, contorno_del_corte, giro_de_la_base
 from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
@@ -62,6 +62,7 @@ def abrir_camara(fuente):
 POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al cambiar de postura: negarse"))
 PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
+NOMBRES_EJES = "XYZ"
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
 TEXTO_VER_VOLUMEN, TEXTO_OCULTAR_VOLUMEN = "VOLUMEN DE TRABAJO", "OCULTAR VOLUMEN"
 # PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
@@ -418,8 +419,13 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.sliders_xyz = (self.SLIDER_X, self.SLIDER_Y, self.SLIDER_Z)
         self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
         self._poner_rangos_xyz()
-        for slider in self.sliders_xyz:
-            slider.valueChanged.connect(self._jog_cartesiano)
+        self._jog_avisado = False  # YA SE AVISÓ UN TOPE O UN «NO SE MUEVE» EN ESTE ARRASTRE: NO SE REPITE
+        self._jog_arrastrando = False
+        for eje, slider in enumerate(self.sliders_xyz):
+            slider.color_fuera = QtGui.QColor(COLOR_NIVEL["error"])  # EL ROJO DE LOS ERRORES, EL MISMO DEL REGISTRO
+            slider.valueChanged.connect(lambda _valor, eje=eje: self._slider_xyz_movido(eje))
+            slider.sliderPressed.connect(lambda: self._jog_arrastre(True))
+            slider.sliderReleased.connect(lambda: self._jog_arrastre(False))
 
     def _poner_rangos_xyz(self):
         """Los sliders de la punta llegan hasta donde llega la punta de la herramienta. Con las señales calladas:
@@ -447,21 +453,52 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             destino[i] = slider.value()
         self.ejecutar(tramo_articular(self.robot, self.servos, destino), bloquear=False, origen="Servos")
 
+    def _slider_xyz_movido(self, eje):
+        """Un slider de la punta cambió: no se deja entrar al rojo (se detiene en la frontera) y se mueve la punta."""
+        slider = self.sliders_xyz[eje]
+        tope = slider.acotar(slider.value(), self.posicion[eje])
+        topado = tope != slider.value()
+        if topado:
+            slider.blockSignals(True)
+            slider.setValue(tope)
+            slider.blockSignals(False)
+            self._avisar_jog(f"La punta no llega más allá de {NOMBRES_EJES[eje]} = {tope} mm desde esta pose: "
+                             f"el resto del slider (en rojo) no se alcanza.", eje=NOMBRES_EJES[eje], tope_mm=tope,
+                             desde_mm=self.posicion)
+        # DURANTE UN ARRASTRE EL AVISO NO SE REARMA (EL PLANEADOR ACEPTA Y NIEGA DESTINOS ALTERNADOS Y SE REPETIRÍA): SOLO
+        # SOLTAR EL SLIDER. SIN ARRASTRE (TECLADO, RUEDA), UN MOVIMIENTO DENTRO DEL TRAMO LO REARMA
+        if self._jog_cartesiano() and not topado and not self._jog_arrastrando:
+            self._jog_avisado = False
+
+    def _jog_arrastre(self, empieza):
+        """Se agarra o se suelta un slider de la punta: arrastre nuevo, aviso nuevo."""
+        self._jog_arrastrando = empieza
+        self._jog_avisado = False
+
+    def _avisar_jog(self, texto, **datos):
+        """Un aviso del jog por arrastre: tras el primero se calla hasta que se suelte el slider. Sin arrastre (teclado,
+        rueda) se calla hasta que algo se mueva."""
+        if not self._jog_avisado:
+            self._jog_avisado = True
+            self.avisar(texto, "aviso", "Jog", **datos)
+
     def _jog_cartesiano(self):
-        """Pestaña Punta X Y Z: la punta va en línea recta al punto de los sliders; la CI mueve los servos."""
+        """Pestaña Punta X Y Z: la punta va en línea recta al punto de los sliders; la CI mueve los servos.
+        True si el movimiento salió."""
         destino = [float(slider.value()) for slider in self.sliders_xyz]
         distancia = math.dist(self.posicion, destino)
         if distancia < 0.5:
-            return
+            return False
         muestras = max(2, int(distancia / MM_POR_MUESTRA_JOG) + 1)
         plan, motivo = tramo_continuo(self.robot, self.servos, destino, self.postura, pasos=muestras)
         if plan is None:
-            self.avisar(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
-                        if not motivo.startswith("Para") else f"No se mueve. {motivo}", "aviso", "Jog",
-                        destino_mm=destino, desde_mm=self.posicion, postura=self.postura)
+            self._avisar_jog(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
+                             if not motivo.startswith("Para") else f"No se mueve. {motivo}",
+                             destino_mm=destino, desde_mm=self.posicion, postura=self.postura)
             self._sincronizar(self.sliders_xyz, self.posicion)  # EL SLIDER REGRESA A DONDE ESTÁ LA PUNTA
-            return
+            return False
         self.ejecutar(plan, bloquear=False, origen="Jog")
+        return True
 
     @staticmethod
     def _sincronizar(sliders, valores):
@@ -472,11 +509,22 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
     def _sincronizar_sliders(self):
         """Las dos pestañas muestran siempre la misma pose: servos en grados y punta en mm.
-        Un grupo de sliders que la persona está arrastrando no se toca."""
+        Un grupo de sliders que la persona está arrastrando no se toca. Los tramos que la punta alcanza desde esta
+        pose se recalculan aquí: es lo que pasa siempre que algo termina de moverse (y al arrancar, en HOME)."""
+        self._pintar_alcance()
         if not any(s.isSliderDown() for s in self.sliders_servo):
             self._sincronizar(self.sliders_servo, self.servos)
         if not any(s.isSliderDown() for s in self.sliders_xyz):
             self._sincronizar(self.sliders_xyz, self.posicion)
+
+    def _pintar_alcance(self):
+        """Cada slider de la punta pinta el tramo al que la punta llega desde donde está, sobre su eje. Sin solver de
+        cinemática inversa no se sabe qué se alcanza: no se pinta ni se frena nada."""
+        for eje, slider in enumerate(self.sliders_xyz):
+            if self.robot.cinematica_inversa is None:
+                slider.poner_tramos(None)
+            else:
+                slider.poner_tramos(tramos_alcanzables(self.robot, self.posicion, eje, slider.minimum(), slider.maximum()))
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CONSOLA DE REGISTRO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_registro(self):
