@@ -639,6 +639,18 @@ def test_p8_el_texto_no_ensancha_la_ventana_y_el_auditor_no_halla_nada(robot, ab
     assert au.auditar(w) == []
 
 
+def test_v04_un_largo_con_decimales_se_lee_completo_y_no_ensancha_la_ventana(con_largo, abrir):
+    """Banco de ataque, «el texto más largo que cabe»: 120 son tres cifras; un largo medido con calibrador trae más."""
+    w = abrir(con_largo(123.456))
+    assert w.LARGO_HERRAMIENTA.text() == "123.456"
+    minimo = w.minimumSizeHint()
+    assert minimo.width() <= HOY_VENTANA_MINIMA[0] and minimo.height() <= 648
+    w.resize(1280, 720)
+    w.show()  # OFFSCREEN: NO SE ABRE NADA A LA VISTA
+    QtWidgets.QApplication.processEvents()
+    assert au.auditar(w) == []  # NI CORTADO NI ENCIMADO
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% P9: HOME ES UNA POSTURA, NO UN PUNTO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 @pytest.mark.parametrize("largo", [0, 120, 300])
 def test_p9_con_cualquier_herramienta_el_brazo_y_la_camara_en_home_quedan_donde_estaban(robot, con_largo, abrir, largo):
