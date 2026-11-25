@@ -421,6 +421,39 @@ def test_s3_en_una_esquina_de_los_limites_el_slider_no_entra_al_rojo(ventana, ro
     assert tuple(w.posicion) == pytest.approx(punta, abs=0.5)
 
 
+@pytest.fixture
+def bajo_la_base(ventana, robot):
+    """La punta por debajo del nivel de la base (z < 0). El slider de Z no baja de 0: ahí marca 0 aunque la punta no esté en 0."""
+    colocar(ventana, (90, robot.articulaciones[1].servo.maximo, 40))
+    assert ventana.posicion[2] < -50, "control: la punta no quedó bajo la base"
+    return ventana
+
+
+def test_s3_con_la_punta_bajo_la_base_el_slider_de_z_tambien_frena(bajo_la_base):
+    """De un salto (tecla Fin, o un clic en la pista): arrastrando poco a poco la punta sube sola a la parte del tramo
+    que el slider sí conoce y el defecto no se ve (así pasó en verde la primera versión de esta prueba)."""
+    w = bajo_la_base
+    slider = w.SLIDER_Z
+    techo = max(b for _, b in slider.tramos)
+    assert techo < slider.maximum() - 5, "control: sobre Z no hay rojo arriba"
+    teclear(w, slider, "Fin")
+    assert slider.value() == math.floor(techo), "el slider entró al rojo o rebotó"
+    assert w.posicion[2] == pytest.approx(math.floor(techo), abs=1)
+    assert len(topes(w)) == 1 and negativas_del_planeador(w) == []
+
+
+@pytest.mark.parametrize("eje", (0, 1))
+def test_s3_con_la_punta_bajo_la_base_mover_x_o_y_no_la_sube(bajo_la_base, eje):
+    """El slider de Z marca 0 porque no puede marcar menos: mover otro eje no es una orden de subir la punta a 0."""
+    w = bajo_la_base
+    antes = tuple(w.posicion)
+    destino = w.sliders_xyz[eje].value() + 30
+    arrastrar_hasta(w, w.sliders_xyz[eje], destino)
+    esperado = con_el_eje(antes, eje, destino)
+    assert tuple(w.posicion) == pytest.approx(esperado, abs=1), "la punta no fue a donde se le pidió"
+    assert negativas_del_planeador(w) == []
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% S4: UN SOLO AVISO AL TOPAR, NO UNA LLUVIA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def avisos_del_jog(w):
     return [e for e in eventos(w, "aviso") if e.origen == "Jog"]

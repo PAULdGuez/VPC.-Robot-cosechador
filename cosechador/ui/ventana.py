@@ -467,7 +467,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
                              desde_mm=self.posicion)
         # DURANTE UN ARRASTRE EL AVISO NO SE REARMA (EL PLANEADOR ACEPTA Y NIEGA DESTINOS ALTERNADOS Y SE REPETIRÍA): SOLO
         # SOLTAR EL SLIDER. SIN ARRASTRE (TECLADO, RUEDA), UN MOVIMIENTO DENTRO DEL TRAMO LO REARMA
-        if self._jog_cartesiano() and not topado and not self._jog_arrastrando:
+        if self._jog_cartesiano(eje) and not topado and not self._jog_arrastrando:
             self._jog_avisado = False
 
     def _jog_arrastre(self, empieza):
@@ -482,10 +482,15 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self._jog_avisado = True
             self.avisar(texto, "aviso", "Jog", **datos)
 
-    def _jog_cartesiano(self):
+    def _jog_cartesiano(self, eje):
         """Pestaña Punta X Y Z: la punta va en línea recta al punto de los sliders; la CI mueve los servos.
-        True si el movimiento salió."""
+        `eje` es el slider que se movió. True si el movimiento salió."""
         destino = [float(slider.value()) for slider in self.sliders_xyz]
+        for otro, slider in enumerate(self.sliders_xyz):
+            # UN SLIDER QUE NO PUEDE MARCAR DÓNDE ESTÁ LA PUNTA (BAJO LA BASE, EL DE Z MARCA 0 PORQUE NO BAJA MÁS) NO ES
+            # UNA ORDEN: SI EL QUE SE MOVIÓ ES OTRO, ESE EJE SE QUEDA DONDE ESTÁ
+            if otro != eje and not slider.minimum() <= self.posicion[otro] <= slider.maximum():
+                destino[otro] = float(self.posicion[otro])
         distancia = math.dist(self.posicion, destino)
         if distancia < 0.5:
             return False
@@ -523,8 +528,12 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         for eje, slider in enumerate(self.sliders_xyz):
             if self.robot.cinematica_inversa is None:
                 slider.poner_tramos(None)
-            else:
-                slider.poner_tramos(tramos_alcanzables(self.robot, self.posicion, eje, slider.minimum(), slider.maximum()))
+                continue
+            # EL TRAMO SE BUSCA TAMBIÉN DONDE ESTÁ LA PUNTA AUNQUE EL SLIDER NO LLEGUE AHÍ (BAJO LA BASE, EL DE Z EMPIEZA EN
+            # 0): SI NO, EL SLIDER NO SABE EN QUÉ TRAMO ESTÁ LA PUNTA Y NO FRENA
+            aqui = self.posicion[eje]
+            slider.poner_tramos(tramos_alcanzables(self.robot, self.posicion, eje, min(slider.minimum(), aqui),
+                                                   max(slider.maximum(), aqui)))
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CONSOLA DE REGISTRO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_registro(self):
