@@ -18,7 +18,7 @@ def K(robot):
 
 @pytest.fixture(scope="module")
 def q_home(robot):
-    return servo_a_dh(robot, angulos_servo(robot, robot.home))
+    return servo_a_dh(robot, robot.postura_home)  # HOME ES UNA POSTURA: LA CÁMARA QUEDA EN (0, 0, 1065) CON CUALQUIER HERRAMIENTA
 
 
 @pytest.fixture(scope="module")
@@ -71,7 +71,7 @@ def test_estima_la_profundidad_por_el_tamano(distancia, foto, detectar_uno, en_b
 def test_aguacate_al_centro_queda_enfrente_y_arriba_del_fruto(robot, foto, detectar_uno, en_base):
     x, y, z = en_base(detectar_uno(foto(np.array([0.0, 0.0, 800.0]))))
     assert abs(x) < 5                      # NI A LA IZQUIERDA NI A LA DERECHA
-    assert robot.home[2] + 40 < z < robot.home[2] + 120  # EL CORTE VA ENCIMA DEL FRUTO, NO EN SU CENTRO
+    assert robot.punto_de_giro[2] + 40 < z < robot.punto_de_giro[2] + 120  # EL CORTE VA ENCIMA DEL FRUTO, NO EN SU CENTRO
 
 
 def test_los_ejes_de_la_imagen_corresponden_al_mundo(foto, detectar_uno, en_base):

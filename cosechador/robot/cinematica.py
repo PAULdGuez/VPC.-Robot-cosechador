@@ -43,24 +43,44 @@ def matrices(robot, q):
 
 
 def cinematica_directa(robot, q):
-    """Posición (x, y, z) del efector en mm."""
-    return matrices(robot, q)[-1][:3, 3]
+    """Posición (x, y, z) en mm de la PUNTA de la herramienta: lo que se pide y se muestra por coordenadas.
+
+    La herramienta prolonga el último eslabón: su punta queda `robot.efector.largo` mm más allá del extremo
+    de ese eslabón (pose_efector), sobre su eje X. Sin herramienta (largo 0) son el mismo punto.
+    """
+    return (pose_efector(robot, q) @ (robot.efector.largo, 0.0, 0.0, 1.0))[:3]
 
 
 def pose_efector(robot, q):
-    """Matriz 4x4 completa del efector (posición y orientación)."""
+    """Matriz 4x4 (posición y orientación) del extremo del último eslabón: ahí se atornilla el efector, y la
+    cámara si va montada en él. NO es la punta de la herramienta: esa la da cinematica_directa."""
     return matrices(robot, q)[-1]
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% SERVOS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+# UN SERVO RECIBE GRADOS ENTEROS: UNA CENTÉSIMA DE GRADO FUERA DE SU RANGO ES RUIDO NUMÉRICO, NO UN
+# LÍMITE REAL. (CON 1e-6 °, EL REDONDEO DE UN PROGRAMA GUARDADO DECLARABA INALCANZABLE UN PUNTO A 350 mm.)
+TOLERANCIA_SERVO = 0.01
+
+
+def _recortar(valor, servo):
+    """Si el ángulo se sale del rango por menos de TOLERANCIA_SERVO, se lleva al borde."""
+    if servo.minimo - TOLERANCIA_SERVO <= valor < servo.minimo:
+        return servo.minimo
+    if servo.maximo < valor <= servo.maximo + TOLERANCIA_SERVO:
+        return servo.maximo
+    return valor
+
+
 def dh_a_servo(robot, q):
     """Ángulos DH -> ángulos de servo: servo = offset + signo * theta.
 
     Se envuelve alrededor del CENTRO del rango de cada servo: así el ruido numérico (-1e-10°)
-    queda como ~0° y no como 359.9999° (fuera de rango).
+    queda como ~0° y no como 359.9999° (fuera de rango). Lo que se sale por menos de
+    TOLERANCIA_SERVO se recorta al borde, para que lo que llega a la placa siempre esté en rango.
     """
-    return tuple(envolver(j.servo.offset + j.servo.signo * float(theta), j.servo.centro)
+    return tuple(_recortar(envolver(j.servo.offset + j.servo.signo * float(theta), j.servo.centro), j.servo)
                  for theta, j in zip(q, robot.articulaciones))
 
 
@@ -69,6 +89,13 @@ def servo_a_dh(robot, servos):
     return tuple(j.servo.signo * (float(s) - j.servo.offset) for s, j in zip(servos, robot.articulaciones))
 
 
-def servos_en_rango(robot, servos, tolerancia=1e-6):
-    return all(j.servo.minimo - tolerancia <= s <= j.servo.maximo + tolerancia
-               for s, j in zip(servos, robot.articulaciones))
+def primer_servo_fuera(robot, servos, tolerancia=TOLERANCIA_SERVO):
+    """Índice (desde 0) del primer servo fuera de su rango, o None si todos caben. Un solo lugar decide el rango."""
+    for i, (s, j) in enumerate(zip(servos, robot.articulaciones)):
+        if not j.servo.minimo - tolerancia <= s <= j.servo.maximo + tolerancia:
+            return i
+    return None
+
+
+def servos_en_rango(robot, servos, tolerancia=TOLERANCIA_SERVO):
+    return primer_servo_fuera(robot, servos, tolerancia) is None

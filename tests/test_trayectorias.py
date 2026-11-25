@@ -9,7 +9,7 @@ from cosechador.robot.cinematica_inversa import alcanzable, angulos_servo, salto
 
 @pytest.fixture(scope="module")
 def home_s(robot):
-    return angulos_servo(robot, robot.home)
+    return robot.postura_home
 
 
 def avisos_del_plan(plan):
@@ -37,13 +37,15 @@ def test_cada_punto_de_la_cosecha_se_visita(robot, home_s):
 
 
 def test_la_recta_que_cruza_el_eje_pasa_por_home(robot):
-    # DE (-1656, 0, 630) A (1656, 0, 630) LA RECTA PASA DEMASIADO CERCA DEL EJE DE LA BASE: INALCANZABLE
-    assert tramo_recto(robot, (-1656, 0, 630), (1656, 0, 630)) is None
-    inicio = angulos_servo(robot, (-1656, 0, 630))
-    plan, cosechados = plan_cosecha(robot, inicio, [(1656, 0, 630)])
+    # (LO QUE SE CRUZA ES EL PUNTO DE GIRO, SOBRE EL EJE; LA PUNTA DE HOME, FUERA DEL EJE, SOLO ES EL REGRESO)
+    # DE (-1656, 0, 500) A (1656, 0, 500) LA RECTA PASA DEMASIADO CERCA DEL EJE DE LA BASE: INALCANZABLE
+    # (A z = 630, COMO ANTES DE LA HERRAMIENTA, YA SE PUEDE: CON EL BRAZO DOBLADO LA PUNTA LLEGA 120 mm MÁS CERCA DEL HOMBRO)
+    assert tramo_recto(robot, (-1656, 0, 500), (1656, 0, 500)) is None
+    inicio = angulos_servo(robot, (-1656, 0, 500))
+    plan, cosechados = plan_cosecha(robot, inicio, [(1656, 0, 500)])
     assert cosechados == 1
     visitadas = [posicion(robot, s) for s in servos_del_plan(plan)]
-    assert min(np.linalg.norm(v - robot.home) for v in visitadas) < 1e-6
+    assert min(np.linalg.norm(v - robot.punto_de_giro) for v in visitadas) < 1e-6
 
 
 def test_todo_paso_del_plan_es_ejecutable(robot, home_s):
@@ -105,19 +107,21 @@ def test_c1_rectas_aleatorias_continuas(robot):
 
 
 def test_c2_cruzar_y_cero_respeta_el_modo(robot):
-    # DE (-1400, 150, 1300) A (-1400, -150, 1300): TODO ES ALCANZABLE, PERO LA BASE (0-180°) TIENE QUE
+    # DE (-1400, 150, 1500) A (-1400, -150, 1500): TODO ES ALCANZABLE, PERO LA BASE (0-180°) TIENE QUE
     # VOLTEARSE PARA CRUZAR y = 0 (EL BRAZO PASA A INCLINARSE HACIA ATRAS)
-    inicio = angulos_servo(robot, (-1400, 150, 1300))
-    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1300), "negar")
+    inicio = angulos_servo(robot, (-1400, 150, 1500))
+    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1500), "negar")
     assert plan is None and "«negar»" in motivo
-    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1300), "despacio")
+    plan, motivo = tramo_continuo(robot, inicio, (-1400, -150, 1500), "despacio")
     assert motivo is None
     assert any("Cambio de postura" in a for a in avisos_del_plan(plan))
     assert salto_maximo(inicio, plan) <= robot.movimiento.salto_max_por_paso + 1e-9
 
 
-def test_c2_girar_en_el_lugar_siempre_se_permite(robot, home_s):
-    # EN HOME LA PUNTA ESTA SOBRE EL EJE DE LA BASE: GIRARLA NO MUEVE LA PUNTA, AUN EN MODO «negar»
-    plan, motivo = tramo_continuo(robot, home_s, (300, 0, 1065), "negar")
+def test_c2_girar_en_el_lugar_siempre_se_permite(robot):
+    # EN EL PUNTO DE GIRO LA PUNTA ESTA SOBRE EL EJE DE LA BASE: GIRARLA NO MUEVE LA PUNTA, AUN EN MODO «negar»
+    # (LA POSTURA DE HOME DEJA LA PUNTA FUERA DEL EJE, A `largo` mm: AHI LA BASE NO GIRA EN EL LUGAR)
+    en_el_punto = angulos_servo(robot, robot.punto_de_giro)
+    plan, motivo = tramo_continuo(robot, en_el_punto, (300, 0, 1065), "negar")
     assert motivo is None
     assert any("Giro en el lugar" in a for a in avisos_del_plan(plan))

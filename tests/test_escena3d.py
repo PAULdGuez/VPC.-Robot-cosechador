@@ -61,3 +61,38 @@ def test_c4_otro_robot_se_dibuja_con_piezas_provisionales(robot_4gdl):
     for i, j in enumerate(robot_4gdl.articulaciones):
         assert np.allclose(en_base(poses_piezas(robot_4gdl, q)[i + 1], (j.a, 0, j.d)),
                            matrices(robot_4gdl, q)[i + 1][:3, 3])
+
+
+def test_u1_plan_y_recorrido_de_la_punta(robot):
+    escena = Escena(pv.Plotter(off_screen=True), robot)
+    escena.mostrar_plan([(0, 0, 1065), (300, 0, 1065), (300, 300, 1065)])
+    assert escena._plan.n_points == 3 and escena._actor_plan.GetVisibility()
+    escena.reiniciar_recorrido((0, 0, 1065))
+    for x in (0.1, 50, 50.2, 100):            # 0.1 Y 50.2 ESTÁN A < 0.5 mm DEL ANTERIOR: NO SE AGREGAN
+        escena.agregar_al_recorrido((x, 0, 1065))
+    assert [p[0] for p in escena.puntos_recorrido] == [0, 50, 100]
+    assert escena._recorrido.n_points == 3 and escena._actor_recorrido.GetVisibility()
+    escena.mostrar_trayectoria(False)
+    assert not escena._actor_plan.GetVisibility() and not escena._actor_recorrido.GetVisibility()
+    escena.mostrar_trayectoria(True)
+    escena.limpiar_trayectoria((100, 0, 1065))
+    assert len(escena.puntos_recorrido) == 1
+    assert not escena._actor_plan.GetVisibility()  # SIN PLAN NO HAY LÍNEA QUE MOSTRAR
+
+
+def test_u2_ejes_en_el_origen(robot):
+    plotter = pv.Plotter(off_screen=True)
+    antes = len(plotter.renderer.actors)
+    Escena(plotter, robot)
+    # PISO + PIEZAS + 3 FLECHAS + 3 ETIQUETAS (MÍNIMO)
+    assert len(plotter.renderer.actors) - antes >= 1 + robot.gdl + 2 + 6
+
+
+@pytest.mark.parametrize("nombre, desde", [("iso", (0.58, 0.58, 0.58)), ("arriba", (0, 0, 1)),
+                                            ("frente", (0, -1, 0)), ("lado", (1, 0, 0))])
+def test_k6_cada_vista_pone_la_camara_donde_dice(robot, nombre, desde):
+    escena = Escena(pv.Plotter(off_screen=True), robot)
+    escena.vista(nombre)
+    camara = escena.plotter.camera
+    direccion = np.array(camara.position) - np.array(camara.focal_point)
+    assert direccion / np.linalg.norm(direccion) == pytest.approx(desde, abs=0.01)

@@ -4,3 +4,5 @@ __pycache__/
 *.gif
 modelos/*-codigo.stl
 modelos/*-codigo.step
+logs/
+.hypothesis/

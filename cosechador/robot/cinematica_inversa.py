@@ -1,4 +1,4 @@
-"""Cinemática inversa: posición del efector -> ángulos.
+"""Cinemática inversa: posición de la punta de la herramienta -> ángulos.
 
 Cada topología tiene su solver; el YAML del robot dice cuál usar en 'cinematica_inversa'.
 Hoy existe el analítico 'antropomorfico_3r' (base vertical + hombro + codo). Un robot sin solver
@@ -7,6 +7,12 @@ se carga y se dibuja, pero no puede calcular trayectorias (SinSolver).
 import numpy as np
 
 from .cinematica import dh_a_servo, servo_a_dh, servos_en_rango
+
+
+# A MENOS DE ESTA DISTANCIA DEL EJE DE LA BASE, EL GIRO DE LA BASE ES INDIFERENTE (SE USA EL CENTRO DE SU
+# RANGO). CON 1e-6 mm, EL HOME REDONDEADO DE UN ARCHIVO (A 0.0005 mm DEL EJE) ELEGÍA EL BRAZO INCLINADO
+# HACIA ATRÁS Y EL JOG DESDE AHÍ FALLABA A LOS 350 mm.
+SOBRE_EL_EJE_MM = 0.01
 
 
 class SinSolver(RuntimeError):
@@ -21,7 +27,8 @@ def _antropomorfico_3r(robot, x, y, z):
     """Hasta 4 soluciones (grados DH), en orden de preferencia:
     base mirando al punto con codo arriba / codo abajo, y luego base girada 180°."""
     j1, j2, j3 = robot.articulaciones
-    d1, a2, a3 = j1.d, j2.a, j3.a
+    # LA HERRAMIENTA PROLONGA EL ANTEBRAZO EN LÍNEA RECTA: PARA LLEVAR SU PUNTA AL PUNTO, EL ÚLTIMO ESLABÓN MIDE ESO MÁS
+    d1, a2, a3 = j1.d, j2.a, j3.a + robot.efector.largo
 
     # Distancia plana y altura MEDIDA DESDE EL HOMBRO (encima de la base, a d1)
     r = np.hypot(x, y)
@@ -33,7 +40,7 @@ def _antropomorfico_3r(robot, x, y, z):
         raise FueraDeAlcance("El punto está fuera del alcance del robot.")
     D = float(np.clip(D, -1.0, 1.0))
 
-    if r < 1e-6:
+    if r < SOBRE_EL_EJE_MM:
         # PUNTO SOBRE EL EJE DE LA BASE (P. EJ. HOME): CUALQUIER GIRO SIRVE. SE USA EL CENTRO DEL
         # RANGO DEL SERVO PARA QUE EL ROBOT (Y LA CAMARA) MIRE A LA MITAD DE SU ZONA DE TRABAJO.
         theta1 = servo_a_dh(robot, (j1.servo.centro, j2.servo.centro, j3.servo.centro))[0]
@@ -75,9 +82,67 @@ def angulos_servo(robot, punto):
     return None
 
 
+def motivo_de_no_alcanzar(robot, punto):
+    """None si el robot real llega al punto; si no, por qué no, en palabras (fuera del brazo, o qué servo se sale).
+
+    Si llega o no lo decide angulos_servo, como en todo lo demás: aquí solo se explica el «no».
+    """
+    if angulos_servo(robot, punto) is not None:
+        return None
+    try:
+        preferido = dh_a_servo(robot, soluciones(robot, punto)[0])  # EL PRIMER ACOMODO, EL PREFERIDO
+    except FueraDeAlcance:
+        return "queda fuera del alcance del brazo"
+    for j, s in zip(robot.articulaciones, preferido):
+        if not j.servo.minimo <= s <= j.servo.maximo:
+            return f"el servo «{j.nombre}» tendría que ir a {s:.1f}° y su rango es de {j.servo.minimo:g}° a {j.servo.maximo:g}°"
+    return "ningún acomodo del brazo cabe en el rango de los servos"
+
+
 def alcanzable(robot, punto):
     """True si el robot real puede llegar al punto (alcance + límites de los servos)."""
     return angulos_servo(robot, punto) is not None
+
+
+# TRAMOS DE UN EJE (tramos_alcanzables): CADA 5 mm SE PREGUNTA SI SE LLEGA Y CADA FRONTERA SE AFINA POR BISECCIÓN HASTA
+# 0.25 mm. TOLERANCIA: DENTRO DE UN TRAMO TODO SE ALCANZA; A MÁS DE 0.25 mm DE SU FRONTERA, YA NO. LO ÚNICO QUE NO SE VE
+# ES UN TRAMO ALCANZABLE MÁS ANGOSTO QUE 5 mm.
+PASO_TRAMOS_MM = 5.0
+TOLERANCIA_TRAMOS_MM = 0.25
+
+
+def _frontera(llega, malo, bueno):
+    """Entre un valor al que no se llega y otro al que sí: el lado que SÍ llega, a TOLERANCIA_TRAMOS_MM de la frontera."""
+    while abs(bueno - malo) > TOLERANCIA_TRAMOS_MM:
+        medio = (bueno + malo) / 2
+        if llega(medio):
+            bueno = medio
+        else:
+            malo = medio
+    return bueno
+
+
+def tramos_alcanzables(robot, punto, eje, minimo, maximo):
+    """Los tramos de [minimo, maximo] sobre un eje (0 X, 1 Y, 2 Z) a los que la punta llega, con las otras dos
+    coordenadas de `punto` fijas: [(desde, hasta), ...] en mm, de menor a mayor (más de uno si hay un hueco en medio).
+    La coordenada actual de `punto` en ese eje también se pregunta, para que el tramo donde está la punta no se pierda."""
+    def llega(valor):
+        q = list(punto)
+        q[eje] = valor
+        return alcanzable(robot, q)
+
+    valores = sorted({*np.arange(minimo, maximo, PASO_TRAMOS_MM), float(maximo), *([punto[eje]] if minimo <= punto[eje] <= maximo else [])})
+    tramos, inicio = [], None
+    for anterior, valor in zip([None, *valores], valores):
+        if llega(valor):
+            if inicio is None:
+                inicio = valor if anterior is None else _frontera(llega, anterior, valor)
+        elif inicio is not None:
+            tramos.append((float(inicio), float(_frontera(llega, valor, anterior))))
+            inicio = None
+    if inicio is not None:
+        tramos.append((float(inicio), float(valores[-1])))
+    return tramos
 
 
 def salto(servos_a, servos_b):
@@ -96,4 +161,7 @@ def angulos_servo_cercanos(robot, punto, servos_actuales):
     except FueraDeAlcance:
         return None
     validas = [s for s in (dh_a_servo(robot, q) for q in candidatas) if servos_en_rango(robot, s)]
-    return min(validas, key=lambda s: salto(s, servos_actuales)) if validas else None
+    # SI DOS ACOMODOS QUEDAN IGUAL DE CERCA (LA BASE A 0° O A 180° CON LA PUNTA SOBRE SU EJE, COMO EN HOME), GANA EL
+    # PRIMERO: EL ORDEN DE PREFERENCIA DEL SOLVER. SIN REDONDEAR, 1e-14 mm DE RUIDO NUMÉRICO DECIDÍAN SI EL BRAZO
+    # SALÍA DE HOME DE FRENTE O DE ESPALDAS AL PUNTO (CON HERRAMIENTA DE 120 mm, DE ESPALDAS).
+    return min(validas, key=lambda s: round(salto(s, servos_actuales), 6)) if validas else None

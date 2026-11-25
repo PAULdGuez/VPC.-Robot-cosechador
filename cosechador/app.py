@@ -29,7 +29,8 @@ def mostrar_error(tipo, valor, tb):
     from cosechador.ui.ventana import VentanaPrincipal
     for ventana in QApplication.topLevelWidgets():
         if isinstance(ventana, VentanaPrincipal):
-            ventana.statusBar().showMessage(f"Error: {valor}")
+            ventana.avisar(f"Error inesperado: {valor}", "error", "Sistema", tipo=tipo.__name__,
+                           donde=traceback.format_tb(tb)[-1].strip() if tb else "")
 
 
 def main(argv=None):
