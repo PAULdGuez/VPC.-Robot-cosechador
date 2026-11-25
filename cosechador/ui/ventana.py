@@ -78,6 +78,7 @@ AYUDA_EN_CAMINO = ("Qué hace la punta si se mueve otro slider mientras va en ca
                    "• Reemplazar: deja lo que hacía y va en línea recta al punto que marcan los tres sliders.\n"
                    "• En cola: termina el tramo que lleva y después recorre los siguientes, en el orden pedido.\n"
                    "• Cancelar: se detiene donde va y recorre solo el tramo nuevo.")
+SIN_EJE = -1  # EN EL ÚLTIMO TRAMO DEL JOG: NO ES DE NINGÚN SLIDER (CUALQUIER ORDEN NUEVA «EN COLA» VA DETRÁS DE LO PENDIENTE)
 PASOS_POR_REPINTADO_JOG = 3  # CON LA PUNTA EN CAMINO, EL ROJO DE LOS SLIDERS SE VUELVE A CALCULAR CADA TANTOS PASOS
 MISMA_RECTA_MM = 0.05        # DOS RECTAS QUE DIFIEREN MENOS QUE ESTO PINTAN EL MISMO ROJO: NO SE VUELVE A CALCULAR
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
@@ -503,8 +504,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         for clave, texto in POSTURAS:
             self.SELECTOR_POSTURA.addItem(texto, clave)
         self.SELECTOR_POSTURA.setCurrentIndex([c for c, _ in POSTURAS].index(self.robot.movimiento.al_cambiar_postura))
-        # EN «NEGARSE» EL ROJO CUBRE TAMBIÉN LO QUE PIDE CAMBIAR DE POSTURA: AL CAMBIAR DE MODO SE PINTA OTRA VEZ, COMPLETO
-        self.SELECTOR_POSTURA.currentIndexChanged.connect(lambda _indice: self._pintar_alcance())
+        self.SELECTOR_POSTURA.currentIndexChanged.connect(self._postura_cambiada)
         self.SLIDER_VELOCIDAD.valueChanged.connect(self._velocidad_cambiada)
         self._velocidad_cambiada()
         if self.robot.cinematica_inversa is None:  # SIN SOLVER NO HAY JOG XYZ NI TRAYECTORIAS
@@ -557,6 +557,39 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _en_camino_cambiado(self):
         self.ajustes.setValue(AJUSTE_EN_CAMINO, self.en_camino)
         self._pintar_alcance(solo_lo_cambiado=True)  # CON LA PUNTA EN CAMINO, CADA MODO MIDE EL ROJO DESDE OTRO PUNTO
+
+    def _postura_cambiada(self, *_):
+        """Cambió el modo «Al cambiar de postura». Al pasar a «negarse», lo pendiente que se aceptó en «girar despacio» ya no
+        vale: se cancela desde el primer cambio de postura que no ha empezado. Y el rojo se pinta otra vez, completo: en
+        «negarse» cubre también lo que pide cambiar de postura."""
+        if self.postura == "negar":
+            self._cancelar_desde_el_cambio_de_postura()
+        self._pintar_alcance()
+
+    def _cancelar_desde_el_cambio_de_postura(self):
+        """Quita de lo pendiente el primer cambio de postura que no ha empezado y todo lo que venía detrás. Lo anterior se
+        termina: la punta llega hasta donde iba a empezar el giro y ahí se queda, que es hasta donde «negarse» la habría
+        dejado llegar. Un giro que ya empezó se termina (dejarlo a medias sería peor). En vista previa no hay nada que
+        cancelar: el robot no se mueve."""
+        corte = next((i for i, paso in enumerate(self.cola) if paso.cambio_de_postura), None)
+        if corte is None or self.en_vista_previa:
+            return
+        cancelados = len(self.cola) - corte
+        for _ in range(cancelados):
+            self.cola.pop()
+        servos_fin = self._servos_al_terminar()
+        fin = tuple(float(c) for c in posicion(self.robot, servos_fin))
+        if self._destino_jog is not None:  # ERA DE LOS SLIDERS DE LA PUNTA: SU DESTINO Y SU ÚLTIMO TRAMO SE ACORTAN A LO QUE QUEDA
+            eje, pasos, servos_salida, salida = self._tramo_jog
+            self._tramo_jog = ((eje, pasos - cancelados, servos_salida, salida) if pasos > cancelados
+                               else (SIN_EJE, 0, servos_fin, fin))
+            self._destino_jog = fin
+            if not any(s.isSliderDown() for s in self.sliders_xyz):
+                self._sincronizar(self.sliders_xyz, fin)
+        self.escena.mostrar_plan([self.posicion] + [posicion(self.robot, p.servos) for p in self.cola if p.servos is not None])
+        self.avisar("El modo ahora es «negarse»: se canceló el cambio de postura que estaba pendiente y lo que venía detrás. "
+                    f"La punta se queda en {tuple(int(round(c)) for c in fin)}.", "aviso", "Postura",
+                    cancelados=cancelados, queda_mm=fin)
 
     @property
     def postura(self):

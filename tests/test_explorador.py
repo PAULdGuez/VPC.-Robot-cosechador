@@ -648,9 +648,7 @@ HALLAZGOS = (
         Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.9677999949201714, s=375441, dt=0.05),
         Gesto(tipo='elegir', control='SELECTOR_POSTURA', v=0.6424961212029794, s=0, dt=0.0),
         Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.6837036588129731, s=624556, dt=0.008),
-    ), "en «En cola», con un cambio de postura ya pendiente (aceptado en «girar despacio»), se pasa a «negarse» y se arrastra otra "
-       "vez el mismo slider: su tramo se retraza desde donde salía y el rojo se midió desde donde llega; el planeador se niega "
-       "(«tendría que cambiar de postura») y el slider vuelve. Con un solo modo de postura de principio a fin no pasa"),
+    ), ""),   # ARREGLADO EL 25-nov-2026 (tests/test_postura_en_camino.py, D6): AL PASAR A «NEGARSE» SE CANCELA LO PENDIENTE
     ("D7-rebote-reemplazar-con-la-punta-en-camino", "rebote", (
         Gesto(tipo='elegir', control='PESTANAS_MOVIMIENTO', v=0.5, s=0, dt=0.0),
         Gesto(tipo='elegir', control='SELECTOR_EN_CAMINO', v=0.2238158098647538, s=0, dt=0.0),

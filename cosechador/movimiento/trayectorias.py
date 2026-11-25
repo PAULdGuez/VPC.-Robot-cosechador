@@ -33,6 +33,7 @@ class Paso:
     aviso: str | None = None
     ms: float | None = None
     nivel: str = "info"           # DEL AVISO: info | ok | aviso | error (ver cosechador/registro.py)
+    cambio_de_postura: bool = False  # ANUNCIA UN CAMBIO DE POSTURA QUE BARRE EL ESPACIO: EL GIRO SON LOS PASOS QUE SIGUEN
 
 
 class _NoSePuede(Exception):
@@ -69,7 +70,7 @@ def _cambio_de_postura(robot, servos_a, servos_b, cerca_de, postura):
                          f"(el brazo barrería hasta {desvio:.0f} mm fuera de la línea) y el modo es «negar».")
     aviso = (f"Cambio de postura cerca de {_texto(cerca_de)}: los servos giran despacio "
              f"(la punta sale hasta {desvio:.0f} mm de la línea recta).")
-    return [Paso(aviso=aviso, nivel="aviso")] + pasos
+    return [Paso(aviso=aviso, nivel="aviso", cambio_de_postura=True)] + pasos
 
 
 def _refinar(robot, pa, sa, pb, postura):

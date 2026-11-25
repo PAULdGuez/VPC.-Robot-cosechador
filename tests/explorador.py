@@ -82,11 +82,6 @@ class Conocido:
 
 
 CONOCIDOS = (
-    Conocido("D6-rebote-negar-con-la-punta-en-camino", "rebote", "punta en camino, modo «en_cola», postura «negar»",
-             "con un cambio de postura ya en cola (aceptado en «girar despacio») se pasa a «negarse» y se vuelve a arrastrar el "
-             "MISMO slider antes de que su tramo empiece: «En cola» retraza ese tramo desde donde SALÍA, y el rojo del slider se "
-             "midió desde donde LLEGA. Desde la llegada no hay cambio de postura; desde la salida sí: el planeador se niega (con "
-             "un aviso veraz) y el slider vuelve. Con un solo modo de postura de principio a fin no puede pasar"),
     Conocido("D7-rebote-reemplazar-con-la-punta-en-camino", "rebote", "punta en camino, modo «reemplazar», postura «despacio»",
              "riesgo DECLARADO de «Reemplazar» (aceptado al elegir los tres modos, 25-nov-2026): con la punta en camino el rojo "
              "de los sliders se mide desde el punto al que va, y el tramo nuevo sale en diagonal desde donde va la punta. Esa "
