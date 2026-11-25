@@ -1,4 +1,4 @@
-"""Cinemática inversa: posición del efector -> ángulos.
+"""Cinemática inversa: posición de la punta de la herramienta -> ángulos.
 
 Cada topología tiene su solver; el YAML del robot dice cuál usar en 'cinematica_inversa'.
 Hoy existe el analítico 'antropomorfico_3r' (base vertical + hombro + codo). Un robot sin solver
@@ -27,7 +27,8 @@ def _antropomorfico_3r(robot, x, y, z):
     """Hasta 4 soluciones (grados DH), en orden de preferencia:
     base mirando al punto con codo arriba / codo abajo, y luego base girada 180°."""
     j1, j2, j3 = robot.articulaciones
-    d1, a2, a3 = j1.d, j2.a, j3.a
+    # LA HERRAMIENTA PROLONGA EL ANTEBRAZO EN LÍNEA RECTA: PARA LLEVAR SU PUNTA AL PUNTO, EL ÚLTIMO ESLABÓN MIDE ESO MÁS
+    d1, a2, a3 = j1.d, j2.a, j3.a + robot.efector.largo
 
     # Distancia plana y altura MEDIDA DESDE EL HOMBRO (encima de la base, a d1)
     r = np.hypot(x, y)
@@ -102,4 +103,7 @@ def angulos_servo_cercanos(robot, punto, servos_actuales):
     except FueraDeAlcance:
         return None
     validas = [s for s in (dh_a_servo(robot, q) for q in candidatas) if servos_en_rango(robot, s)]
-    return min(validas, key=lambda s: salto(s, servos_actuales)) if validas else None
+    # SI DOS ACOMODOS QUEDAN IGUAL DE CERCA (LA BASE A 0° O A 180° CON LA PUNTA SOBRE SU EJE, COMO EN HOME), GANA EL
+    # PRIMERO: EL ORDEN DE PREFERENCIA DEL SOLVER. SIN REDONDEAR, 1e-14 mm DE RUIDO NUMÉRICO DECIDÍAN SI EL BRAZO
+    # SALÍA DE HOME DE FRENTE O DE ESPALDAS AL PUNTO (CON HERRAMIENTA DE 120 mm, DE ESPALDAS).
+    return min(validas, key=lambda s: round(salto(s, servos_actuales), 6)) if validas else None

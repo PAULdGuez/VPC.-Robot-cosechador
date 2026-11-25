@@ -26,7 +26,8 @@ from cosechador.movimiento.trayectorias import (duracion_ms, plan_cosecha, plan_
                                                 tramo_continuo)
 from cosechador.robot.cinematica import servo_a_dh
 from cosechador.robot.cinematica_inversa import SinSolver, alcanzable, angulos_servo
-from cosechador.robot.espacio_trabajo import barrer
+from cosechador.robot.config import con_herramienta
+from cosechador.robot.espacio_trabajo import barrer, contorno_del_corte, giro_de_la_base
 from cosechador.ui import tema
 from cosechador.ui.escena3d import Escena
 from cosechador.vision.camara import pedunculo_en_base
@@ -63,6 +64,7 @@ POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al
 PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
+TEXTO_VER_VOLUMEN, TEXTO_OCULTAR_VOLUMEN = "VOLUMEN DE TRABAJO", "OCULTAR VOLUMEN"
 # PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
 TEXTOS_GUARDAR = {"grabacion": ("Guardar grabación", "Nombre de la grabación:", "Grabación"),
                   "puntos": ("Guardar programa", "Nombre del programa:", "Programa")}
@@ -78,6 +80,11 @@ MARCA_IMPOSIBLE = "imposible"  # LO QUE LLEVA EN UserRole EL RENGLÓN DE UN PUNT
 def _cuantos_puntos(n):
     """«sin puntos», «1 punto», «4 puntos»: el conteo en palabras. Lo dicen igual la pestaña Programa y el editor."""
     return "sin puntos" if not n else "1 punto" if n == 1 else f"{n} puntos"
+
+
+def clave_herramienta(robot):
+    """Dónde se recuerda, en los ajustes de la persona, el largo de la herramienta de ESE robot."""
+    return f"herramienta/{robot.nombre}"
 
 
 class _RenglonDelRegistro(QtWidgets.QStyledItemDelegate):
@@ -126,6 +133,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         # AJUSTES DE LA PERSONA (P. EJ. EL ÚLTIMO PROGRAMA ELEGIDO): QSettings ES LO NATIVO DE Qt
         self.ajustes = ajustes if ajustes is not None else QtCore.QSettings("robot-cosechador", "cosechador")
         self.carpeta_programas = carpeta_programas or programas.CARPETA_PROGRAMAS
+        # EL LARGO DE LA HERRAMIENTA: EL ARCHIVO DEL ROBOT DA EL DE ARRANQUE; SI LA PERSONA LO CAMBIÓ, VALE EL SUYO
+        robot = self._con_la_herramienta_recordada()
 
         # ESCENA 3D INCRUSTADA EN EL RECUADRO "PANTALLA" DEL .ui
         self.escena = Escena(QtInteractor(self), robot)
@@ -173,6 +182,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.CALCULAR.clicked.connect(self.ir_y_volver)
         self.COSECHAR.clicked.connect(self.cosechar)
         self.VER_VOLUMEN.clicked.connect(self.ver_volumen)
+        self.TE_HERRAMIENTA.setText(f"{robot.efector.largo:g}")
+        self.TE_HERRAMIENTA.editingFinished.connect(self.cambiar_herramienta)
 
         self._ir_a_home()
         self.escena.reiniciar_recorrido(self.posicion)
@@ -305,8 +316,8 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _ocupado(self, si):
         """Bloquea los controles de movimiento mientras el robot se mueve (evita clics encimados)."""
         self.ocupado = si
-        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, self.BTN_REPRODUCIR, self.SELECTOR_PROGRAMA,
-                        self.BTN_GRABAR, *self.sliders_servo, *self.sliders_xyz):
+        for control in (self.CALCULAR, self.COSECHAR, self.VER_VOLUMEN, self.TE_HERRAMIENTA, self.BTN_REPRODUCIR,
+                        self.SELECTOR_PROGRAMA, self.BTN_GRABAR, *self.sliders_servo, *self.sliders_xyz):
             control.setEnabled(not si)
         if self.SELECTOR_PROGRAMA.currentData() is None:  # SIN PROGRAMA ELEGIDO NO HAY QUÉ REPRODUCIR
             self.BTN_REPRODUCIR.setEnabled(False)
@@ -355,12 +366,79 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.ejecutar(plan, origen="Cosecha")
 
     def ver_volumen(self):
+        """Botón del volumen de trabajo: lo dibuja; con el volumen a la vista, lo oculta."""
+        if self.escena.actores_volumen:
+            self.escena.ocultar_volumen()
+            self.PROCESO.setValue(0)
+        else:
+            self._dibujar_volumen()
+        self.VER_VOLUMEN.setText(TEXTO_OCULTAR_VOLUMEN if self.escena.actores_volumen else TEXTO_VER_VOLUMEN)
+
+    def _dibujar_volumen(self):
         def avance(hechos, total):
             self.PROCESO.setRange(0, total)
             self.PROCESO.setValue(hechos)
             QtWidgets.QApplication.processEvents()
-        self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
+        lazos = contorno_del_corte(self.robot, progreso=avance)
+        if lazos is None:  # EL CORTE DE ESTE ROBOT NO SE PUEDE GIRAR (O NO ENCIERRA ÁREA): LA NUBE DE PUNTOS
+            self.escena.mostrar_volumen(barrer(self.robot, paso=5, progreso=avance))
+        else:
+            self.escena.mostrar_superficie(lazos, giro_de_la_base(self.robot))
         self.escena.encuadrar(zoom=1.0)
+
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% HERRAMIENTA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    def _robot_con_herramienta(self, largo):
+        """(el robot con ese largo de herramienta, None), o (None, por qué ese largo no sirve)."""
+        try:
+            nuevo = con_herramienta(self.robot, float(largo))
+        except (TypeError, ValueError):  # NO ES UN NÚMERO, O NO CABE ENTRE CERO Y EL ALCANCE DEL BRAZO
+            return None, f"«{largo}» no es un largo de herramienta: va en milímetros, de 0 a {self.robot.alcance:g}."
+        if nuevo.cinematica_inversa is not None and not alcanzable(nuevo, nuevo.home):
+            # SIN HOME NO HAY A DÓNDE REGRESAR DESPUÉS DE CALCULAR O COSECHAR
+            return None, f"Con una herramienta de {nuevo.efector.largo:g} mm la punta no alcanza HOME."
+        return nuevo, None
+
+    def _con_la_herramienta_recordada(self):
+        """Deja en self.robot el largo de herramienta que la persona puso la última vez, si lo hay y sirve."""
+        recordado = self.ajustes.value(clave_herramienta(self.robot))
+        if recordado is not None:
+            nuevo, motivo = self._robot_con_herramienta(recordado)
+            if nuevo is None:
+                self.ajustes.remove(clave_herramienta(self.robot))
+                self.avisar(f"{motivo} Se usa el largo del archivo del robot: {self.robot.efector.largo:g} mm.",
+                            "aviso", "Herramienta", recordado=recordado)
+            else:
+                self.robot = nuevo
+        return self.robot
+
+    def cambiar_herramienta(self):
+        """Campo «Herramienta (mm)»: otro largo de herramienta. No mueve el robot: cambia dónde queda su punta."""
+        actual, escrito = self.robot.efector.largo, self.TE_HERRAMIENTA.text().strip()
+        self.TE_HERRAMIENTA.setText(f"{actual:g}")  # EL CAMPO DICE LO QUE VALE; SI EL CAMBIO PROCEDE, SE REESCRIBE ABAJO
+        if escrito == f"{actual:g}":  # SALIÓ DEL CAMPO SIN TOCARLO (EL CAMPO REDONDEA: NO SE RELEE COMO UN LARGO NUEVO)
+            return
+        if self.en_movimiento:  # EL PLAN EN CURSO SE CALCULÓ PARA LA PUNTA DE AHORA
+            self.avisar("La herramienta se cambia con el robot quieto.", "aviso", "Herramienta")
+            return
+        nuevo, motivo = self._robot_con_herramienta(escrito)
+        if nuevo is None:
+            self.avisar(f"{motivo} Se queda en {actual:g} mm.", "aviso", "Herramienta", escrito=escrito)
+            return
+        largo = nuevo.efector.largo
+        if largo == actual:  # EL MISMO LARGO, ESCRITO DE OTRA MANERA («120.0»)
+            return
+        self.robot = nuevo
+        self.ajustes.setValue(clave_herramienta(nuevo), largo)
+        self.TE_HERRAMIENTA.setText(f"{largo:g}")
+        self.escena.cambiar_herramienta(nuevo)
+        self.escena.limpiar_trayectoria(self.posicion)  # LA LÍNEA DE ANTES LA DIBUJÓ OTRA PUNTA
+        self._poner_rangos_xyz()
+        self.poner_etiquetas()
+        self._sincronizar_sliders()
+        self.avisar(f"Herramienta de {largo:g} mm: la punta está en {tuple(int(round(c)) for c in self.posicion)}.",
+                    "ok", "Herramienta", largo_mm=largo, antes_mm=actual)
+        if self.escena.actores_volumen:  # EL VOLUMEN A LA VISTA ERA EL DE LA PUNTA DE ANTES
+            self._dibujar_volumen()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VELOCIDAD Y POSTURA (FUERA DE LAS PESTAÑAS) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_selectores(self):
@@ -406,10 +484,18 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
 
         self.sliders_xyz = (self.SLIDER_X, self.SLIDER_Y, self.SLIDER_Z)
         self.valores_xyz = (self.VS_X, self.VS_Y, self.VS_Z)
-        alcance = int(math.ceil(self.robot.alcance))
-        for slider, (lo, hi) in zip(self.sliders_xyz, ((-alcance, alcance), (-alcance, alcance), (0, alcance))):
-            slider.setRange(lo, hi)
+        self._poner_rangos_xyz()
+        for slider in self.sliders_xyz:
             slider.valueChanged.connect(self._jog_cartesiano)
+
+    def _poner_rangos_xyz(self):
+        """Los sliders de la punta llegan hasta donde llega la punta de la herramienta. Con las señales calladas:
+        si el rango se encoge y recorta el valor de un slider, eso no es una orden de moverse."""
+        alcance = int(math.ceil(self.robot.alcance_de_la_punta))
+        for slider, (lo, hi) in zip(self.sliders_xyz, ((-alcance, alcance), (-alcance, alcance), (0, alcance))):
+            slider.blockSignals(True)
+            slider.setRange(lo, hi)
+            slider.blockSignals(False)
 
     def poner_etiquetas(self):
         for etiqueta, valor in zip(self.valores_servo, self.servos):

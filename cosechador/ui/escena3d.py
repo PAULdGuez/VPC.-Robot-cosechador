@@ -8,7 +8,7 @@ CONVENCIÓN DE CADA PIEZA (su propio origen y ejes; ver modelos/README.md):
 - base:            fija; origen en el centro del piso, Z hacia arriba.
 - articulación i:  gira con su servo. Origen en SU eje de giro (que es Z). La pieza sube d_i sobre Z
                    y luego avanza a_i sobre +X, hasta el eje de la siguiente articulación.
-- efector:         origen en la punta del último eslabón, apuntando a +X.
+- efector:         origen en el extremo del último eslabón, apuntando a +X; su punta queda a `efector.largo` mm.
 """
 import os
 
@@ -26,6 +26,10 @@ VISTAS = {"iso": lambda p: p.view_isometric(), "arriba": lambda p: p.view_xy(),
           "frente": lambda p: p.view_xz(), "lado": lambda p: p.view_yz()}
 MAXIMO_RECORRIDO = 5000          # PUNTOS DE LA ESTELA (LOS MÁS VIEJOS SE DESCARTAN)
 DISTANCIA_MINIMA_ESTELA = 0.5    # mm: NO SE AGREGAN PUNTOS REPETIDOS
+# VOLUMEN DE TRABAJO: SUPERFICIE TRANSLÚCIDA (EL ROBOT Y LA TRAYECTORIA SE VEN A TRAVÉS) Y SU CONTORNO
+COLOR_VOLUMEN, COLOR_BORDE_VOLUMEN, OPACIDAD_VOLUMEN = "#1aa3a3", "#0b4f6c", 0.3
+COLOR_BAJO_LA_BASE = "#8a8a8a"   # LO QUE EL ROBOT ALCANZA POR DEBAJO DEL NIVEL DE SU BASE (z = 0, EL PISO DE LA ESCENA)
+GRADOS_POR_GAJO = 2              # LA SUPERFICIE DE GIRO SE ARMA CON GAJOS PLANOS DE ESTE ÁNGULO, COMO MUCHO
 
 
 def piezas_del_robot(robot):
@@ -53,8 +57,10 @@ def pieza_provisional(robot, indice):
     if indice == 0:
         return _cilindro((0, 0, 30 * escala), (0, 0, 1), 180 * escala, 60 * escala)
     if indice == robot.gdl + 1:
-        # TIJERA PROVISIONAL: UN CONO QUE APUNTA AL FRENTE (+X)
-        return pv.Cone(center=(60 * escala, 0, 0), direction=(1, 0, 0), height=120 * escala,
+        # HERRAMIENTA PROVISIONAL: UN CONO QUE NACE EN EL EXTREMO DEL ÚLTIMO ESLABÓN, APUNTA AL FRENTE (+X) Y MIDE LO
+        # QUE DICE EL DATO DEL ROBOT (efector.largo, EN mm REALES): SU PUNTA ES LA QUE DA cinematica_directa
+        largo = robot.efector.largo
+        return pv.Cone(center=(largo / 2, 0, 0), direction=(1, 0, 0), height=largo,
                        radius=35 * escala, resolution=32).triangulate()
 
     j = robot.articulaciones[indice - 1]
@@ -83,6 +89,24 @@ def cargar_pieza(robot, indice, pieza):
     return pieza_provisional(robot, indice), "provisional"
 
 
+def superficie_de_giro(lazos, giro):
+    """El contorno de un corte, girado sobre el eje Z de la base: (superficie, bordes).
+
+    lazos: contornos del corte (ver espacio_trabajo.contorno_del_corte), cada uno (n, 2) con (alcance, altura).
+    giro: (desde, hasta), en grados: hacia dónde mira la base en los dos extremos de su giro.
+    La superficie queda abierta en esos dos extremos; `bordes` es el contorno del corte en cada uno.
+    """
+    desde, hasta = giro
+    corte = None
+    for lazo in lazos:
+        linea = pv.lines_from_points(np.column_stack([lazo[:, 0], np.zeros(len(lazo)), lazo[:, 1]]), close=True)
+        corte = linea if corte is None else corte + linea
+    inicio = corte.rotate_z(desde)
+    gajos = max(int(np.ceil(abs(hasta - desde) / GRADOS_POR_GAJO)), 1)
+    superficie = inicio.extrude_rotate(resolution=gajos, angle=hasta - desde, capping=False)
+    return superficie, inicio + corte.rotate_z(hasta)
+
+
 class Escena:
     """El robot dibujado en un plotter de PyVista (o en el QtInteractor de la ventana)."""
 
@@ -91,20 +115,30 @@ class Escena:
         self.robot = robot
         self.actores = []
         self.origen_piezas = {}
-        self.actor_volumen = None
+        self.actores_volumen = []
 
         lado = 2 * robot.alcance
         piso = pv.Plane(i_size=lado, j_size=lado, i_resolution=20, j_resolution=20)
         self.plotter.add_mesh(piso, style="wireframe", color="gray", opacity=0.3)
         for indice, (nombre, pieza) in enumerate(piezas_del_robot(robot)):
-            malla, origen = cargar_pieza(robot, indice, pieza)
-            self.origen_piezas[nombre] = origen
-            self.actores.append(self.plotter.add_mesh(malla, color=pieza.color, smooth_shading=True, specular=0.4))
+            self.actores.append(self._agregar_pieza(indice, nombre, pieza))
         self._dibujar_ejes()
         self._plan = self._recorrido = None
         self._actor_plan = self._actor_recorrido = None
         self.puntos_recorrido = []
         self.trayectoria_visible = True
+
+    def _agregar_pieza(self, indice, nombre, pieza, **opciones):
+        malla, self.origen_piezas[nombre] = cargar_pieza(self.robot, indice, pieza)
+        return self.plotter.add_mesh(malla, color=pieza.color, smooth_shading=True, specular=0.4, **opciones)
+
+    def cambiar_herramienta(self, robot):
+        """El mismo robot con otro largo de herramienta: se rehace solo la pieza del efector, donde estaba."""
+        self.robot = robot
+        vieja = self.actores[-1]
+        self.actores[-1] = self._agregar_pieza(robot.gdl + 1, "efector", robot.efector, reset_camera=False)
+        self.actores[-1].user_matrix = vieja.user_matrix
+        self.plotter.remove_actor(vieja)
 
     def _dibujar_ejes(self):
         """Flechas X/Y/Z en el origen de la base, con su letra, y el cubo de orientación en la esquina."""
@@ -170,14 +204,43 @@ class Escena:
             actor.user_matrix = T
         self.plotter.render()
 
-    def mostrar_volumen(self, puntos):
-        """Dibuja la nube del volumen de trabajo (reemplaza la anterior en vez de apilarla)."""
-        if self.actor_volumen is not None:
-            self.plotter.remove_actor(self.actor_volumen)
-        self.actor_volumen = self.plotter.add_mesh(pv.PolyData(np.asarray(puntos)), color="cyan",
-                                                   point_size=2, render_points_as_spheres=True)
-        self.plotter.show_grid()
+    def _poner_volumen(self, *actores):
+        """El volumen de trabajo recién dibujado reemplaza al anterior (nube o superficie) en vez de apilarse.
+        Sin actores, el volumen se quita, con todo y su rejilla de medidas."""
+        for actor in self.actores_volumen:
+            self.plotter.remove_actor(actor)
+        self.actores_volumen = list(actores)
+        if actores:
+            self.plotter.show_grid()
+        else:
+            self.plotter.remove_bounds_axes()
         self.plotter.render()
+
+    def ocultar_volumen(self):
+        """Quita el volumen de trabajo de la escena: queda como antes de dibujarlo."""
+        self._poner_volumen()
+
+    def mostrar_volumen(self, puntos):
+        """Dibuja el volumen de trabajo como nube de puntos: para el robot cuyo corte no se puede girar."""
+        self._poner_volumen(self.plotter.add_mesh(pv.PolyData(np.asarray(puntos)), color="cyan",
+                                                  point_size=2, render_points_as_spheres=True))
+
+    def mostrar_superficie(self, lazos, giro):
+        """Dibuja el volumen de trabajo como superficie translúcida, con su contorno (ver superficie_de_giro).
+
+        Se dibuja TODO lo que el robot alcanza, sin recortar. Lo que queda por debajo del nivel de su base (z = 0,
+        donde está el piso de la escena) va en gris, y ese nivel queda marcado con una línea sobre la superficie.
+        """
+        superficie, bordes = superficie_de_giro(lazos, giro)
+        # DOS COLORES SEGÚN LA ALTURA, CON LA ESCALA SIMÉTRICA: EL CAMBIO DE COLOR CAE JUSTO EN z = 0
+        superficie["altura"] = superficie.points[:, 2]
+        tope = max(float(np.abs(superficie.points[:, 2]).max()), 1.0)
+        nivel_de_la_base = superficie.slice(normal="z", origin=(0, 0, 0))
+        self._poner_volumen(
+            self.plotter.add_mesh(superficie, scalars="altura", cmap=[COLOR_BAJO_LA_BASE, COLOR_VOLUMEN], n_colors=2,
+                                  clim=(-tope, tope), interpolate_before_map=True, show_scalar_bar=False,
+                                  opacity=OPACIDAD_VOLUMEN),
+            self.plotter.add_mesh(bordes + nivel_de_la_base, color=COLOR_BORDE_VOLUMEN, line_width=2))
 
     def encuadrar(self, zoom=1.8):
         """Encuadra la escena sin cambiar el ángulo; el zoom acerca al robot porque el encuadre incluye todo el piso."""

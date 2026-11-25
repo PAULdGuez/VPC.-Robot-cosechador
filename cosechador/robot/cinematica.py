@@ -43,12 +43,17 @@ def matrices(robot, q):
 
 
 def cinematica_directa(robot, q):
-    """Posición (x, y, z) del efector en mm."""
-    return matrices(robot, q)[-1][:3, 3]
+    """Posición (x, y, z) en mm de la PUNTA de la herramienta: lo que se pide y se muestra por coordenadas.
+
+    La herramienta prolonga el último eslabón: su punta queda `robot.efector.largo` mm más allá del extremo
+    de ese eslabón (pose_efector), sobre su eje X. Sin herramienta (largo 0) son el mismo punto.
+    """
+    return (pose_efector(robot, q) @ (robot.efector.largo, 0.0, 0.0, 1.0))[:3]
 
 
 def pose_efector(robot, q):
-    """Matriz 4x4 completa del efector (posición y orientación)."""
+    """Matriz 4x4 (posición y orientación) del extremo del último eslabón: ahí se atornilla el efector, y la
+    cámara si va montada en él. NO es la punta de la herramienta: esa la da cinematica_directa."""
     return matrices(robot, q)[-1]
 
 

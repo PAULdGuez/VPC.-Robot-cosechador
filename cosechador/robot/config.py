@@ -4,7 +4,7 @@ Este módulo no sabe nada de un robot en particular: solo lee, valida y entrega 
 Si el archivo trae un error, ErrorConfiguracion dice en qué campo está y por qué.
 """
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import yaml
@@ -38,6 +38,12 @@ class Servo:
 class Pieza:
     archivo: str | None
     color: str = "#f09a3e"
+
+
+@dataclass(frozen=True)
+class Efector(Pieza):
+    """La herramienta: prolonga el último eslabón `largo` mm, alineada con él. 0 = sin herramienta."""
+    largo: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -85,7 +91,7 @@ class Robot:
     articulaciones: tuple
     home: tuple
     base: Pieza
-    efector: Pieza
+    efector: Efector
     camara: Camara
     vision: Vision
     cinematica_inversa: str | None = None
@@ -99,8 +105,13 @@ class Robot:
 
     @property
     def alcance(self):
-        """Distancia máxima aproximada desde la base (para escalar el dibujo)."""
+        """Distancia máxima aproximada de la base al extremo del último eslabón (para escalar el dibujo)."""
         return sum(abs(j.a) + abs(j.d) for j in self.articulaciones)
+
+    @property
+    def alcance_de_la_punta(self):
+        """Lo más lejos de la base que puede quedar la punta de la herramienta (hasta dónde se pide X, Y, Z)."""
+        return self.alcance + self.efector.largo
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LECTURA Y VALIDACIÓN %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -135,12 +146,24 @@ def _vector(datos, clave, donde, largo):
     return tuple(float(v) for v in valor)
 
 
-def _pieza(datos, donde):
+def _pieza(datos, donde, clase=Pieza):
     archivo = datos.get("pieza")
     if archivo is not None and not isinstance(archivo, str):
         raise ErrorConfiguracion(f"El campo 'pieza' en {donde} debe ser un nombre de archivo (llegó {archivo!r}).")
     color = datos.get("color", "#f09a3e")
-    return Pieza(archivo=archivo, color=str(color))
+    return clase(archivo=archivo, color=str(color))
+
+
+def con_herramienta(robot, largo):
+    """El mismo robot con otra herramienta: su punta queda `largo` mm más allá del extremo del último eslabón.
+
+    Es el único lugar que decide qué largo vale, venga del archivo del robot o de la interfaz: un número de
+    milímetros entre 0 y el alcance del brazo (una herramienta más larga que el brazo entero es un error de dedo).
+    """
+    if isinstance(largo, bool) or not isinstance(largo, (int, float)) or not 0 <= largo <= robot.alcance:
+        raise ErrorConfiguracion(f"'efector.largo' debe ser un número de milímetros entre 0 y {robot.alcance:g}, "
+                                 f"el alcance del brazo (llegó {largo!r}).")
+    return replace(robot, efector=replace(robot.efector, largo=float(largo)))
 
 
 def _servo(datos, donde):
@@ -224,13 +247,14 @@ def robot_desde_dict(datos, carpeta_modelos=""):
     if solver is not None and solver not in SOLVERS_CONOCIDOS:
         raise ErrorConfiguracion(f"'cinematica_inversa' debe ser uno de {SOLVERS_CONOCIDOS} o no ponerse (llegó {solver!r}).")
     vision = _campo(datos, "vision", "el robot", dict)
+    efector = datos.get("efector", {})
     puntos = datos.get("puntos_demo_mm", [])
     robot = Robot(
         nombre=str(_campo(datos, "nombre", "el robot")),
         articulaciones=tuple(_articulacion(j, i) for i, j in enumerate(articulaciones)),
         home=_vector(datos, "home_mm", "el robot", 3),
         base=_pieza(datos.get("base", {}), "base"),
-        efector=_pieza(datos.get("efector", {}), "efector"),
+        efector=_pieza(efector, "efector", Efector),
         camara=_camara(_campo(datos, "camara", "el robot", dict)),
         vision=Vision(verde=_rango_hsv(_campo(vision, "verde", "vision", dict), "vision.verde"),
                       cafe=_rango_hsv(_campo(vision, "cafe", "vision", dict), "vision.cafe")),
@@ -241,7 +265,7 @@ def robot_desde_dict(datos, carpeta_modelos=""):
     )
     if solver == "antropomorfico_3r":
         _validar_topologia_3r(robot)
-    return robot
+    return con_herramienta(robot, efector.get("largo", 0))
 
 
 def _validar_topologia_3r(robot):
