@@ -63,9 +63,14 @@ class Estado:
         self.guardia = None               # LA GUARDIA DE VERDAD DE LA VENTANA (w.enlace)
 
 
+CREADAS, BORRADAS = [], []   # LAS CARPETAS DESECHABLES QUE ESTE PROCESO CREÓ Y LAS QUE BORRÓ (test_ex07 LAS COTEJA)
+
+
 def carpeta_desechable():
     """Una carpeta nueva y vacía, fuera del repo y de las carpetas de la persona."""
-    return tempfile.mkdtemp(prefix="cosechador-exploracion-")
+    carpeta = tempfile.mkdtemp(prefix="cosechador-exploracion-")
+    CREADAS.append(carpeta)
+    return carpeta
 
 
 def borrar_desechable(carpeta):
@@ -74,6 +79,7 @@ def borrar_desechable(carpeta):
     if not real.startswith(base + os.sep):   # NUNCA BORRA FUERA DE LA CARPETA TEMPORAL
         raise RuntimeError(f"No borro {carpeta!r}: no está dentro de {base!r}.")
     shutil.rmtree(real, ignore_errors=True)
+    BORRADAS.append(carpeta)
 
 
 def ventana_aislada(robot, carpeta):

@@ -34,6 +34,7 @@ import pytest
 from PyQt5 import QtCore
 
 import explorador as ex
+import helpers_ventana
 from cosechador import registro as reg
 from cosechador.movimiento import programa as prog
 from cosechador.hardware.guardia import OrdenNegada
@@ -539,20 +540,26 @@ def _ajustes_reales():
     return {k: str(s.value(k)) for k in s.allKeys()}
 
 
-def _desechables_en_el_tmp():
-    return set(glob.glob(os.path.join(tempfile.gettempdir(), "cosechador-exploracion-*")))
+def _desechables_de_este_proceso():
+    """(creadas, borradas) hasta ahora. Las de ESTE proceso: mirar todas las del temporal del sistema hacía fallar la
+    prueba cuando otra corrida (otra suite, una exploración larga) creaba o borraba las suyas al mismo tiempo."""
+    return len(helpers_ventana.CREADAS), len(helpers_ventana.BORRADAS)
 
 
 def test_ex07_no_toca_programas_ni_registro_ni_ajustes_de_la_persona():
     programas, logs = prog.CARPETA_PROGRAMAS, reg.CARPETA_LOGS
-    antes = (_huella_de(programas), _huella_de(logs), _ajustes_reales(), _desechables_en_el_tmp())
+    antes = (_huella_de(programas), _huella_de(logs), _ajustes_reales())
+    creadas, borradas = _desechables_de_este_proceso()
     resultado = ex.explorar("corto", 77, tolerar=True)         # CON GRABAR, GUARDAR, DESCARTAR Y EDITAR AL AZAR
-    despues = (_huella_de(programas), _huella_de(logs), _ajustes_reales(), _desechables_en_el_tmp())
+    despues = (_huella_de(programas), _huella_de(logs), _ajustes_reales())
+    nuevas, tiradas = helpers_ventana.CREADAS[creadas:], helpers_ventana.BORRADAS[borradas:]
     assert resultado.cobertura.gestos > 50
     assert antes[0] == despues[0], "cambió la carpeta programas/ de la persona"
     assert antes[1] == despues[1], "cambió la carpeta logs/ de la persona"
     assert antes[2] == despues[2], "cambiaron los ajustes (QSettings) de la persona"
-    assert antes[3] == despues[3], "quedó una carpeta desechable sin borrar (o se borró otra)"
+    assert nuevas, "control: la exploración no usó ninguna carpeta desechable"
+    assert not [c for c in nuevas if os.path.exists(c)], "quedó una carpeta desechable sin borrar"
+    assert sorted(tiradas) == sorted(nuevas), "se borró una carpeta que esta exploración no creó (o una dos veces)"
 
 
 def test_ex07_la_ventana_aislada_vive_toda_en_la_carpeta_desechable():
