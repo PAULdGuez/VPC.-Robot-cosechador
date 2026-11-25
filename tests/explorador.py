@@ -87,6 +87,11 @@ CONOCIDOS = (
              "de los sliders se mide desde el punto al que va, y el tramo nuevo sale en diagonal desde donde va la punta. Esa "
              "diagonal puede cruzar una zona que el robot no alcanza: el planeador se niega con un aviso veraz y el slider "
              "vuelve. Esperando a que llegue, o en «En cola» y «Cancelar», no pasa"),
+    Conocido("D7n-rebote-reemplazar-en-negarse-con-la-punta-en-camino", "rebote",
+             "punta en camino, modo «reemplazar», postura «negar»",
+             "el mismo riesgo declarado de «Reemplazar», con la postura en «negarse»: la diagonal desde donde va la punta "
+             "pediría cambiar de postura, el planeador se niega con un aviso veraz y el slider vuelve. Medido el "
+             "25-nov-2026: 11 de 1,466 órdenes con la punta en camino (0.75 %)"),
 )
 
 TAMANOS = {   # (ejemplos de Hypothesis, pasos por ejemplo). Un «paso» puede ser una macro de varios gestos.
@@ -112,6 +117,11 @@ class Gesto:
 
     def __str__(self):
         return f"{self.tipo}({self.control}, v={self.v:.3f}, s={self.s}, dt={self.dt})"
+
+
+def conocido_de(clase, detalle):
+    """El defecto abierto ya conocido (CONOCIDOS) al que corresponde ese hallazgo, o None si es uno nuevo."""
+    return next((c for c in CONOCIDOS if c.clase == clase and c.contiene in detalle), None)
 
 
 class Hallazgo(AssertionError):
@@ -408,7 +418,7 @@ class Sesion:
             hallazgo = revision(antes)
             if hallazgo is None:
                 continue
-            conocido = next((c for c in CONOCIDOS if c.clase == hallazgo[0] and c.contiene in hallazgo[1]), None)
+            conocido = conocido_de(hallazgo[0], hallazgo[1])
             if conocido is not None and self.tolerar_conocidos:
                 self.cob.conocidos[conocido.id] += 1      # SE VIO, SE CUENTA Y SE REPORTA; NO TUMBA LA CORRIDA
                 continue
@@ -520,10 +530,11 @@ class Sesion:
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% REPRODUCIR Y REDUCIR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-def reproducir(gestos, robot=None, semilla=None):
-    """Repite una lista de gestos en una ventana nueva. Devuelve el Hallazgo que produce, o None si no pasa nada."""
+def reproducir(gestos, robot=None, semilla=None, tolerar=False):
+    """Repite una lista de gestos en una ventana nueva. Devuelve el Hallazgo que produce, o None si no pasa nada.
+    `tolerar`: los defectos abiertos ya conocidos que salgan por el camino no la detienen (como en una exploración)."""
     robot = robot or cargar_robot()
-    sesion = Sesion(robot, semilla=semilla, tolerar_conocidos=False)
+    sesion = Sesion(robot, semilla=semilla, tolerar_conocidos=tolerar)
     try:
         with sin_dialogos_de_verdad():
             for g in gestos:
@@ -539,11 +550,19 @@ def reproducir(gestos, robot=None, semilla=None):
 
 
 def reducir(hallazgo, robot=None, reproducir_con=None):
-    """La lista de gestos más corta (ninguno sobra) que sigue produciendo un hallazgo DE LA MISMA CLASE."""
-    repetir = reproducir_con or (lambda gs: reproducir(gs, robot, hallazgo.semilla))
+    """La lista de gestos más corta (ninguno sobra) que sigue produciendo EL MISMO hallazgo: de la misma clase y con la
+    misma identidad frente a los conocidos. Un hallazgo NUEVO no se «reduce» hasta volverlo uno conocido: al repetir se
+    toleran los conocidos que salgan por el camino (como en la corrida que lo encontró) y no vale una lista que acabe en
+    uno de ellos. (Pasó el 25-nov-2026: un rebote nuevo en «negarse» salió «reducido» como el ya conocido.)"""
+    identidad = conocido_de(hallazgo.clase, hallazgo.detalle)
+    repetir = reproducir_con or (lambda gs: reproducir(gs, robot, hallazgo.semilla, tolerar=identidad is None))
+
+    def el_mismo(r):
+        return r is not None and r.clase == hallazgo.clase and conocido_de(r.clase, r.detalle) == identidad
+
     gestos = list(hallazgo.gestos)
     ultimo = repetir(gestos)
-    if ultimo is None or ultimo.clase != hallazgo.clase:
+    if not el_mismo(ultimo):
         return hallazgo                          # NO SE REPITE: SE ENTREGA TAL CUAL, SIN REDUCIR
     gestos = list(ultimo.gestos)                 # LO QUE HAY DESPUÉS DEL GESTO QUE LO PROVOCA SOBRA
     trozo = max(1, len(gestos) // 2)
@@ -552,7 +571,7 @@ def reducir(hallazgo, robot=None, reproducir_con=None):
         while i < len(gestos):
             candidato = gestos[:i] + gestos[i + trozo:]
             r = repetir(candidato) if candidato else None
-            if r is not None and r.clase == hallazgo.clase:
+            if el_mismo(r):
                 gestos, cambio = list(r.gestos), True
             else:
                 i += trozo
@@ -562,7 +581,7 @@ def reducir(hallazgo, robot=None, reproducir_con=None):
         else:
             trozo = max(1, trozo // 2)
     final = repetir(gestos)
-    return final if final is not None else hallazgo
+    return final if el_mismo(final) else hallazgo
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LA MÁQUINA DE ESTADOS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

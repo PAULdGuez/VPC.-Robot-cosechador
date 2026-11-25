@@ -630,6 +630,31 @@ def test_ex09_un_hallazgo_que_no_se_repite_se_entrega_tal_cual():
     assert ex.reducir(h, reproducir_con=lambda gestos: None) is h
 
 
+def test_ex09_un_hallazgo_nuevo_no_se_reduce_hasta_volverlo_uno_conocido():
+    """Lo que pasó el 25-nov-2026: un rebote NUEVO se «redujo» quitándole el gesto que lo hacía nuevo y quedó convertido en
+    el rebote ya conocido: misma clase, otro defecto."""
+    conocido = next(c for c in ex.CONOCIDOS if c.id.startswith("D7-"))
+    clave, relleno = Gesto("elegir", "SELECTOR_POSTURA", 0.9, 0, 0.0), Gesto("esperar", "", 0.0, 0, 0.1)
+    provoca = Gesto("arrastrar", "SLIDER_X", 0.3, 1, 0.0)
+
+    def repetir(gestos):   # CON EL GESTO CLAVE, EL DEFECTO NUEVO; SIN ÉL, EL CONOCIDO; SIN EL QUE LO PROVOCA, NADA
+        if provoca not in gestos:
+            return None
+        hasta = gestos[:gestos.index(provoca) + 1]
+        return Hallazgo("rebote", "uno nuevo" if clave in gestos else f"({conocido.contiene})", hasta)
+
+    h = Hallazgo("rebote", "uno nuevo", (relleno, clave, relleno, provoca, relleno))
+    corto = ex.reducir(h, reproducir_con=repetir)
+    assert corto.detalle == "uno nuevo" and corto.gestos == (clave, provoca), corto
+
+
+def test_ex09_al_repetir_se_pueden_tolerar_los_conocidos_del_camino():
+    """Para reducir un hallazgo nuevo hay que poder pasar de largo los conocidos, igual que la corrida que lo encontró."""
+    d7 = list(next(h for h in HALLAZGOS if h[0].startswith("D7-"))[2])
+    assert ex.reproducir(d7) is not None, "control: sin tolerar, el conocido sí detiene"
+    assert ex.reproducir(d7, tolerar=True) is None
+
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX10: LOS HALLAZGOS SE QUEDAN COMO PRUEBA FIJA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # (nombre, clase, gestos, motivo si el defecto sigue vivo en el código de hoy). Los pega, ya reducidos, `python tests/explorador.py`.
 # Si el defecto sigue vivo: fallo esperado ESTRICTO (xfail strict) con su motivo. El día que se arregle, esta prueba se pone roja
@@ -659,6 +684,16 @@ HALLAZGOS = (
        "se mide desde el punto al que va y el tramo nuevo sale en diagonal desde donde va la punta; la diagonal cruza una zona "
        "que el robot no alcanza, el planeador se niega («pasa por … una zona que el robot no alcanza») y el slider vuelve. "
        "Lo encontró la exploración larga del 25-nov-2026. Esperando a que llegue, o en «En cola» y «Cancelar», no pasa"),
+    ("D7n-rebote-reemplazar-en-negarse-con-la-punta-en-camino", "rebote", (
+        Gesto(tipo='elegir', control='SELECTOR_POSTURA', v=0.9, s=0, dt=0.0),
+        Gesto(tipo='elegir', control='PESTANAS_MOVIMIENTO', v=0.5, s=0, dt=0.0),
+        Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.38591912681792206, s=23154, dt=0.0),
+        Gesto(tipo='elegir', control='SELECTOR_EN_CAMINO', v=0.16227008287739508, s=0, dt=0.05),
+        Gesto(tipo='arrastrar', control='SLIDER_Z', v=0.734530518561858, s=528255, dt=0.05),
+        Gesto(tipo='arrastrar', control='SLIDER_X', v=0.26604663315456467, s=620442, dt=0.008),
+    ), "el riesgo declarado de «Reemplazar», con la postura en «negarse»: la diagonal desde donde va la punta pediría cambiar "
+       "de postura, el planeador se niega («tendría que cambiar de postura») y el slider vuelve. Lo encontró la cuarta vuelta "
+       "de la exploración larga del 25-nov-2026"),
 )
 
 
