@@ -489,8 +489,9 @@ HALLAZGOS = (
         Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.9677999949201714, s=375441, dt=0.05),
         Gesto(tipo='elegir', control='SELECTOR_POSTURA', v=0.6424961212029794, s=0, dt=0.0),
         Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.6837036588129731, s=624556, dt=0.008),
-    ), "en «negarse» y «En cola» con la punta en camino, el rojo del slider de Y deja entrar a Y = 0 (el plano del frente) y el "
-       "planeador se niega («el brazo barrería hasta 16 mm fuera de la línea»): el slider rebota. Con la punta quieta no pasa"),
+    ), "en «En cola», con un cambio de postura ya pendiente (aceptado en «girar despacio»), se pasa a «negarse» y se arrastra otra "
+       "vez el mismo slider: su tramo se retraza desde donde salía y el rojo se midió desde donde llega; el planeador se niega "
+       "(«tendría que cambiar de postura») y el slider vuelve. Con un solo modo de postura de principio a fin no pasa"),
 )
 
 
