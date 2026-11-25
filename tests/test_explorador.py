@@ -283,6 +283,14 @@ def test_ex02_cada_revision_caza_su_defecto(con_efecto, clase, efecto):
     assert hallazgo.gestos[-1] == PRUEBA, "el hallazgo debe señalar el gesto que lo provocó"
 
 
+def test_ex02_el_aviso_del_punto_de_paso_no_es_un_rebote(con_efecto):
+    """D7: «no se puede ir directo: termina el tramo y luego va» avisa de una orden que SÍ salió. El rebote es la negativa
+    (la siembra _efecto_rebote, arriba); si esta revisión los confundiera, cada punto de paso tumbaría la exploración."""
+    con_efecto(lambda s: s.w.avisar("No se puede ir directo a (1, 0, 1) desde donde va la punta: termina el tramo que lleva "
+                                    "y luego va.", "aviso", "Jog", destino_mm=[1, 0, 1], de_paso=True))
+    assert ex.reproducir([Gesto("esperar", "", 0.0, 0, 0.1), PRUEBA]) is None
+
+
 def test_ex02_un_movimiento_que_no_termina_es_hallazgo(monkeypatch):
     def nunca_termina(w, tope=0):
         raise NoTermina("el movimiento sigue pidiendo pasos")
@@ -637,10 +645,11 @@ def test_ex09_un_hallazgo_que_no_se_repite_se_entrega_tal_cual():
     assert ex.reducir(h, reproducir_con=lambda gestos: None) is h
 
 
-def test_ex09_un_hallazgo_nuevo_no_se_reduce_hasta_volverlo_uno_conocido():
+def test_ex09_un_hallazgo_nuevo_no_se_reduce_hasta_volverlo_uno_conocido(monkeypatch):
     """Lo que pasó el 25-nov-2026: un rebote NUEVO se «redujo» quitándole el gesto que lo hacía nuevo y quedó convertido en
     el rebote ya conocido: misma clase, otro defecto."""
-    conocido = next(c for c in ex.CONOCIDOS if c.id.startswith("D7-"))
+    conocido = ex.Conocido("K1-de-prueba", "rebote", "defecto conocido de prueba", "solo para esta prueba")
+    monkeypatch.setattr(ex, "CONOCIDOS", (conocido,))
     clave, relleno = Gesto("elegir", "SELECTOR_POSTURA", 0.9, 0, 0.0), Gesto("esperar", "", 0.0, 0, 0.1)
     provoca = Gesto("arrastrar", "SLIDER_X", 0.3, 1, 0.0)
 
@@ -655,8 +664,20 @@ def test_ex09_un_hallazgo_nuevo_no_se_reduce_hasta_volverlo_uno_conocido():
     assert corto.detalle == "uno nuevo" and corto.gestos == (clave, provoca), corto
 
 
-def test_ex09_al_repetir_se_pueden_tolerar_los_conocidos_del_camino():
-    """Para reducir un hallazgo nuevo hay que poder pasar de largo los conocidos, igual que la corrida que lo encontró."""
+def test_ex09_al_repetir_se_pueden_tolerar_los_conocidos_del_camino(monkeypatch):
+    """Para reducir un hallazgo nuevo hay que poder pasar de largo los conocidos, igual que la corrida que lo encontró.
+    Ya no queda un defecto conocido de verdad (D7 se arregló el 25-nov-2026): se siembra uno desde fuera, quitándole a
+    «Reemplazar» su punto de paso, y se anota como conocido solo para esta prueba."""
+    import cosechador.ui.ventana as V
+    real, ultimo = V.tramo_continuo, []
+
+    def sin_punto_de_paso(robot, servos, destino, *a, **k):   # EL SEGUNDO INTENTO AL MISMO DESTINO ES EL PUNTO DE PASO
+        repetido = ultimo == [list(destino)]
+        ultimo[:] = [list(destino)]
+        return (None, "pasa por una zona sembrada para la prueba") if repetido else real(robot, servos, destino, *a, **k)
+
+    monkeypatch.setattr(V, "tramo_continuo", sin_punto_de_paso)
+    monkeypatch.setattr(ex, "CONOCIDOS", (ex.Conocido("K1-sembrado", "rebote", "punta en camino, modo «reemplazar»", "solo para esta prueba"),))
     d7 = list(next(h for h in HALLAZGOS if h[0].startswith("D7-"))[2])
     assert ex.reproducir(d7) is not None, "control: sin tolerar, el conocido sí detiene"
     assert ex.reproducir(d7, tolerar=True) is None
@@ -687,10 +708,7 @@ HALLAZGOS = (
         Gesto(tipo='arrastrar', control='SLIDER_Z', v=0.5457821488113972, s=477770, dt=0.3),
         Gesto(tipo='arrastrar', control='SLIDER_X', v=0.8835869371580177, s=34855, dt=0.3),
         Gesto(tipo='arrastrar', control='SLIDER_Y', v=0.14673451377324587, s=607881, dt=1.5),
-    ), "riesgo declarado de «Reemplazar»: con la punta en camino (aquí, 0.3 s entre soltar un slider y agarrar el otro) el rojo "
-       "se mide desde el punto al que va y el tramo nuevo sale en diagonal desde donde va la punta; la diagonal cruza una zona "
-       "que el robot no alcanza, el planeador se niega («pasa por … una zona que el robot no alcanza») y el slider vuelve. "
-       "Lo encontró la exploración larga del 25-nov-2026. Esperando a que llegue, o en «En cola» y «Cancelar», no pasa"),
+    ), ""),   # ARREGLADO EL 25-nov-2026 (tests/test_reemplazar_de_paso.py, D7): SI NO SE PUEDE IR DIRECTO, TERMINA EL TRAMO Y LUEGO VA
     ("D7n-rebote-reemplazar-en-negarse-con-la-punta-en-camino", "rebote", (
         Gesto(tipo='elegir', control='SELECTOR_POSTURA', v=0.9, s=0, dt=0.0),
         Gesto(tipo='elegir', control='PESTANAS_MOVIMIENTO', v=0.5, s=0, dt=0.0),
@@ -698,9 +716,7 @@ HALLAZGOS = (
         Gesto(tipo='elegir', control='SELECTOR_EN_CAMINO', v=0.16227008287739508, s=0, dt=0.05),
         Gesto(tipo='arrastrar', control='SLIDER_Z', v=0.734530518561858, s=528255, dt=0.05),
         Gesto(tipo='arrastrar', control='SLIDER_X', v=0.26604663315456467, s=620442, dt=0.008),
-    ), "el riesgo declarado de «Reemplazar», con la postura en «negarse»: la diagonal desde donde va la punta pediría cambiar "
-       "de postura, el planeador se niega («tendría que cambiar de postura») y el slider vuelve. Lo encontró la cuarta vuelta "
-       "de la exploración larga del 25-nov-2026"),
+    ), ""),   # ARREGLADO EL 25-nov-2026 (tests/test_reemplazar_de_paso.py, D7): SI NO SE PUEDE IR DIRECTO, TERMINA EL TRAMO Y LUEGO VA
 )
 
 

@@ -81,18 +81,7 @@ class Conocido:
     motivo: str
 
 
-CONOCIDOS = (
-    Conocido("D7-rebote-reemplazar-con-la-punta-en-camino", "rebote", "punta en camino, modo «reemplazar», postura «despacio»",
-             "riesgo DECLARADO de «Reemplazar» (aceptado al elegir los tres modos, 25-nov-2026): con la punta en camino el rojo "
-             "de los sliders se mide desde el punto al que va, y el tramo nuevo sale en diagonal desde donde va la punta. Esa "
-             "diagonal puede cruzar una zona que el robot no alcanza: el planeador se niega con un aviso veraz y el slider "
-             "vuelve. Esperando a que llegue, o en «En cola» y «Cancelar», no pasa"),
-    Conocido("D7n-rebote-reemplazar-en-negarse-con-la-punta-en-camino", "rebote",
-             "punta en camino, modo «reemplazar», postura «negar»",
-             "el mismo riesgo declarado de «Reemplazar», con la postura en «negarse»: la diagonal desde donde va la punta "
-             "pediría cambiar de postura, el planeador se niega con un aviso veraz y el slider vuelve. Medido el "
-             "25-nov-2026: 11 de 1,466 órdenes con la punta en camino (0.75 %)"),
-)
+CONOCIDOS = ()
 
 TAMANOS = {   # (ejemplos de Hypothesis, pasos por ejemplo). Un «paso» puede ser una macro de varios gestos.
     "corto": (8, 12),
@@ -458,7 +447,9 @@ class Sesion:
 
     def _rebote(self, antes):
         for e in self.w.x.eventos[antes["eventos"]:]:
-            if e.origen == "Jog" and e.nivel == "aviso" and "destino_mm" in e.datos and "tope_mm" not in e.datos:
+            # EL AVISO DEL PUNTO DE PASO (D7) TAMBIÉN TRAE DESTINO, PERO ES DE UNA ORDEN QUE SÍ SALIÓ: EL REBOTE ES LA NEGATIVA
+            if (e.origen == "Jog" and e.nivel == "aviso" and "destino_mm" in e.datos and "tope_mm" not in e.datos
+                    and not e.datos.get("de_paso")):
                 w = self.w
                 contexto = (f"punta en camino, modo «{w.en_camino}»" if w._destino_jog is not None else "punta quieta")
                 return "rebote", (f"el slider dejó entrar a donde el planeador se niega y volvió solo ({contexto}, postura "

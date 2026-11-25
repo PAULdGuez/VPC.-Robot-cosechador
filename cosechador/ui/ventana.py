@@ -716,6 +716,19 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         """Los servos con los que el robot termina lo que tiene pendiente (los de ahora, si no hay nada pendiente)."""
         return next((p.servos for p in reversed(self.cola) if p.servos is not None), self.servos)
 
+    def _detras_de_lo_pendiente(self, eje, desde):
+        """De dónde sale un tramo de la punta que va DETRÁS de lo pendiente, y cuántos pasos de lo pendiente se quedan:
+        (conservar, servos, salida). None si no hay un jog pendiente, o si el mismo slider ya empezó su tramo (no hay un
+        «detrás» que le toque). Un solo lugar lo decide: lo usan «En cola» y el punto de paso de «Reemplazar»."""
+        if self._tramo_jog is None:
+            return None
+        eje_ultimo, pasos_ultimo, servos_ultimo, salida_ultimo = self._tramo_jog
+        if eje_ultimo != eje:                        # OTRO SLIDER: SU TRAMO VA DETRÁS DE TODO LO PENDIENTE
+            return len(self.cola), self._servos_al_terminar(), desde
+        if len(self.cola) >= pasos_ultimo:           # EL MISMO SLIDER Y SU TRAMO NO HA EMPEZADO: SE TRAZA OTRA VEZ DESDE DONDE SALÍA
+            return len(self.cola) - pasos_ultimo, servos_ultimo, salida_ultimo
+        return None
+
     def _avisar_jog(self, texto, clave, **datos):
         """Un aviso del jog por arrastre: tras el primero se calla hasta que se suelte el slider. Sin arrastre (teclado,
         rueda) se calla hasta que algo se mueva. Y el mismo aviso (`clave`: qué slider y por qué) no se repite aunque se
@@ -738,14 +751,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         # DE DÓNDE SALE EL TRAMO NUEVO Y CUÁNTOS PASOS DE LO PENDIENTE SE QUEDAN. «REEMPLAZAR» Y «CANCELAR»: SALE DE DONDE
         # VA LA PUNTA Y NO SE QUEDA NADA
         conservar, servos, salida = 0, self.servos, self.posicion
-        if self.en_camino == "en_cola" and self._tramo_jog is not None:
-            eje_ultimo, pasos_ultimo, servos_ultimo, salida_ultimo = self._tramo_jog
-            if eje_ultimo != eje:                    # OTRO SLIDER: SU TRAMO VA DETRÁS DE TODO LO PENDIENTE
-                conservar, salida = len(self.cola), desde
-                servos = self._servos_al_terminar()
-            elif len(self.cola) >= pasos_ultimo:     # EL MISMO SLIDER Y SU TRAMO NO HA EMPEZADO: SE TRAZA OTRA VEZ DESDE DONDE SALÍA
-                conservar, servos, salida = len(self.cola) - pasos_ultimo, servos_ultimo, salida_ultimo
-            # EL MISMO SLIDER Y SU TRAMO YA EMPEZÓ: SALE DE DONDE VA LA PUNTA, COMO EN LOS OTROS DOS MODOS
+        detras = self._detras_de_lo_pendiente(eje, desde) if self.en_camino == "en_cola" else None
+        if detras is not None:
+            conservar, servos, salida = detras
+        # EN «EN COLA», EL MISMO SLIDER CON SU TRAMO YA EMPEZADO SALE DE DONDE VA LA PUNTA, COMO EN LOS OTROS DOS MODOS
         distancia = math.dist(salida, destino)
         if distancia < 0.5 and self._destino_jog is None:
             return False                             # LA PUNTA YA ESTÁ AHÍ
@@ -753,6 +762,20 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             plan, motivo = [], None                  # EL SLIDER VOLVIÓ A DONDE SALE SU TRAMO: ESE TRAMO YA NO HACE FALTA
         else:
             plan, motivo = tramo_continuo(self.robot, servos, destino, self.postura, pasos=muestras_del_jog(distancia))
+        if plan is None and self.en_camino == "reemplazar" and self._destino_jog is not None:
+            # D7: DESDE DONDE VA LA PUNTA NO SE PUEDE IR DIRECTO (LO QUE ALCANZA LA PUNTA NO ES CONVEXO), PERO EL ROJO DEL
+            # SLIDER SE MIDIÓ DESDE EL PUNTO AL QUE VA. LA ORDEN NO SE PIERDE: LA PUNTA TERMINA LO PENDIENTE Y LUEGO VA
+            for de_paso in (self._detras_de_lo_pendiente(eje, desde), (len(self.cola), self._servos_al_terminar(), desde)):
+                if de_paso is None or not de_paso[0]:   # SIN NADA PENDIENTE QUE CONSERVAR ES LA MISMA ORDEN DIRECTA
+                    continue
+                plan, _ = tramo_continuo(self.robot, de_paso[1], destino, self.postura,
+                                         pasos=muestras_del_jog(math.dist(de_paso[2], destino)))
+                if plan is not None:
+                    conservar, servos, salida = de_paso
+                    self._avisar_jog(f"No se puede ir directo a {tuple(int(c) for c in destino)} desde donde va la punta: "
+                                     "termina el tramo que lleva y luego va.", ("de_paso", eje),
+                                     destino_mm=destino, desde_mm=list(salida), de_paso=True, postura=self.postura)
+                    break
         if plan is None:
             self._avisar_jog(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
                              if not motivo.startswith("Para") else f"No se mueve. {motivo}",
