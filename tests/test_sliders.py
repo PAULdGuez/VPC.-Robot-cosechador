@@ -201,6 +201,17 @@ def test_s1_el_rojo_arranca_donde_se_acaba_el_tramo_en_la_perilla(ventana, pose)
     w.hide()
 
 
+def test_s1_si_en_un_eje_no_se_alcanza_nada_el_slider_sale_todo_en_rojo(ventana):
+    """«Nada se alcanza» no es «no se sabe»: lo primero es todo rojo; lo segundo (sin solver) no pinta nada."""
+    w = ventana
+    a_la_vista(w)
+    w.SLIDER_X.poner_tramos([])
+    assert junto_a_la_perilla(w, w.SLIDER_X, 0) == (True, True)
+    w.SLIDER_X.poner_tramos(None)
+    assert junto_a_la_perilla(w, w.SLIDER_X, 0) == (False, False)
+    w.hide()
+
+
 def test_s1_sin_solver_los_sliders_no_pintan_ni_frenan(robot_4gdl, abrir):
     """Un robot sin cinemática inversa no puede decir qué alcanza: los sliders quedan como antes (nada en rojo)."""
     w = abrir(robot_4gdl)

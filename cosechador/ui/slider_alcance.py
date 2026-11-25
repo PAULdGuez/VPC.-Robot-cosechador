@@ -16,7 +16,8 @@ class SliderConAlcance(QtWidgets.QSlider):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.tramos = None  # [(desde, hasta), ...] ALCANZABLES; None = NO SE SABE: NO SE PINTA NADA NI SE FRENA
+        # [(desde, hasta), ...] ALCANZABLES. None = NO SE SABE (NO SE PINTA NADA NI SE FRENA); [] = NADA SE ALCANZA (TODO ROJO)
+        self.tramos = None
         self.color_fuera = QtGui.QColor(tema.TOKENS["rojo"])
 
     def poner_tramos(self, tramos):
@@ -50,7 +51,7 @@ class SliderConAlcance(QtWidgets.QSlider):
 
     def paintEvent(self, evento):
         super().paintEvent(evento)
-        if not self.tramos or self.maximum() <= self.minimum():
+        if self.tramos is None or self.maximum() <= self.minimum():
             return
         opcion = QtWidgets.QStyleOptionSlider()
         self.initStyleOption(opcion)
