@@ -2341,9 +2341,12 @@ S</string>
                                 <widget class="QComboBox" name="SELECTOR_POSTURA">
                                   <property name="minimumSize">
                                     <size>
-                                      <width>300</width>
+                                      <width>0</width>
                                       <height>26</height>
                                     </size>
+                                  </property>
+                                  <property name="sizeAdjustPolicy">
+                                    <enum>QComboBox::AdjustToContents</enum>
                                   </property>
                                 </widget>
                               </item>
