@@ -127,6 +127,7 @@ class Escena:
         self._actor_plan = self._actor_recorrido = None
         self.puntos_recorrido = []
         self.trayectoria_visible = True
+        self.numeros_visibles = True   # LOS NÚMEROS Y LOS NOMBRES DE LOS EJES DE LA REJILLA DEL VOLUMEN (LA CAJA VA CON ELLOS)
 
     def _agregar_pieza(self, indice, nombre, pieza):
         malla, self.origen_piezas[nombre] = cargar_pieza(self.robot, indice, pieza)
@@ -202,10 +203,20 @@ class Escena:
         for actor in self.actores_volumen:
             self.plotter.remove_actor(actor)
         self.actores_volumen = list(actores)
-        if actores:
+        self._poner_rejilla()
+        self.plotter.render()
+
+    def _poner_rejilla(self):
+        """La rejilla con medidas va con el volumen y con sus números encendidos. Apagados se van los números, los nombres de
+        los ejes y la caja: queda la rejilla del piso, que es parte de la escena."""
+        if self.actores_volumen and self.numeros_visibles:
             self.plotter.show_grid()
         else:
             self.plotter.remove_bounds_axes()
+
+    def mostrar_numeros(self, visible):
+        self.numeros_visibles = bool(visible)
+        self._poner_rejilla()
         self.plotter.render()
 
     def ocultar_volumen(self):
