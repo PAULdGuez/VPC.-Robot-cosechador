@@ -534,8 +534,10 @@ def corrida(data):
         reloj.t += data.draw(st.sampled_from([0, 0.001, 0.005, 0.02, 0.04, 0.05, 0.05, 0.06, 0.2, 5, 3600]))
         base = g.ultima or punto_medio(robot)
         if data.draw(st.integers(0, 7)) == 0:
-            orden = tuple(data.draw(st.lists(st.one_of(st.floats(), st.floats(0, 180), st.none(), st.booleans(),
-                                                       st.text(max_size=2)), max_size=robot.gdl + 2)))
+            orden = tuple(data.draw(st.one_of(
+                st.lists(st.one_of(st.floats(), st.floats(0, 180), st.none(), st.booleans(), st.text(max_size=2)),
+                         max_size=robot.gdl + 2),
+                st.lists(st.floats(0, 180), max_size=robot.gdl + 2))))  # TAMBIÉN NÚMEROS BUENOS DE LA CANTIDAD EQUIVOCADA
         else:
             tope = data.draw(st.sampled_from([1, 5, 15, 16]))
             orden = tuple(b + data.draw(st.floats(-tope, tope)) for b in base)
