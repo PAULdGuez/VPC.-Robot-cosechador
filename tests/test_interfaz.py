@@ -187,3 +187,31 @@ def test_el_auditor_caza_defectos_sembrados(ui):
     ui.FONDO_REGISTRO.layout().activate()
     app.processEvents()
     assert au.auditar(ui) == []
+
+
+def test_el_auditor_mide_el_hueco_real_del_texto_de_un_selector(ui):
+    """Un selector al que le faltan 4 px para su texto más largo es un hallazgo; con el ancho justo, no. El hueco se le
+    pregunta al estilo: con una resta fija (ancho − 44) el auditor dio por bueno «…girar despacio» cortado en pantalla."""
+    app = QtWidgets.QApplication.instance()
+    combo = ui.SELECTOR_POSTURA
+    del_selector = lambda: [h for h in au.textos_cortados(ui) if "SELECTOR_POSTURA" in h]
+    assert del_selector() == []
+    minimo = combo.minimumWidth()
+    largo = max(combo.fontMetrics().horizontalAdvance(combo.itemText(i)) for i in range(combo.count()))
+    cromo = combo.width() - au.hueco_del_texto(combo)                # LO QUE SE COMEN LA FLECHA, LOS BORDES Y LA SANGRÍA
+    assert cromo > 44, f"el estilo se come {cromo} px; la resta fija de antes suponía 44"
+    try:
+        combo.setFixedWidth(largo + cromo - 4)
+        app.processEvents()
+        assert au.hueco_del_texto(combo) == largo - 4
+        assert del_selector(), "al selector le faltan 4 px para su texto y el auditor no lo dijo"
+        combo.setFixedWidth(largo + cromo)
+        app.processEvents()
+        assert del_selector() == []
+    finally:
+        combo.setMinimumWidth(minimo)
+        combo.setMaximumWidth(16777215)
+        combo.parentWidget().layout().invalidate()
+        combo.parentWidget().layout().activate()
+        app.processEvents()
+    assert au.auditar(ui) == []

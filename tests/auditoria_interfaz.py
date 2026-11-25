@@ -108,6 +108,14 @@ def recortes(ventana):
     return hallazgos
 
 
+def hueco_del_texto(combo):
+    """Los px que el estilo de verdad le deja al texto de un selector (sin la flecha, los bordes ni la sangría). Se le
+    PREGUNTA al estilo: una resta fija («ancho − 44») dio por bueno un texto que en pantalla salía cortado."""
+    opcion = W.QStyleOptionComboBox()
+    combo.initStyleOption(opcion)
+    return combo.style().subControlRect(W.QStyle.CC_ComboBox, opcion, W.QStyle.SC_ComboBoxEditField, combo).width()
+
+
 def textos_cortados(ventana):
     hallazgos = []
     for w in hojas(ventana, CON_TEXTO):
@@ -132,7 +140,7 @@ def textos_cortados(ventana):
             if ancho < metrica.horizontalAdvance(texto) + 8:
                 hallazgos.append(f"texto: la pestaña «{texto}» mide {ancho} px y su texto {metrica.horizontalAdvance(texto)}")
     for combo in hojas(ventana, (W.QComboBox,)):
-        metrica, disponible = combo.fontMetrics(), combo.width() - 44  # flecha 26 + sangría 10 + bordes y aire 8
+        metrica, disponible = combo.fontMetrics(), hueco_del_texto(combo)
         for i in range(combo.count()):
             ancho = metrica.horizontalAdvance(combo.itemText(i))
             if ancho > disponible:
