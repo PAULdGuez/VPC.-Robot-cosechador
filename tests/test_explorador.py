@@ -18,12 +18,15 @@ roja y dice cuál.
 Los defectos que el explorador encontró en el código de hoy están en HALLAZGOS como fallo esperado ESTRICTO: la prueba falla
 (xfail) mientras el defecto siga vivo y se pone ROJA (XPASS estricto) el día que se arregle, para que alguien quite la marca.
 """
+import contextlib
 import datetime as dt
+import functools
 import glob
 import hashlib
 import os
 import sys
 import tempfile
+import warnings
 from unittest import mock
 
 import numpy as np
@@ -45,9 +48,7 @@ from rachas import forma_del_aviso, rachas_de_avisos, rachas_del_archivo
 CARPETA_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROBOT = cargar_robot()
 PRUEBA = Gesto("tecla", "PRUEBA", 0.0, 0, 0.0)       # UN GESTO QUE NO EXISTE: LOS EFECTOS DE ABAJO LO ATRAPAN EN _ejecutar
-SEMILLA_DEL_ROJO = 2                                 # SEMILLAS DONDE EL CORTO ENCUENTRA CADA DEFECTO SEMBRADO (CALIBRADAS)
-SEMILLA_DEL_BRINCO = 5
-SEMILLA_DE_LA_PERDIDA = 10
+SEMILLAS_A_PROBAR = range(1, 13)                     # DONDE SE BUSCA SI LA SEMILLA CALIBRADA DE UN DEFECTO SEMBRADO YA NO LO ENCUENTRA
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LOS DEFECTOS DE ANOCHE, SEMBRADOS A PROPÓSITO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -76,6 +77,45 @@ def _sembrar_la_grabacion_tirada():
                 return
         original(self)
     return mock.patch.object(ventana_real.VentanaPrincipal, "terminar_grabacion", terminar_grabacion)
+
+
+# defecto: (cómo se siembra, clases que cuentan como encontrarlo, lo que debe decir el detalle según la clase, si se toleran
+#           los defectos conocidos, semilla calibrada). El tramo que llega de un solo paso lo acusa el brinco de la punta o,
+#           antes, la guardia observadora (un salto de más de 15°): son dos redes para el mismo defecto y cualquiera vale.
+DEFECTOS_SEMBRADOS = {
+    "rojo": (_sembrar_el_rojo, ("rebote", "racha_de_avisos"), {}, False, 5),
+    "brinco": (_sembrar_el_brinco, ("brinco", "orden_negada"), {"orden_negada": "salto_excedido"}, False, 5),
+    "perdida": (_sembrar_la_grabacion_tirada, ("perdida",), {}, True, 6),
+}
+
+
+@functools.lru_cache(maxsize=None)
+def _donde_lo_encuentra(defecto):
+    """(semilla, hallazgo con el defecto sembrado, hallazgo de esa misma semilla SIN sembrarlo).
+
+    Una semilla vale si CON el defecto sembrado la corrida corta lo encuentra y SIN sembrarlo no acusa nada de esa clase (si
+    no, lo que acusó podría ser otro defecto, real, y no demostraría que el explorador caza el sembrado). Primero se prueba
+    la calibrada; si dejó de servir se buscan otras y se AVISA. No puede ser una semilla fija a secas: cada control que se
+    le agrega a la ventana cambia qué gesto sale con cada semilla (al traer las vistas, la 2 y la 5 dejaron de cazar)."""
+    sembrar, clases, exige, tolerar, calibrada = DEFECTOS_SEMBRADOS[defecto]
+    vistas = []
+    for semilla in (calibrada, *(s for s in SEMILLAS_A_PROBAR if s != calibrada)):
+        with sembrar():
+            h = ex.explorar("corto", semilla, tolerar=tolerar).hallazgo
+        if h is None or h.clase not in clases or exige.get(h.clase, "") not in str(h):
+            vistas.append(f"{semilla}: sembrado dio «{h.clase if h else 'nada'}»")
+            continue
+        limpio = ex.explorar("corto", semilla, tolerar=tolerar).hallazgo
+        if limpio is not None and limpio.clase in clases:
+            vistas.append(f"{semilla}: sin sembrar también acusa «{limpio.clase}»")
+            continue
+        if semilla != calibrada:
+            warnings.warn(f"EX5: la semilla calibrada del defecto «{defecto}» ({calibrada}) ya no lo encuentra y ahora lo "
+                          f"encuentra la {semilla}: actualiza DEFECTOS_SEMBRADOS para no pagar la búsqueda en cada corrida. "
+                          f"Las anteriores: {'; '.join(vistas)}")
+        return semilla, h, limpio
+    raise AssertionError(f"ninguna semilla de {list(SEMILLAS_A_PROBAR)} encontró el defecto sembrado «{defecto}»: "
+                         + "; ".join(vistas))
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX1 y EX11: LA CORRIDA CORTA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -264,11 +304,9 @@ def test_ex02_el_tope_del_brinco_no_deja_fuera_un_paso_legal():
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX3 y EX4: REPRODUCIBLE, MISMA SEMILLA MISMO RECORRIDO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def test_ex03_un_hallazgo_trae_semilla_y_gestos_y_se_repite():
+    semilla, h, _ = _donde_lo_encuentra("rojo")
+    assert h.semilla == semilla and len(h.gestos) > 0
     with _sembrar_el_rojo():
-        resultado = ex.explorar("corto", SEMILLA_DEL_ROJO, tolerar=False)
-        h = resultado.hallazgo
-        assert h is not None, "el rojo sembrado debía encontrarse"
-        assert h.semilla == SEMILLA_DEL_ROJO and len(h.gestos) > 0
         otra_vez = ex.reproducir(h.gestos, semilla=h.semilla)
     assert otra_vez is not None and otra_vez.clase == h.clase, "la lista de gestos no repite el hallazgo"
     assert str(h.semilla) in str(h) and "Gesto(" in str(h), "el reporte debe traer la semilla y los gestos"
@@ -288,30 +326,56 @@ def test_ex04_misma_semilla_mismo_recorrido():
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX5: DEMUESTRA QUE CAZA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def test_ex05_encuentra_el_rojo_que_dejaba_rebotar_al_slider():
-    with _sembrar_el_rojo():
-        hallazgo = ex.explorar("corto", SEMILLA_DEL_ROJO, tolerar=False).hallazgo
-    assert hallazgo is not None and hallazgo.clase in ("rebote", "racha_de_avisos"), str(hallazgo)
+    _, hallazgo, _ = _donde_lo_encuentra("rojo")
+    assert hallazgo.clase in ("rebote", "racha_de_avisos"), str(hallazgo)
 
 
 def test_ex05_encuentra_el_brinco_grosero():
-    with _sembrar_el_brinco():
-        hallazgo = ex.explorar("corto", SEMILLA_DEL_BRINCO, tolerar=False).hallazgo
-    assert hallazgo is not None and hallazgo.clase == "brinco", str(hallazgo)
+    _, hallazgo, _ = _donde_lo_encuentra("brinco")
+    assert hallazgo.clase == "brinco" or (hallazgo.clase == "orden_negada" and "salto_excedido" in str(hallazgo)), str(hallazgo)
 
 
 def test_ex05_encuentra_la_grabacion_tirada_al_cancelar():
-    with _sembrar_la_grabacion_tirada():
-        hallazgo = ex.explorar("corto", SEMILLA_DE_LA_PERDIDA, tolerar=True).hallazgo
-    assert hallazgo is not None and hallazgo.clase == "perdida", str(hallazgo)
+    _, hallazgo, _ = _donde_lo_encuentra("perdida")
+    assert hallazgo.clase == "perdida", str(hallazgo)
 
 
 def test_ex05_sin_los_defectos_las_mismas_semillas_no_encuentran_nada_de_eso():
     """El control: con el código de hoy, las MISMAS semillas no acusan lo que acusaron con el defecto sembrado (si no, las
     pruebas de arriba no probarían que el explorador caza: acusaría siempre, o acusaría un defecto real distinto)."""
-    for semilla, clases in ((SEMILLA_DEL_ROJO, ("rebote", "racha_de_avisos")), (SEMILLA_DEL_BRINCO, ("brinco", "orden_negada")),
-                            (SEMILLA_DE_LA_PERDIDA, ("perdida",))):
-        h = ex.explorar("corto", semilla, tolerar=False).hallazgo
-        assert h is None or h.clase not in clases, f"semilla {semilla} sin sembrar acusa {h.clase}: {h}"
+    for defecto, (_, clases, _, _, _) in DEFECTOS_SEMBRADOS.items():
+        semilla, _, limpio = _donde_lo_encuentra(defecto)
+        assert limpio is None or limpio.clase not in clases, f"semilla {semilla} sin sembrar acusa {limpio.clase}: {limpio}"
+
+
+def test_ex05_la_busqueda_de_semilla_no_acepta_la_que_acusa_sin_sembrar(monkeypatch):
+    """La búsqueda, con corridas de mentira: la semilla calibrada (5) acusa «rebote» también SIN sembrar (no demostraría
+    nada), la 1 no encuentra el defecto y la 2 sí, limpia sin sembrar: gana la 2 y avisa que hay que recalibrar. Y si
+    ninguna lo encuentra, la prueba falla diciendo qué dio cada una."""
+    sembrado = []
+
+    @contextlib.contextmanager
+    def sembrar():
+        sembrado.append(True)
+        try:
+            yield
+        finally:
+            sembrado.pop()
+
+    de_mentira = {(5, True): "rebote", (5, False): "rebote", (2, True): "rebote", (2, False): "excepcion"}
+
+    def explorar(tamano, semilla, tolerar=True):
+        clase = de_mentira.get((semilla, bool(sembrado)))
+        return ex.Resultado(None, None if clase is None else Hallazgo(clase, "de mentira", (), semilla), 0.0)
+
+    monkeypatch.setattr(ex, "explorar", explorar)
+    monkeypatch.setitem(DEFECTOS_SEMBRADOS, "de-mentira", (sembrar, ("rebote",), {}, False, 5))
+    with pytest.warns(UserWarning, match="ya no lo encuentra"):
+        semilla, hallazgo, limpio = _donde_lo_encuentra.__wrapped__("de-mentira")
+    assert (semilla, hallazgo.clase, limpio.clase) == (2, "rebote", "excepcion")
+    monkeypatch.setitem(DEFECTOS_SEMBRADOS, "inencontrable", (sembrar, ("perdida",), {}, False, 5))
+    with pytest.raises(AssertionError, match="5: sembrado dio «rebote».*2: sembrado dio «rebote»"):
+        _donde_lo_encuentra.__wrapped__("inencontrable")
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX6: EL DETECTOR DE RACHAS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -452,9 +516,8 @@ def test_ex08_los_controles_se_descubren_no_se_listan_a_mano():
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EX9: REDUCIR %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 def test_ex09_reduce_a_la_lista_mas_corta_que_reproduce():
+    _, h, _ = _donde_lo_encuentra("rojo")
     with _sembrar_el_rojo():
-        h = ex.explorar("corto", SEMILLA_DEL_ROJO, tolerar=False).hallazgo
-        assert h is not None
         corto = ex.reducir(h)
         assert corto.clase == h.clase and len(corto.gestos) < len(h.gestos), (len(h.gestos), len(corto.gestos))
         assert ex.reproducir(corto.gestos) is not None, "la lista reducida ya no reproduce el hallazgo"
