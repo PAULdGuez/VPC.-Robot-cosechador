@@ -104,6 +104,47 @@ def alcanzable(robot, punto):
     return angulos_servo(robot, punto) is not None
 
 
+# TRAMOS DE UN EJE (tramos_alcanzables): CADA 5 mm SE PREGUNTA SI SE LLEGA Y CADA FRONTERA SE AFINA POR BISECCIÓN HASTA
+# 0.25 mm. TOLERANCIA: DENTRO DE UN TRAMO TODO SE ALCANZA; A MÁS DE 0.25 mm DE SU FRONTERA, YA NO. LO ÚNICO QUE NO SE VE
+# ES UN TRAMO ALCANZABLE MÁS ANGOSTO QUE 5 mm.
+PASO_TRAMOS_MM = 5.0
+TOLERANCIA_TRAMOS_MM = 0.25
+
+
+def _frontera(llega, malo, bueno):
+    """Entre un valor al que no se llega y otro al que sí: el lado que SÍ llega, a TOLERANCIA_TRAMOS_MM de la frontera."""
+    while abs(bueno - malo) > TOLERANCIA_TRAMOS_MM:
+        medio = (bueno + malo) / 2
+        if llega(medio):
+            bueno = medio
+        else:
+            malo = medio
+    return bueno
+
+
+def tramos_alcanzables(robot, punto, eje, minimo, maximo):
+    """Los tramos de [minimo, maximo] sobre un eje (0 X, 1 Y, 2 Z) a los que la punta llega, con las otras dos
+    coordenadas de `punto` fijas: [(desde, hasta), ...] en mm, de menor a mayor (más de uno si hay un hueco en medio).
+    La coordenada actual de `punto` en ese eje también se pregunta, para que el tramo donde está la punta no se pierda."""
+    def llega(valor):
+        q = list(punto)
+        q[eje] = valor
+        return alcanzable(robot, q)
+
+    valores = sorted({*np.arange(minimo, maximo, PASO_TRAMOS_MM), float(maximo), *([punto[eje]] if minimo <= punto[eje] <= maximo else [])})
+    tramos, inicio = [], None
+    for anterior, valor in zip([None, *valores], valores):
+        if llega(valor):
+            if inicio is None:
+                inicio = valor if anterior is None else _frontera(llega, anterior, valor)
+        elif inicio is not None:
+            tramos.append((float(inicio), float(_frontera(llega, valor, anterior))))
+            inicio = None
+    if inicio is not None:
+        tramos.append((float(inicio), float(valores[-1])))
+    return tramos
+
+
 def salto(servos_a, servos_b):
     """Lo más que gira cualquier servo para pasar de una pose a otra (grados)."""
     return max(abs(a - b) for a, b in zip(servos_a, servos_b))
