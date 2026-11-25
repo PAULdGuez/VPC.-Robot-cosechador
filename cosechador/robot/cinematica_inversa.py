@@ -83,15 +83,17 @@ def angulos_servo(robot, punto):
 
 
 def motivo_de_no_alcanzar(robot, punto):
-    """None si el robot real llega al punto; si no, por qué no, en palabras (fuera del brazo, o qué servo se sale)."""
+    """None si el robot real llega al punto; si no, por qué no, en palabras (fuera del brazo, o qué servo se sale).
+
+    Si llega o no lo decide angulos_servo, como en todo lo demás: aquí solo se explica el «no».
+    """
+    if angulos_servo(robot, punto) is not None:
+        return None
     try:
-        candidatas = soluciones(robot, punto)
+        preferido = dh_a_servo(robot, soluciones(robot, punto)[0])  # EL PRIMER ACOMODO, EL PREFERIDO
     except FueraDeAlcance:
         return "queda fuera del alcance del brazo"
-    servos = [dh_a_servo(robot, q) for q in candidatas]
-    if any(servos_en_rango(robot, s) for s in servos):
-        return None
-    for j, s in zip(robot.articulaciones, servos[0]):  # DEL PRIMER ACOMODO, EL PREFERIDO
+    for j, s in zip(robot.articulaciones, preferido):
         if not j.servo.minimo <= s <= j.servo.maximo:
             return f"el servo «{j.nombre}» tendría que ir a {s:.1f}° y su rango es de {j.servo.minimo:g}° a {j.servo.maximo:g}°"
     return "ningún acomodo del brazo cabe en el rango de los servos"
