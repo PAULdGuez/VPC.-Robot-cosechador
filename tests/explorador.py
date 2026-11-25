@@ -38,6 +38,10 @@ import sys
 import time
 import traceback
 
+CARPETA_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if CARPETA_REPO not in sys.path:             # PARA LANZARLO COMO PROGRAMA (python tests/explorador.py), NO SOLO DESDE pytest
+    sys.path.insert(0, CARPETA_REPO)
+
 from hypothesis import HealthCheck, Phase, settings, strategies as st
 from hypothesis import seed as semilla_de_hypothesis
 from hypothesis.stateful import RuleBasedStateMachine, get_state_machine_test, initialize, rule
@@ -51,8 +55,6 @@ from cosechador.robot.cinematica import servos_en_rango
 from helpers_ventana import (APP, DESCARTAR_NOMBRE, NoTermina, avanzar, borrar_desechable, carpeta_desechable, cerrar, correr,
                              sin_dialogos_de_verdad, ventana_aislada)
 from rachas import MINIMO_DE_UNA_RACHA, rachas_de_avisos
-
-CARPETA_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% LO QUE SE DECLARA %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 # DEL BRINCO DE LA PUNTA (defecto 4: 445 mm en un paso de un programa de puntos; su tope NO está aprobado):
