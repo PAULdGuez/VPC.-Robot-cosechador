@@ -104,6 +104,7 @@ QSlider::handle:horizontal:disabled { background: $apagado; border-color: #99999
 /* %%%%% SELECTORES, CAMPOS Y CASILLAS %%%%% */
 QComboBox { background: $fondo; border: 2px solid $borde; border-radius: $radio; padding: 0px 30px 0px 10px;
             min-height: 22px; }
+QComboBox[rol="en-barra"] { min-height: 20px; }  /* EN LA ESQUINA DE LAS PESTAÑAS CABEN 24 px, NO 26 */
 QComboBox:hover { background: $resalte; }
 QComboBox:focus { border-color: $manija_vision; }
 QComboBox:disabled { color: $tinta_apagada; border-color: $apagado; background: #f2f2f2; }
@@ -121,7 +122,7 @@ QFrame#FONDO_SIMULACION QCheckBox { color: $tinta; }
 QTabWidget::pane { border: none; background: $fondo; }
 QTabWidget::tab-bar { alignment: left; }
 QTabBar { font-size: $letra; }
-QTabBar::tab { padding: 4px 16px; background: $pista; color: $tinta; border: 1px solid #999999;
+QTabBar::tab { padding: 5px 16px; background: $pista; color: $tinta; border: 1px solid #999999;
                border-bottom: none; border-top-left-radius: 6px; border-top-right-radius: 6px;
                margin-right: 2px; min-width: 56px; }
 QTabBar::tab:selected { background: $primario; color: white; }

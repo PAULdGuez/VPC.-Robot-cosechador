@@ -215,7 +215,8 @@ def test_b2_8_mientras_graba_el_aviso_se_ve_desde_las_tres_pestanas(ventana):
         QtWidgets.QApplication.processEvents()
         donde = pestanas.tabText(indice)
         assert aviso.isVisible(), donde
-        zona = aviso.geometry()                           # EN COORDENADAS DE LAS PESTAÑAS
+        # EN COORDENADAS DE LAS PESTAÑAS (EL AVISO COMPARTE LA ESQUINA CON EL SELECTOR «EN CAMINO»)
+        zona = QtCore.QRect(aviso.mapTo(pestanas, QtCore.QPoint(0, 0)), aviso.size())
         assert zona.width() >= aviso.sizeHint().width() and zona.height() >= aviso.sizeHint().height(), donde
         assert pestanas.rect().contains(zona) and not zona.intersects(pestanas.tabBar().geometry()), donde
         assert au.auditar(w) == [], donde                 # NI SE ENCIMA, NI SE CORTA, NI PIERDE CONTRASTE

@@ -65,9 +65,10 @@ def cerca_de_una_frontera(tramos, v):
     return any(abs(v - borde) <= TOLERANCIA_TRAMOS_MM for tramo in tramos for borde in tramo)
 
 
-def defectos_de_lo_pintado(w):
-    """Todo lo que lo pintado en los tres sliders dice distinto de lo que el robot alcanza desde donde está. [] = bien."""
-    robot, punto, hallazgos = w.robot, w.posicion, []
+def defectos_de_lo_pintado(w, desde=None):
+    """Todo lo que lo pintado en los tres sliders dice distinto de lo que el robot alcanza desde donde está la punta
+    (o desde el punto `desde`, cuando la punta va en camino hacia él). [] = bien."""
+    robot, punto, hallazgos = w.robot, (w.posicion if desde is None else tuple(desde)), []
     for eje, slider in enumerate(w.sliders_xyz):
         pintado = slider.tramos
         if pintado is None:

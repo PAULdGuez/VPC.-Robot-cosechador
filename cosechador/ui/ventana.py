@@ -63,6 +63,16 @@ POSTURAS = (("despacio", "Al cambiar de postura: girar despacio"), ("negar", "Al
 PESTANA_SERVOS, PESTANA_XYZ, PESTANA_PROGRAMA = 0, 1, 2
 MM_POR_MUESTRA_JOG = 5.0  # EN MODO XYZ, LA RECTA SE MUESTREA CADA 5 mm
 NOMBRES_EJES = "XYZ"
+# QUÉ HACE LA PUNTA SI SE MUEVE OTRO SLIDER DE «PUNTA X Y Z» MIENTRAS VA EN CAMINO: (CLAVE, TEXTO DEL SELECTOR)
+EN_CAMINO = (("reemplazar", "Reemplazar"), ("en_cola", "En cola"), ("cancelar", "Cancelar"))
+EN_CAMINO_AL_ABRIR = "en_cola"
+AJUSTE_EN_CAMINO = "jog/en_camino"  # DONDE SE RECUERDA EL MODO ELEGIDO
+AYUDA_EN_CAMINO = ("Qué hace la punta si se mueve otro slider mientras va en camino:\n"
+                   "• Reemplazar: deja lo que hacía y va en línea recta al punto que marcan los tres sliders.\n"
+                   "• En cola: termina el tramo que lleva y después recorre los siguientes, en el orden pedido.\n"
+                   "• Cancelar: se detiene donde va y recorre solo el tramo nuevo.")
+PASOS_POR_REPINTADO_JOG = 3  # CON LA PUNTA EN CAMINO, EL ROJO DE LOS SLIDERS SE VUELVE A CALCULAR CADA TANTOS PASOS
+MISMA_RECTA_MM = 0.05        # DOS RECTAS QUE DIFIEREN MENOS QUE ESTO PINTAN EL MISMO ROJO: NO SE VUELVE A CALCULAR
 TEXTO_GRABAR, TEXTO_DETENER_GRABACION = "⏺ Grabar", "⏹ Detener grabación"
 TEXTO_VER_VOLUMEN, TEXTO_OCULTAR_VOLUMEN = "VOLUMEN DE TRABAJO", "OCULTAR VOLUMEN"
 # PEDIR NOMBRE Y GUARDAR, SEGÚN EL TIPO DE PROGRAMA: (TÍTULO DEL DIÁLOGO, ETIQUETA DEL CAMPO, ORIGEN EN EL REGISTRO)
@@ -154,6 +164,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.guardar_en_siguiente_frame = False
         self.imagen_fija = None
         self.cola = deque()
+        self._destino_jog = None      # PUNTO EXACTO DONDE TERMINA EL JOG DE LA PUNTA QUE VA EN CAMINO (None: NO HAY)
+        self._tramo_jog = None        # SU ÚLTIMO TRAMO: (EJE, CUÁNTOS PASOS, SERVOS DE SALIDA, PUNTO DE SALIDA)
+        self._pasos_jog = 0           # PASOS DADOS DESDE QUE SE PUSO AL DÍA EL ROJO POR UNA ORDEN: SE REPINTA CADA POCOS
+        self._rectas_pintadas = [None, None, None]  # LA RECTA SOBRE LA QUE SE PINTÓ EL ROJO DE CADA SLIDER DE LA PUNTA
         self.grabadora = Grabadora()  # ANTES DEL PRIMER poner_servos: AHÍ SE ENGANCHA LA GRABACIÓN
         self.tipo_elegido = None      # DEL PROGRAMA ELEGIDO EN EL SELECTOR: "puntos" | "grabacion" (None: NINGUNO, O ILEGIBLE)
         self.editado = None           # EL Programa ABIERTO EN EL EDITOR DE PUNTOS (None: EDITOR CERRADO)
@@ -166,6 +180,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self.temporizador_movimiento.timeout.connect(self._siguiente_paso)
 
         self._configurar_selectores()
+        self._configurar_esquina()
         self._configurar_sliders()
         self._configurar_editor()
         self._configurar_programas()
@@ -241,26 +256,28 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         self._sincronizar_sliders()
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% EJECUCIÓN DE PLANES %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    def ejecutar(self, plan, bloquear=True, origen="Movimiento", solo_simulacion=False):
+    def ejecutar(self, plan, bloquear=True, origen="Movimiento", solo_simulacion=False, conservar=0):
         """Encola los pasos del plan; el temporizador los ejecuta uno por uno.
 
         bloquear=False (jog con los sliders): no se bloquean los controles y un movimiento nuevo
-        reemplaza lo que faltaba del anterior.
+        reemplaza lo que faltaba del anterior, salvo sus primeros `conservar` pasos (el modo «En cola» de la punta).
         solo_simulacion=True (vista previa): los pasos se dibujan y a la placa no se le manda nada.
         """
         if self.en_vista_previa and not solo_simulacion:
             self._fin_del_movimiento()  # LO QUE FALTABA DE UNA VISTA PREVIA NUNCA SE MANDA A LA PLACA
         self.en_vista_previa = solo_simulacion
+        self._destino_jog = self._tramo_jog = None  # TODO MOVIMIENTO NUEVO OLVIDA EL JOG PENDIENTE (EL JOG LO VUELVE A ANOTAR)
         if not bloquear:
-            self.cola.clear()
+            while len(self.cola) > conservar:
+                self.cola.pop()
+        self.cola.extend(plan)
         # LO QUE VA A RECORRER LA PUNTA, ANTES DE MOVERSE. UN MOVIMIENTO «COMPLETO» (PROGRAMA, COSECHA,
         # CALCULAR) EMPIEZA ESTELA NUEVA; EL JOG Y LOS SLIDERS LA SIGUEN ALARGANDO.
-        camino = [self.posicion] + [posicion(self.robot, p.servos) for p in plan if p.servos is not None]
+        camino = [self.posicion] + [posicion(self.robot, p.servos) for p in self.cola if p.servos is not None]
         self.escena.mostrar_plan(camino)
         if bloquear:
             self.escena.reiniciar_recorrido(self.posicion)
         self._origen_plan = origen
-        self.cola.extend(plan)
         self._ocupado(bloquear)
         self.BTN_DETENER.setEnabled(True)
         if not self.temporizador_movimiento.isActive():
@@ -278,6 +295,10 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self._dibujar(paso.servos)  # NI PLACA, NI GRABACIÓN, NI self.servos: EL ROBOT NO SE MOVIÓ
         elif paso.servos is not None:
             self.poner_servos(paso.servos, intervalo / 1000)
+            if self._destino_jog is not None:  # LA PUNTA VA EN CAMINO POR UN SLIDER: SU ROJO SE PONE AL DÍA CADA POCOS PASOS
+                self._pasos_jog += 1
+                if self._pasos_jog % PASOS_POR_REPINTADO_JOG == 0:
+                    self._pintar_alcance(solo_lo_cambiado=True)
         if paso.aviso is not None:
             self.avisar(paso.aviso, paso.nivel, self._origen_plan)
         self.temporizador_movimiento.setInterval(intervalo)
@@ -389,6 +410,54 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
         if self.robot.cinematica_inversa is None:  # SIN SOLVER NO HAY JOG XYZ NI TRAYECTORIAS
             self.PESTANAS_MOVIMIENTO.setTabEnabled(PESTANA_XYZ, False)
 
+    def _configurar_esquina(self):
+        """La esquina de la barra de pestañas: el aviso de que se está grabando (a la vista en las tres pestañas, porque
+        se graba moviendo desde las otras dos) y el selector «En camino» (solo junto a los sliders de la punta)."""
+        self.aviso_grabando = QtWidgets.QLabel("⏺ Grabando")
+        self.aviso_grabando.setProperty("rol", "grabando")
+        self.aviso_grabando.setToolTip("Se detiene en la pestaña Programa")
+        self.aviso_grabando.hide()
+        self.etiqueta_en_camino = QtWidgets.QLabel("En camino")
+        self.selector_en_camino = QtWidgets.QComboBox()
+        self.selector_en_camino.setProperty("rol", "en-barra")
+        for clave, texto in EN_CAMINO:
+            self.selector_en_camino.addItem(texto, clave)
+        guardado = self.selector_en_camino.findData(str(self.ajustes.value(AJUSTE_EN_CAMINO, EN_CAMINO_AL_ABRIR)))
+        if guardado < 0:  # UN MODO QUE ESTA VERSIÓN NO CONOCE
+            guardado = self.selector_en_camino.findData(EN_CAMINO_AL_ABRIR)
+        self.selector_en_camino.setCurrentIndex(guardado)
+        esquina = QtWidgets.QWidget()
+        fila = QtWidgets.QHBoxLayout(esquina)
+        fila.setContentsMargins(0, 0, 0, 0)
+        fila.setSpacing(8)
+        for control, nombre in ((self.aviso_grabando, "AVISO_GRABANDO"), (self.etiqueta_en_camino, "ETIQUETA_EN_CAMINO"),
+                                (self.selector_en_camino, "SELECTOR_EN_CAMINO")):  # (SUS NOMBRES PARA EL AUDITOR)
+            control.setObjectName(nombre)
+            fila.addWidget(control)
+        for control in (self.etiqueta_en_camino, self.selector_en_camino):
+            control.setToolTip(AYUDA_EN_CAMINO)
+        self.PESTANAS_MOVIMIENTO.setCornerWidget(esquina, QtCore.Qt.TopRightCorner)
+        self.selector_en_camino.currentIndexChanged.connect(self._en_camino_cambiado)
+        self.PESTANAS_MOVIMIENTO.currentChanged.connect(self._acomodar_esquina)
+        self._acomodar_esquina()
+
+    def _acomodar_esquina(self, *_):
+        """El selector «En camino» solo acompaña a los sliders de la punta. Al tamaño mínimo de la ventana no caben el
+        aviso de grabación, la etiqueta y el selector (faltan 25 px): mientras se graba se quita la etiqueta, y qué es
+        ese selector lo sigue diciendo su ayuda."""
+        en_xyz = self.PESTANAS_MOVIMIENTO.currentIndex() == PESTANA_XYZ
+        self.selector_en_camino.setVisible(en_xyz)
+        self.etiqueta_en_camino.setVisible(en_xyz and self.aviso_grabando.isHidden())
+
+    @property
+    def en_camino(self):
+        """Qué hace la punta con una orden nueva mientras va en camino: "reemplazar" | "en_cola" | "cancelar"."""
+        return self.selector_en_camino.currentData()
+
+    def _en_camino_cambiado(self):
+        self.ajustes.setValue(AJUSTE_EN_CAMINO, self.en_camino)
+        self._pintar_alcance(solo_lo_cambiado=True)  # CON LA PUNTA EN CAMINO, CADA MODO MIDE EL ROJO DESDE OTRO PUNTO
+
     @property
     def postura(self):
         return self.SELECTOR_POSTURA.currentData()
@@ -461,7 +530,9 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _slider_xyz_movido(self, eje):
         """Un slider de la punta cambió: no se deja entrar al rojo (se detiene en la frontera) y se mueve la punta."""
         slider = self.sliders_xyz[eje]
-        tope = slider.acotar(slider.value(), self.posicion[eje])
+        desde = self._referencia_del_jog()
+        self._pintar_alcance(solo_lo_cambiado=True, ejes=(eje,))  # EL SLIDER FRENA CON EL ROJO DE ESTE MOMENTO
+        tope = slider.acotar(slider.value(), desde[eje])
         topado = tope != slider.value()
         if topado:
             slider.blockSignals(True)
@@ -469,16 +540,27 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             slider.blockSignals(False)
             self._avisar_jog(f"La punta no llega más allá de {NOMBRES_EJES[eje]} = {tope} mm desde esta pose: "
                              f"el resto del slider (en rojo) no se alcanza.", eje=NOMBRES_EJES[eje], tope_mm=tope,
-                             desde_mm=self.posicion)
+                             desde_mm=desde)
         # DURANTE UN ARRASTRE EL AVISO NO SE REARMA (EL PLANEADOR ACEPTA Y NIEGA DESTINOS ALTERNADOS Y SE REPETIRÍA): SOLO
         # SOLTAR EL SLIDER. SIN ARRASTRE (TECLADO, RUEDA), UN MOVIMIENTO DENTRO DEL TRAMO LO REARMA
-        if self._jog_cartesiano(eje) and not topado and not self._jog_arrastrando:
+        if self._jog_cartesiano(eje, desde) and not topado and not self._jog_arrastrando:
             self._jog_avisado = False
 
     def _jog_arrastre(self, empieza):
-        """Se agarra o se suelta un slider de la punta: arrastre nuevo, aviso nuevo."""
+        """Se agarra o se suelta un slider de la punta: arrastre nuevo, aviso nuevo. Durante el arrastre el rojo de los
+        otros dos sliders no se recalcula en cada pixel: se pone al día cada pocos pasos y aquí, al soltar."""
         self._jog_arrastrando = empieza
         self._jog_avisado = False
+        if not empieza:
+            self._pintar_alcance(solo_lo_cambiado=True)
+
+    def _referencia_del_jog(self):
+        """El punto del que se mide una orden nueva de la punta: su destino, el freno de cada slider y su rojo. Con la
+        punta quieta, o en «Cancelar» (el tramo nuevo sale de donde va la punta), es donde está la punta. En «Reemplazar»
+        y «En cola», con la punta en camino, es el punto al que va: el que marcan los tres sliders, con sus decimales."""
+        if self._destino_jog is None or self.en_camino == "cancelar":
+            return self.posicion
+        return self._destino_jog
 
     def _avisar_jog(self, texto, **datos):
         """Un aviso del jog por arrastre: tras el primero se calla hasta que se suelte el slider. Sin arrastre (teclado,
@@ -487,29 +569,53 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self._jog_avisado = True
             self.avisar(texto, "aviso", "Jog", **datos)
 
-    def _jog_cartesiano(self, eje):
-        """Pestaña Punta X Y Z: la punta va en línea recta al punto de los sliders; la CI mueve los servos.
-        `eje` es el slider que se movió. True si el movimiento salió."""
-        destino = [float(slider.value()) for slider in self.sliders_xyz]
-        for otro, slider in enumerate(self.sliders_xyz):
-            # UN SLIDER QUE SOLO MARCA DÓNDE ESTÁ LA PUNTA NO ES UNA ORDEN: SI EL QUE SE MOVIÓ ES OTRO, ESE EJE SE QUEDA
-            # EXACTAMENTE DONDE ESTÁ. EL SLIDER GUARDA MILÍMETROS ENTEROS Y LA PUNTA TIENE DECIMALES (Y BAJO LA BASE EL DE Z
-            # MARCA 0 PORQUE NO BAJA MÁS): TOMAR SU VALOR SACA EL DESTINO DE LA RECTA SOBRE LA QUE SE PINTÓ EL ROJO, Y JUSTO
-            # EN LA FRONTERA EL PLANEADOR SE NIEGA. UN SLIDER QUE YA SE MOVIÓ (EL ROBOT VA EN CAMINO HACIA ÉL) SÍ ES UNA ORDEN
-            if otro != eje and slider.value() == _marca(slider, self.posicion[otro]):
-                destino[otro] = float(self.posicion[otro])
-        distancia = math.dist(self.posicion, destino)
+    def _jog_cartesiano(self, eje, desde):
+        """Pestaña Punta X Y Z: se movió el slider `eje`. La punta va en línea recta a `desde` (el punto del que se mide
+        la orden, ver _referencia_del_jog) con ese eje donde lo marca su slider; la CI mueve los servos. Con la punta en
+        camino, el selector «En camino» decide qué pasa con lo que faltaba. True si el movimiento salió.
+
+        Los otros dos ejes se toman de `desde`, con sus decimales, y no de sus sliders: un slider guarda milímetros enteros
+        (y bajo la base el de Z marca 0 porque no baja más); tomar su valor saca el destino de la recta sobre la que se
+        pintó el rojo, y justo en la frontera el planeador se niega."""
+        slider = self.sliders_xyz[eje]
+        destino = list(desde)
+        destino[eje] = float(slider.value())
+        # DE DÓNDE SALE EL TRAMO NUEVO Y CUÁNTOS PASOS DE LO PENDIENTE SE QUEDAN. «REEMPLAZAR» Y «CANCELAR»: SALE DE DONDE
+        # VA LA PUNTA Y NO SE QUEDA NADA
+        conservar, servos, salida = 0, self.servos, self.posicion
+        if self.en_camino == "en_cola" and self._tramo_jog is not None:
+            eje_ultimo, pasos_ultimo, servos_ultimo, salida_ultimo = self._tramo_jog
+            if eje_ultimo != eje:                    # OTRO SLIDER: SU TRAMO VA DETRÁS DE TODO LO PENDIENTE
+                conservar, salida = len(self.cola), desde
+                servos = next((p.servos for p in reversed(self.cola) if p.servos is not None), self.servos)
+            elif len(self.cola) >= pasos_ultimo:     # EL MISMO SLIDER Y SU TRAMO NO HA EMPEZADO: SE TRAZA OTRA VEZ DESDE DONDE SALÍA
+                conservar, servos, salida = len(self.cola) - pasos_ultimo, servos_ultimo, salida_ultimo
+            # EL MISMO SLIDER Y SU TRAMO YA EMPEZÓ: SALE DE DONDE VA LA PUNTA, COMO EN LOS OTROS DOS MODOS
+        distancia = math.dist(salida, destino)
+        if distancia < 0.5 and self._destino_jog is None:
+            return False                             # LA PUNTA YA ESTÁ AHÍ
         if distancia < 0.5:
-            return False
-        muestras = max(2, int(distancia / MM_POR_MUESTRA_JOG) + 1)
-        plan, motivo = tramo_continuo(self.robot, self.servos, destino, self.postura, pasos=muestras)
+            plan, motivo = [], None                  # EL SLIDER VOLVIÓ A DONDE SALE SU TRAMO: ESE TRAMO YA NO HACE FALTA
+        else:
+            muestras = max(2, int(distancia / MM_POR_MUESTRA_JOG) + 1)
+            plan, motivo = tramo_continuo(self.robot, servos, destino, self.postura, pasos=muestras)
         if plan is None:
             self._avisar_jog(f"No se mueve: el camino hacia {tuple(int(c) for c in destino)} {motivo}"
                              if not motivo.startswith("Para") else f"No se mueve. {motivo}",
-                             destino_mm=destino, desde_mm=self.posicion, postura=self.postura)
-            self._sincronizar(self.sliders_xyz, self.posicion)  # EL SLIDER REGRESA A DONDE ESTÁ LA PUNTA
+                             destino_mm=destino, desde_mm=salida, postura=self.postura)
+            # EL SLIDER REGRESA A DONDE ESTABA SU ORDEN (O LA PUNTA); LO QUE YA IBA EN CAMINO SIGUE IGUAL
+            self._sincronizar((slider,), ((self._destino_jog or self.posicion)[eje],))
             return False
-        self.ejecutar(plan, bloquear=False, origen="Jog")
+        if self.en_camino == "cancelar":             # LA PUNTA SE DETIENE DONDE VA: LOS OTROS DOS SLIDERS REGRESAN AHÍ
+            self._sincronizar(*zip(*((s, c) for s, c in zip(self.sliders_xyz, self.posicion) if s is not slider)))
+        self.ejecutar(plan, bloquear=False, origen="Jog", conservar=conservar)
+        self._destino_jog, self._tramo_jog = tuple(destino), (eje, len(plan), servos, tuple(salida))
+        # EL ROJO DE LOS OTROS DOS SLIDERS SE PONE AL DÍA AQUÍ; EN UN ARRASTRE NO (SERÍA EN CADA PIXEL): AHÍ LO HACEN
+        # _siguiente_paso CADA POCOS PASOS Y _jog_arrastre AL SOLTAR. POR ESO EL CONTADOR SOLO VUELVE A CERO AQUÍ: UN RATÓN
+        # MANDA VARIAS ÓRDENES ENTRE PASO Y PASO, Y SI CADA UNA LO REGRESARA A CERO NO LLEGARÍA NUNCA
+        if not self._jog_arrastrando:
+            self._pasos_jog = 0
+            self._pintar_alcance(solo_lo_cambiado=True)
         return True
 
     @staticmethod
@@ -522,25 +628,38 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _sincronizar_sliders(self):
         """Las dos pestañas muestran siempre la misma pose: servos en grados y punta en mm.
         Un grupo de sliders que la persona está arrastrando no se toca. Los tramos que la punta alcanza desde esta
-        pose se recalculan aquí: es lo que pasa siempre que algo termina de moverse (y al arrancar, en HOME)."""
+        pose se recalculan aquí: es lo que pasa siempre que algo termina de moverse (y al arrancar, en HOME).
+        Por eso aquí se olvida el jog pendiente de la punta: los sliders vuelven a decir dónde está, no a dónde va."""
+        self._destino_jog = self._tramo_jog = None
         self._pintar_alcance()
         if not any(s.isSliderDown() for s in self.sliders_servo):
             self._sincronizar(self.sliders_servo, self.servos)
         if not any(s.isSliderDown() for s in self.sliders_xyz):
             self._sincronizar(self.sliders_xyz, self.posicion)
 
-    def _pintar_alcance(self):
-        """Cada slider de la punta pinta el tramo al que la punta llega desde donde está, sobre su eje. Sin solver de
-        cinemática inversa no se sabe qué se alcanza: no se pinta ni se frena nada."""
-        for eje, slider in enumerate(self.sliders_xyz):
+    def _pintar_alcance(self, solo_lo_cambiado=False, ejes=(0, 1, 2)):
+        """Cada slider de la punta pinta hasta dónde se le puede llevar en este momento: el tramo que la punta alcanza
+        sobre su eje, medido desde el punto del que saldría un tramo nuevo (_referencia_del_jog). Sin solver de
+        cinemática inversa no se sabe qué se alcanza: no se pinta ni se frena nada.
+
+        solo_lo_cambiado: se salta el slider cuya recta es la que ya tiene pintada. Con la punta en camino se pregunta
+        muy seguido y cada recta cuesta unos 6 ms."""
+        desde = self._referencia_del_jog()
+        for eje in ejes:
+            slider = self.sliders_xyz[eje]
             if self.robot.cinematica_inversa is None:
                 slider.poner_tramos(None)
                 continue
             # EL TRAMO SE BUSCA TAMBIÉN DONDE ESTÁ LA PUNTA AUNQUE EL SLIDER NO LLEGUE AHÍ (BAJO LA BASE, EL DE Z EMPIEZA EN
             # 0): SI NO, EL SLIDER NO SABE EN QUÉ TRAMO ESTÁ LA PUNTA Y NO FRENA
-            aqui = self.posicion[eje]
-            slider.poner_tramos(tramos_alcanzables(self.robot, self.posicion, eje, min(slider.minimum(), aqui),
-                                                   max(slider.maximum(), aqui)))
+            aqui = desde[eje]
+            lo, hi = min(slider.minimum(), aqui), max(slider.maximum(), aqui)
+            recta = (*(c for otro, c in enumerate(desde) if otro != eje), lo, hi)  # LAS OTRAS DOS COORDENADAS Y DÓNDE SE BUSCA
+            pintada = self._rectas_pintadas[eje]
+            if solo_lo_cambiado and pintada is not None and max(abs(a - b) for a, b in zip(recta, pintada)) < MISMA_RECTA_MM:
+                continue
+            self._rectas_pintadas[eje] = recta
+            slider.poner_tramos(tramos_alcanzables(self.robot, desde, eje, lo, hi))
 
     # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CONSOLA DE REGISTRO %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     def _configurar_registro(self):
@@ -651,12 +770,6 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
             self.BTN_GRABAR.setText(texto)
             anchos.append(self.BTN_GRABAR.sizeHint().width())
         self.BTN_GRABAR.setMinimumWidth(max(anchos))
-        # SE GRABA MOVIENDO DESDE LAS OTRAS DOS PESTAÑAS: EL AVISO VA EN LA ESQUINA DE LAS PESTAÑAS, A LA VISTA EN LAS TRES
-        self.aviso_grabando = QtWidgets.QLabel("⏺ Grabando")
-        self.aviso_grabando.setProperty("rol", "grabando")
-        self.aviso_grabando.setToolTip("Se detiene en la pestaña Programa")
-        self.PESTANAS_MOVIMIENTO.setCornerWidget(self.aviso_grabando, QtCore.Qt.TopRightCorner)
-        self.aviso_grabando.hide()
         self.SELECTOR_PROGRAMA.currentIndexChanged.connect(self._selector_cambio)
         self.recargar_programas()
 
@@ -828,6 +941,7 @@ class VentanaPrincipal(QtWidgets.QMainWindow):
     def _boton_grabar(self, grabando):
         """Aspecto de «grabando» (rol de tema.py): el botón en rojo y el aviso que se ve desde las tres pestañas."""
         self.aviso_grabando.setVisible(grabando)
+        self._acomodar_esquina()
         self.BTN_GRABAR.setText(TEXTO_DETENER_GRABACION if grabando else TEXTO_GRABAR)
         self.BTN_GRABAR.setProperty("rol", "grabando" if grabando else "")
         self.BTN_GRABAR.style().unpolish(self.BTN_GRABAR)  # Qt SOLO RELEE LA HOJA AL CAMBIAR UNA PROPIEDAD SI SE LE PIDE
