@@ -89,6 +89,13 @@ def servo_a_dh(robot, servos):
     return tuple(j.servo.signo * (float(s) - j.servo.offset) for s, j in zip(servos, robot.articulaciones))
 
 
+def primer_servo_fuera(robot, servos, tolerancia=TOLERANCIA_SERVO):
+    """Índice (desde 0) del primer servo fuera de su rango, o None si todos caben. Un solo lugar decide el rango."""
+    for i, (s, j) in enumerate(zip(servos, robot.articulaciones)):
+        if not j.servo.minimo - tolerancia <= s <= j.servo.maximo + tolerancia:
+            return i
+    return None
+
+
 def servos_en_rango(robot, servos, tolerancia=TOLERANCIA_SERVO):
-    return all(j.servo.minimo - tolerancia <= s <= j.servo.maximo + tolerancia
-               for s, j in zip(servos, robot.articulaciones))
+    return primer_servo_fuera(robot, servos, tolerancia) is None

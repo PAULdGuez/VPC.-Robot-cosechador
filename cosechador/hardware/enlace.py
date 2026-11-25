@@ -22,9 +22,14 @@ def _to_int_arduino(texto):
     return int(m.group(1)) if m else 0
 
 
+def angulo_de_placa(servo):
+    """El entero que de verdad le llega a la placa por un ángulo de servo (el firmware solo lee enteros)."""
+    return int(round(servo))
+
+
 def formatear_comando(*servos):
     """Angulos de servo -> linea que entiende el firmware ("t1,t2,t3\\n", enteros)."""
-    return ",".join(str(int(round(s))) for s in servos) + "\n"
+    return ",".join(str(angulo_de_placa(s)) for s in servos) + "\n"
 
 
 class ESP32Virtual:
